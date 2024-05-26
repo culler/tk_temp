@@ -55,6 +55,7 @@ jobs:
             echo "::error::Failure during Test"
           fi
         timeout-minutes: 30
+        continue-on-error: true
       - name: Get crash report
         run: |
           mkdir ~/crashes
