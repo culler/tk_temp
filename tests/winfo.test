@@ -438,25 +438,23 @@ test winfo-13.3 {destroying container window} -setup {
     deleteWindows
 } -result {child 0 parent 0}
 
-# This test fails with msvc.  Commenting it out for now.
-# test winfo-13.4 {[winfo containing] with embedded windows} -setup {
-#     deleteWindows
-# } -body {
-#     frame .con -container 1
-#     pack .con -expand yes -fill both
-#     toplevel .emb -use [winfo id .con] -bd 0 -highlightthickness 0
-#     button .emb.b
-#     pack .emb.b -expand yes -fill both
-#     update
+test winfo-13.4 {[winfo containing] with embedded windows} -setup {
+    deleteWindows
+} -body {
+    frame .con -container 1
+    pack .con -expand yes -fill both
+    toplevel .emb -use [winfo id .con] -bd 0 -highlightthickness 0
+    button .emb.b
+    pack .emb.b -expand yes -fill both
+    update
 
-#     button .b
-#     pack .b -expand yes -fill both
-#     update
-#     string compare .emb.b \
-#         [winfo containing [winfo rootx .emb.b] [winfo rooty .emb.b]]
-# } -cleanup {
-#     deleteWindows
-# } -result 0
+    button .b
+    pack .b -expand yes -fill both
+    update
+    set result [winfo containing [winfo rootx .emb.b] [winfo rooty .emb.b]]
+} -cleanup {
+    deleteWindows
+} -result .emb.b
 
 
 test winfo-14.1 {usage} -body {
