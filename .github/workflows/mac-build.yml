@@ -56,12 +56,8 @@ jobs:
           fi
         timeout-minutes: 30
         continue-on-error: true
-      - name: Get crash report
-        run: |
-          mkdir ~/crashes
-          cp ~/Library/Logs/DiagnosticReports/tktest* crashes
       - name: Upload crash reports
         uses: actions/upload-artifact@v3
         with:
-          name: Logfiles
-          path: ~/crashes
+          name: Reports
+          path: ~/Library/Logs/DiagnosticReports/
