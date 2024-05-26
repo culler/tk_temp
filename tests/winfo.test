@@ -451,7 +451,7 @@ test winfo-13.4 {[winfo containing] with embedded windows} -setup {
     button .b
     pack .b -expand yes -fill both
     update
-    set result [winfo geometry .emb.b]
+    set result "[winfo rootx .emb.b] [winfo rooty .emb.b] -> [winfo geometry .emb.b]"
 } -cleanup {
     deleteWindows
 } -result .emb.b
