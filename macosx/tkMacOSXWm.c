@@ -1028,6 +1028,8 @@ TkWmDeadWindow(
 	int win_x, win_y;
 	Tk_Window target = Tk_TopCoordsToWindow((Tk_Window) winPtr2, top_x, top_y, &win_x, &win_y);
 	if (target != (Tk_Window) winPtr) {
+	    fprintf(stderr, "TkWmDeadWindow calling Tk_UpdatePointer for %s while destroying %s\n",
+		    Tk_PathName(target), Tk_PathName(winPtr));
 	    Tk_UpdatePointer((Tk_Window) target, root_x, root_y, [NSApp tkButtonState]);
 	}
     }
