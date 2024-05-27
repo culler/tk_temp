@@ -441,19 +441,17 @@ test winfo-13.3 {destroying container window} -setup {
 test winfo-13.4 {[winfo containing] with embedded windows} -setup {
     deleteWindows
 } -body {
-    update
     frame .con -container 1
     pack .con -expand yes -fill both
-    update
     toplevel .emb -use [winfo id .con] -bd 0 -highlightthickness 0
-    update
     button .emb.b
     pack .emb.b -expand yes -fill both
     update
+
     button .b
     pack .b -expand yes -fill both
     update
-        string compare .emb.b \
+    string compare .emb.b \
         [winfo containing [winfo rootx .emb.b] [winfo rooty .emb.b]]
 } -cleanup {
     deleteWindows

@@ -56,6 +56,9 @@ jobs:
           fi
         timeout-minutes: 30
         continue-on-error: true
+      - name: Wait a minute
+        run: |
+          sleep 60
       - name: Upload crash reports
         uses: actions/upload-artifact@v3
         with:
