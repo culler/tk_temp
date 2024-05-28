@@ -1031,7 +1031,7 @@ TkWmDeadWindow(
 	for (w = target; w != NULL; w = Tk_Parent(w)) {
 	    fprintf(stderr, "Checking %s\n", Tk_PathName(w));
 	    if (w == (Tk_Window) winPtr) {
-		fprintf(stderr, "The target is a child of the dead window.\n"));
+		fprintf(stderr, "The target is a child of the dead window.\n");
 		/* The target window is a descendant of the dead window. */
 		break;
 	    }
