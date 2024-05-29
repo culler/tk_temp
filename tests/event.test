@@ -933,7 +933,6 @@ test event-9.11 {pointer window container = parent} -setup {
     update; # finish display of window
     set result "|"
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .one.f1.f2
@@ -959,7 +958,6 @@ test event-9.12 {pointer window container != parent} -setup {
     _pause 200; # needed for Windows
     set result "|"
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .one.g
@@ -982,7 +980,6 @@ test event-9.13 {pointer window is a toplevel, toplevel destination} -setup {
     update; # finish displaying windows
     set result |
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .two
@@ -1008,7 +1005,6 @@ test event-9.14 {pointer window is a toplevel, tk internal destination} -setup {
     waitForWindowEvent .two <Enter>
     set result "|"
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .two
@@ -1024,15 +1020,16 @@ test event-9.14 {pointer window is a toplevel, tk internal destination} -setup {
 
 test event-9.15 {pointer window is a toplevel, destination is screen root} -setup {
     setup_win_mousepointer .one; # ensure the mouse pointer is where we want it to be (the .one toplevel is not itself used in this test)
+    destroy .one
     toplevel .two
     wm geometry .two 300x300+150+150
     wm deiconify .two
     waitForWindowEvent .two <Enter>
+    update; # finish displaying .two
     event generate .two <Motion> -warp 1 -x 275 -y 275
     controlPointerWarpTiming
     set result "|"
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .two
@@ -1057,7 +1054,6 @@ test event-9.16 {Successive destructions (pointer window + parent), single gener
     _pause 200; # needed for Windows
     set result "|"
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .one.f1
@@ -1082,7 +1078,6 @@ test event-9.17 {Successive destructions (pointer window + parent), separate cro
     _pause 200; # needed for Windows
     set result "|"
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .one.f1.f2
@@ -1108,7 +1103,6 @@ test event-9.18 {Successive destructions (pointer window + ancestors including i
     waitForWindowEvent .two.f1.f2 <Enter>
     set result "|"
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .two
@@ -1139,11 +1133,11 @@ test event-9.19 {Successive destructions (pointer window + ancestors including i
     update; # finish displaying windows
     set result "|"
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .three
     waitForWindowEvent .two.f1.f2 <Enter>
+    update; #finish destroying .two
     processevents enter leave
     set result
 } -cleanup {
@@ -1164,10 +1158,10 @@ test event-9.20 {Successive destructions (pointer window + ancestors including i
     waitForWindowEvent .two.f1.f2 <Enter>
     set result "|"
 } -body {
-    processevents enter leave
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .two
+    update; #finish destroying .two
     processevents enter leave
     set result
 } -cleanup {
