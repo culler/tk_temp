@@ -1063,15 +1063,18 @@ test textDisp-6.6 {scrolling in DisplayText, Expose events after scroll} {aquaKn
     .t delete 1.0 end
     # Line 1 must wrap exactly twice to get the expected result
     .t insert 1.0 "Line 1 is so long that it occupies 3 display lines"
+    processevents expose
     foreach i {2 3 4 5 6 7 8 9 10 11 12 13 14 15} {
 	.t insert end "\nLine $i"
     }
     update
     processevents expose
     .t delete 1.6 1.end
-    destroy .f2
-    processevents expose
     update
+    processevents expose
+    destroy .f2
+    update
+    processevents expose
     list $tk_textRelayout $tk_textRedraw
 } {{1.0 9.0 10.0} {1.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0}}
 .t configure -bd 0
