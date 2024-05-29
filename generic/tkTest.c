@@ -147,6 +147,9 @@ typedef struct TrivialCommandHeader {
 static int		ImageObjCmd(ClientData dummy,
 			    Tcl_Interp *interp, int objc,
 			    Tcl_Obj * const objv[]);
+static int		ProcessEventsObjCmd(ClientData dummy,
+			    Tcl_Interp *interp, int objc,
+			    Tcl_Obj * const objv[]);
 static int		TestbitmapObjCmd(ClientData dummy,
 			    Tcl_Interp *interp, int objc,
 			    Tcl_Obj * const objv[]);
@@ -247,6 +250,7 @@ Tktest_Init(
 	return TCL_ERROR;
     }
 
+    Tcl_CreateObjCommand(interp, "processevents", ProcessEventsObjCmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "square", SquareObjCmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "testbitmap", TestbitmapObjCmd,
 	    (ClientData) Tk_MainWindow(interp), NULL);
@@ -1677,6 +1681,72 @@ ImageDelete(
     ckfree(timPtr->imageName);
     ckfree(timPtr->varName);
     ckfree(timPtr);
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * ProcessEventsObjCmd --
+ *
+ *      This function implements the "processevents" command which processes
+ *      all queued events of a type specified by one of the arguments to the
+ *      command.  Currently the supported arguments are leave, enter, and
+ *      motion.  Others could be added if needed.
+ *
+ * Results:
+ *      A standard Tcl result.
+ *
+ * Side effects:
+ *      Events are processed
+ *
+ *----------------------------------------------------------------------
+ */
+
+static Tk_RestrictAction
+CrossingRestrictProc(
+    ClientData arg,
+    XEvent *eventPtr)
+{
+    int *eventTypes = (int *) arg;
+    for (int *t = eventTypes; *t != 0; t++) {
+	if (eventPtr->type == *t) {
+	    return TK_PROCESS_EVENT;
+	}
+    }
+    return TK_DEFER_EVENT;	
+}
+
+static int ProcessEventsObjCmd(
+    ClientData dummy,
+    Tcl_Interp *interp,
+    int objc,
+    Tcl_Obj * const objv[])
+{
+    ClientData oldArg;
+    Tk_RestrictProc *oldProc;
+    int index;
+    static const char *const eventTypeNames[] = {
+	"leave", "enter", "motion", NULL};
+    static const int eventTypes[] = {
+	LeaveNotify, EnterNotify, MotionNotify};
+    int whichEvents[100];
+    if (objc < 2) {
+        Tcl_WrongNumArgs(interp, 1, objv, "eventtype ?eventtype ...?");
+        return TCL_ERROR;
+    }
+    for (int n = 1; n < objc; n++) {
+	if (Tcl_GetIndexFromObj(interp, objv[n], eventTypeNames, "eventtype", 0,
+				&index) != TCL_OK) {
+	    return TCL_ERROR;
+	}
+	whichEvents[n - 1] = eventTypes[index];
+    }
+    whichEvents[objc - 1] = 0;
+    oldProc = Tk_RestrictEvents(CrossingRestrictProc, (void *) whichEvents,
+				&oldArg);
+    while (Tcl_ServiceEvent(TCL_WINDOW_EVENTS|TCL_DONT_WAIT)) {};
+    Tk_RestrictEvents(oldProc, oldArg, &oldArg);
+    return TCL_OK;
 }
 
 /*

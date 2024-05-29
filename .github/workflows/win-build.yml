@@ -167,7 +167,7 @@ jobs:
           }
       - name: Run Tk Tests
         run: |
-          make test-classic TESTFLAGS="-verbose bepst" | tee out-classic.txt
+          make test-classic | tee out-classic.txt
           make test-ttk | tee out-ttk.txt
           grep -q "Failed	0" out-classic.txt || {
             echo "::error::Failure during Test"
