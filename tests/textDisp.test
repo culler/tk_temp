@@ -1067,9 +1067,10 @@ test textDisp-6.6 {scrolling in DisplayText, Expose events after scroll} {aquaKn
     foreach i {2 3 4 5 6 7 8 9 10 11 12 13 14 15} {
 	.t insert end "\nLine $i"
     }
-    update
-    .t delete 1.6 1.end
-    destroy .f2
+    update; # display the widget and clear the test variables
+    processevents expose; # make sure expose events have been processed
+    .t delete 1.6 1.end; # deletes line 1; scrolls 9 and 10 into view
+    destroy .f2; # lines 4 - 10 are on top of the red frame
     processevents expose
     list $tk_textRelayout $tk_textRedraw
 } {{1.0 9.0 10.0} {1.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0}}
