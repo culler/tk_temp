@@ -140,7 +140,6 @@ wm withdraw .
 wm minsize . 1 1
 wm positionfrom . user
 wm deiconify .
-wm geometry . +100+100
 update
 
 # Some window managers (like olwm under SunOS 4.1.3) misbehave in a way
@@ -1057,7 +1056,7 @@ test textDisp-6.5 {scrolling in DisplayText, scroll source obscured} {aquaKnownB
 test textDisp-6.6 {scrolling in DisplayText, Expose events after scroll} {aquaKnownBug} {
 # constrained by aquaKnownBug until ticket [aad0231f07] is fixed
     # this test depends on all of the expose events being handled at once
-    .t configure -height 10 -width 20 -wrap char
+    .t configure -wrap char
     frame .f2 -bg #ff0000
     place .f2 -in .t -relx 0.2 -rely 0.5 -relwidth 0.5 -relheight 0.5
     .t configure -bd 2 -relief raised
@@ -1067,11 +1066,10 @@ test textDisp-6.6 {scrolling in DisplayText, Expose events after scroll} {aquaKn
     foreach i {2 3 4 5 6 7 8 9 10 11 12 13 14 15} {
 	.t insert end "\nLine $i"
     }
-    update; # display the widget and clear the test variables
-    processevents expose; # make sure expose events have been processed
-    .t delete 1.6 1.end; # deletes line 1; scrolls 9 and 10 into view
-    destroy .f2; # lines 4 - 10 are on top of the red frame
-    processevents expose
+    update
+    .t delete 1.6 1.end
+    destroy .f2
+    update
     list $tk_textRelayout $tk_textRedraw
 } {{1.0 9.0 10.0} {1.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0}}
 .t configure -bd 0
