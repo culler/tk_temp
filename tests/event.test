@@ -908,7 +908,7 @@ proc create_and_pack_frames {{w {}}} {
 proc setup_win_mousepointer {w} {
 # Position the window and the mouse pointer as an initial state for some tests.
 # The so-called "pointer window" is the $w window that will now contain the mouse pointer.
-    wm geometry . +700+700; # root window out of our way - must not cover windows from event-9.1*
+    wm geometry . +700+400; # root window out of our way - must not cover windows from event-9.1*
     toplevel $w
     pack propagate $w 0
     wm geometry $w 300x300+100+100
@@ -936,11 +936,7 @@ test event-9.11 {pointer window container = parent} -setup {
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .one.f1.f2
-    if {[tk windowingsystem] ne "x11"} {
-	processevents enter leave
-    } else {
-	update
-    }
+    if {[tk windowingsystem] ne "x11"} {processevents enter leave}
     set result
 } -cleanup {
     bind all <Leave> {}
@@ -964,11 +960,7 @@ test event-9.12 {pointer window container != parent} -setup {
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .one.g
-    if {[tk windowingsystem] ne "x11"} {
-	processevents enter leave
-    } else {
-	update
-    }
+    if {[tk windowingsystem] ne "x11"} {processevents enter leave}
     set result
 } -cleanup {
     bind all <Leave> {}
@@ -991,11 +983,7 @@ test event-9.13 {pointer window is a toplevel, toplevel destination} -setup {
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .two
     waitForWindowEvent .one <Enter>
-    if {[tk windowingsystem] ne "x11"} {
-	processevents enter leave
-    } else {
-	update
-    }
+    if {[tk windowingsystem] ne "x11"} {processevents enter leave}
     set result
 } -cleanup {
     bind all <Leave> {}
@@ -1067,11 +1055,7 @@ test event-9.16 {Successive destructions (pointer window + parent), single gener
     bind all <Leave> {append result "<Leave> %d %W|"}
     bind all <Enter> {append result "<Enter> %d %W|"}
     destroy .one.f1
-    if {[tk windowingsystem] ne "x11"} {
-	processevents enter leave
-    } else {
-	update
-    }
+    if {[tk windowingsystem] ne "x11"} {processevents enter leave}
     set result
 } -cleanup {
     bind all <Leave> {}
