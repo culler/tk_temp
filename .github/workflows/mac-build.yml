@@ -124,7 +124,7 @@ jobs:
           }
         env:
           CFGOPT: --enable-symbols=${{ matrix.symbols }} ${{matrix.options }}
-      - name: Build
+      - name: Build Tk
         run: |
           make binaries libraries tktest || {
             echo "::error::Failure during Build"
@@ -147,7 +147,7 @@ jobs:
               echo Xvfb not used, this is a --enable-aqua build
             }
           fi
-          ( runXvfb :0; make test-classic; exit $? ) | tee out-classic.txt || {
+          ( runXvfb :0; make TESTFLAGS="-verbose bpest" test-classic; exit $? ) | tee out-classic.txt || {
             echo "::error::Failure during Test (classic)"
             exit 1
           }
