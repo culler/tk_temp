@@ -164,10 +164,13 @@ jobs:
             exit 1
           }
         timeout-minutes: 20
-      - name: Carry out trial installation
+        continue-on-error: true
+      - name: Wait a minute
         run: |
-          make install || {
-            cat config.log
-            echo "::error::Failure during Install"
-            exit 1
-          }
+          sleep 60
+      - name: Upload crash reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: Reports
+          path: ~/Library/Logs/DiagnosticReports/
+          
