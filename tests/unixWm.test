@@ -2091,11 +2091,13 @@ test unixWm-51.6 {TkWmRestackToplevel procedure, window to be stacked isn't mapp
 test unixWm-51.7 {TkWmRestackToplevel procedure, other window isn't mapped} {unix failsOnXQuarz} {
     foreach w {.t .t2 .t3} {
 	destroy $w
+	update
 	toplevel $w -width 200 -height 200 -bg green
 	tkwait visibility $w
 	wm geometry $w +100+100
 	update
     }
+    update
     raise .t .t2
     restackDelay
     update
