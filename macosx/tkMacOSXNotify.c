@@ -352,7 +352,6 @@ TkMacOSXDrawAllViews(
 		if (dirtyCount) {
 		   continue;
 		}
-		[[view layer] setNeedsDisplayInRect:[view tkDirtyRect]];
 		[view setNeedsDisplay:YES];
 	    }
 	} else {
@@ -366,22 +365,6 @@ TkMacOSXDrawAllViews(
 		       untilDate:[NSDate distantPast]
 			  inMode:GetRunLoopMode(TkMacOSXGetModalSession())
 			 dequeue:NO];
-    for (NSWindow *window in [NSApp windows]) {
-	if ([[window contentView] isMemberOfClass:[TKContentView class]]) {
-	    TKContentView *view = [window contentView];
-
-	    /*
-	     * If we did not run drawRect, we set needsDisplay back to NO.
-	     * Note that if drawRect did run it may have added to Tk's dirty
-	     * rect, due to attempts to draw outside of drawRect's dirty rect.
-	     */
-
-	    if ([view needsDisplay]) {
-		[view setNeedsDisplay: NO];
-	    }
-	}
-    }
-    [NSApp setNeedsToDraw:NO];
 }
 
 /*
@@ -452,7 +435,7 @@ TkMacOSXEventsSetupProc(
 			untilDate:[NSDate distantPast]
 			inMode:GetRunLoopMode(TkMacOSXGetModalSession())
 			dequeue:NO];
-	if ((currentEvent) || [NSApp needsToDraw] ) {
+	if ((currentEvent)) {
 	    Tcl_SetMaxBlockTime(&zeroBlockTime);
 	    Tcl_DeleteTimerHandler(ticker);
 	    ticker = NULL;

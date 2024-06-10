@@ -41,8 +41,6 @@ static Tcl_ObjCmdProc TkMacOSVersionObjCmd;
 @implementation TKApplication
 @synthesize poolLock = _poolLock;
 @synthesize macOSVersion = _macOSVersion;
-@synthesize isDrawing = _isDrawing;
-@synthesize isSigned = _isSigned;
 @synthesize tkLiveResizeEnded = _tkLiveResizeEnded;
 @synthesize tkPointerWindow = _tkPointerWindow;
 - (void) setTkPointerWindow: (TkWindow *)winPtr
@@ -290,12 +288,6 @@ static Tcl_ObjCmdProc TkMacOSVersionObjCmd;
     [NSApp setMacOSVersion: 10000*majorVersion + 100*minorVersion];
 
     /*
-     * We are not drawing right now.
-     */
-
-    [NSApp setIsDrawing:NO];
-
-    /*
      * Be our own delegate.
      */
 
@@ -428,6 +420,18 @@ TCL_NORETURN void TkpExitProc(
     if (doCleanupFromExit) {
 	doCleanupFromExit = NO; /* prevent possible recursive call. */
 	closePanels();
+    }
+
+    /*
+     * At this point it is too late to be looking up the Tk window associated
+     * to any NSWindows, but it can happen.  This makes sure the answer is None
+     * if such a query is attempted. 
+     */
+    
+    for (TKWindow *w in [NSApp orderedWindows]) {
+	if ([w respondsToSelector: @selector (tkWindow)]) {
+	    [w setTkWindow: None];
+	}
     }
 
     /*

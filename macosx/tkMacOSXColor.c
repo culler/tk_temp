@@ -611,6 +611,7 @@ TkpGetColor(
     XColor color;
     Colormap colormap = tkwin ? Tk_Colormap(tkwin) : noColormap;
     NSView *view = nil;
+    Bool haveValidXColor = False;
     static Bool initialized = NO;
 
     if (!initialized) {
@@ -638,6 +639,18 @@ TkpGetColor(
 	    p.pixel.colortype = entry->type;
 	    p.pixel.value = (unsigned int)entry->index;
 	    color.pixel = p.ulong;
+
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
+	    NSAppearance *windowAppearance;
+	    if (@available(macOS 10.14, *)) {
+		if (view) {
+		    windowAppearance = [view effectiveAppearance];
+		} else {
+		    windowAppearance = [NSApp effectiveAppearance];
+		}
+	    }
+#endif
+
 	    if (entry->type == semantic) {
 		CGFloat rgba[4];
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
@@ -671,13 +684,13 @@ TkpGetColor(
 		} else {
 		    GetRGBA(entry, p.ulong, rgba);
 		}
-#else
+#else //MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
 		GetRGBA(entry, p.ulong, rgba);
-#endif
 		color.red   = (unsigned short)(rgba[0] * 65535.0);
 		color.green = (unsigned short)(rgba[1] * 65535.0);
 		color.blue  = (unsigned short)(rgba[2] * 65535.0);
-		goto validXColor;
+#endif //MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
+		haveValidXColor = True;
 	    } else if (SetCGColorComponents(entry, 0, &c)) {
 		const size_t n = CGColorGetNumberOfComponents(c);
 		const CGFloat *rgba = CGColorGetComponents(c);
@@ -695,15 +708,26 @@ TkpGetColor(
 		    Tcl_Panic("CGColor with %d components", (int) n);
 		}
 		CGColorRelease(c);
-		goto validXColor;
+		haveValidXColor = True;
 	    }
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
+	    if (@available(macOS 10.14, *)) {
+		// Not sure whether colormap should also be set for non-semantic color
+		if (haveValidXColor && entry->type == semantic) {
+		    if ([windowAppearance name] == NSAppearanceNameDarkAqua) {
+			colormap = darkColormap;
+		    } else {
+			colormap = lightColormap;
+		    }
+		}
+	    }
+#endif
 	}
     }
-    if (TkParseColor(display, colormap, name, &color) == 0) {
+    if (!haveValidXColor && TkParseColor(display, colormap, name, &color) == 0) {
 	return NULL;
     }
 
-validXColor:
     tkColPtr = (TkColor *)ckalloc(sizeof(TkColor));
     tkColPtr->colormap = colormap;
     tkColPtr->color = color;
