@@ -43,8 +43,8 @@ proc focusSetupAlt {} {
 # the X server and possibly also the window manager.
 
 proc focusClear {} {
-    dobg {focus -force .; after 200; update}
-    after 200
+    dobg {after 200; focus -force .; update}
+    after 400
     update
 }
 
