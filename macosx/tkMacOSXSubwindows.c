@@ -262,7 +262,8 @@ XMapWindow(
  *
  * NotifyVisibility --
  *
- *	Recursively called helper proc for XMapWindow().
+ *	Helper for XMapWindow().  Generates VisibilityNotify events
+ *      for the window and all of its descendants.
  *
  * Results:
  *	None.
@@ -1121,19 +1122,23 @@ Tk_MacOSXGetNSWindowForDrawable(
     MacDrawable *macWin = (MacDrawable *)drawable;
     NSWindow *result = nil;
 
-    if (!macWin ||
-        macWin->flags & TK_IS_PIXMAP ||
-        macWin->winPtr->flags & TK_ALREADY_DEAD) {
+    if (macWin == NULL) abort();
+
+    if (!macWin || macWin->flags & TK_IS_PIXMAP) {
 	result = nil;
+
     } else if (macWin->toplevel && macWin->toplevel->winPtr &&
 	    macWin->toplevel->winPtr->wmInfoPtr &&
 	    macWin->toplevel->winPtr->wmInfoPtr->window) {
 	result = macWin->toplevel->winPtr->wmInfoPtr->window;
+
     } else if (macWin->winPtr && macWin->winPtr->wmInfoPtr &&
 	    macWin->winPtr->wmInfoPtr->window) {
 	result = macWin->winPtr->wmInfoPtr->window;
+
     } else if (macWin->toplevel && (macWin->toplevel->flags & TK_EMBEDDED)) {
 	TkWindow *contWinPtr = (TkWindow *)Tk_GetOtherWindow((Tk_Window)macWin->toplevel->winPtr);
+
 
 	if (contWinPtr) {
 	    result = TkMacOSXGetNSWindowForDrawable((Drawable)contWinPtr->privatePtr);

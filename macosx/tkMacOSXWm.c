@@ -1123,10 +1123,11 @@ TkWmDeadWindow(
     TkWindow *winPtr2;
     NSWindow *w;
     WmInfo *wmPtr = winPtr->wmInfoPtr, *wmPtr2;
-    TKWindow *deadNSWindow = (TKWindow *)TkMacOSXGetNSWindowForDrawable(
-	Tk_WindowId(winPtr));
-    if (deadNSWindow == NULL) {
-	return;
+    TKWindow *deadNSWindow = NULL;
+    if (Tk_WindowId(winPtr) == None) {
+	fprintf(stderr, "TkWmDeadWindow: no window id\n");
+    } else {
+	deadNSWindow = (TKWindow *)TkMacOSXGetNSWindowForDrawable(Tk_WindowId(winPtr));
     }
     /*
      *If the dead window is a transient, remove it from the container's list.
@@ -2657,11 +2658,13 @@ WmGeometryCmd(
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     WmInfo *wmPtr = winPtr->wmInfoPtr;
-    NSWindow *win = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    NSWindow *win = nil;
     char xSign = '+', ySign = '+';
     int width, height, x = wmPtr->x, y= wmPtr->y;
     char *argv3;
-
+    if (winPtr && winPtr->window) {
+	win = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    }
     if ((objc != 3) && (objc != 4)) {
 	Tcl_WrongNumArgs(interp, 2, objv, "window ?newGeometry?");
 	return TCL_ERROR;
@@ -3407,18 +3410,23 @@ WmIconwindowCmd(
 	    return TCL_ERROR;
 	}
 	if (wmPtr->icon != NULL) {
+	    NSWindow *win = nil;
 	    TkWindow *oldIcon = (TkWindow *)wmPtr->icon;
-	    WmInfo *wmPtr3 = oldIcon->wmInfoPtr;
-	    NSWindow *win = TkMacOSXGetNSWindowForDrawable(oldIcon->window);
-
+	    if (winPtr && winPtr->window) {
+		win = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+	    }
 	    /*
 	     * The old icon should be withdrawn.
 	     */
-
-	    TkpWmSetState(oldIcon, WithdrawnState);
+	    if (oldIcon) {
+		WmInfo *wmPtr3 = oldIcon->wmInfoPtr;
+		TkpWmSetState(oldIcon, WithdrawnState);
+		if (wmPtr3) {
+		    wmPtr3->iconFor = NULL;
+		}
+	    }
 	    [win orderOut:NSApp];
-    	    [win setExcludedFromWindowsMenu:YES];
-	    wmPtr3->iconFor = NULL;
+	    [win setExcludedFromWindowsMenu:YES];
 	}
 	Tk_MakeWindowExist(tkwin2);
 	wmPtr->hints.icon_window = Tk_WindowId(tkwin2);
@@ -3652,8 +3660,12 @@ WmOverrideredirectCmd(
 {
     Bool boolValue;
     XSetWindowAttributes atts;
-    TKWindow *win = (TKWindow *)TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    NSWindow *win = nil;
+    if (winPtr && winPtr->window) {
+	win = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    }
 
+    
     if ((objc != 3) && (objc != 4)) {
 	Tcl_WrongNumArgs(interp, 2, objv, "window ?boolean?");
 	return TCL_ERROR;
@@ -6145,7 +6157,10 @@ MODULE_SCOPE int
 TkMacOSXIsWindowZoomed(
     TkWindow *winPtr)
 {
-    NSWindow *macWindow = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    NSWindow *macWindow = nil;
+    if (winPtr && winPtr->window) {
+	macWindow = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    }
     return [macWindow isZoomed];
 }
 
@@ -6874,11 +6889,13 @@ TkMacOSXMakeRealWindowExist(
 void
 TkpRedrawWidget(Tk_Window tkwin) {
     TkWindow *winPtr = (TkWindow *)tkwin;
-    NSWindow *w;
+    NSWindow *w = nil;
     Rect tkBounds;
     NSRect bounds;
 
-    w = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    if (winPtr && winPtr->window) {
+	w = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    }
     if (w) {
 	TKContentView *view = [w contentView];
 	TkMacOSXWinBounds(winPtr, &tkBounds);
@@ -7010,14 +7027,15 @@ TkpWmSetState(
 				 * or WithdrawnState. */
 {
     WmInfo *wmPtr = winPtr->wmInfoPtr;
-    NSWindow *macWin;
+    NSWindow *macWin = nil;
 
     wmPtr->hints.initial_state = state;
     if (wmPtr->flags & WM_NEVER_MAPPED) {
 	goto setStateEnd;
     }
-
-    macWin = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    if (winPtr && winPtr->window) {
+	macWin = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    }
 
     /*
      * Make sure windows are updated before the state change.  As an exception,
