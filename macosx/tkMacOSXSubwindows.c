@@ -1121,7 +1121,9 @@ Tk_MacOSXGetNSWindowForDrawable(
     MacDrawable *macWin = (MacDrawable *)drawable;
     NSWindow *result = nil;
 
-    if (!macWin || macWin->flags & TK_IS_PIXMAP) {
+    if (!macWin ||
+        macWin->flags & TK_IS_PIXMAP ||
+        macWin->winPtr->flags & TK_ALREADY_DEAD) {
 	result = nil;
     } else if (macWin->toplevel && macWin->toplevel->winPtr &&
 	    macWin->toplevel->winPtr->wmInfoPtr &&
