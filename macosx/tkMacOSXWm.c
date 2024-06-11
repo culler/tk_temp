@@ -2417,8 +2417,7 @@ WmDeiconifyCmd(
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     WmInfo *wmPtr = winPtr->wmInfoPtr;
-    NSWindow *win = TkMacOSXGetNSWindowForDrawable(winPtr->window);
-
+    NSWindow *win = nil;
     if (objc != 3) {
 	Tcl_WrongNumArgs(interp, 2, objv, "window");
 	return TCL_ERROR;
@@ -2437,11 +2436,17 @@ WmDeiconifyCmd(
 	return TCL_ERROR;
     }
 
+    if (winPtr->window) {
+	win = TkMacOSXGetNSWindowForDrawable(winPtr->window);
+    }
     TkpWmSetState(winPtr, TkMacOSXIsWindowZoomed(winPtr) ?
 	    ZoomState : NormalState);
-    [win setExcludedFromWindowsMenu:NO];
-    TkMacOSXApplyWindowAttributes(winPtr, win);
-    [win orderFront:NSApp];
+    if (win) {
+	[win setExcludedFromWindowsMenu:NO];
+	TkMacOSXApplyWindowAttributes(winPtr, win);
+	[win orderFront:NSApp];
+	[[win contentView] setNeedsDisplay:YES];
+    }
     if (wmPtr->icon) {
 	Tk_UnmapWindow((Tk_Window)wmPtr->icon);
     }
@@ -2466,7 +2471,6 @@ WmDeiconifyCmd(
 	}
     }
 
-    [[win contentView] setNeedsDisplay:YES];
     Tcl_DoWhenIdle(TkMacOSXDrawAllViews, NULL);
     return TCL_OK;
 }
@@ -6110,7 +6114,7 @@ TkMacOSXGetXWindow(
  *      void*.
  *
  * Results:
- *	A Tk_Window, or NULL if the NSWindow is not associated with
+ *	A Tk_Window, or None if the NSWindow is not associated with
  *      any Tk window.
  *
  * Side effects:
@@ -6126,13 +6130,12 @@ Tk_MacOSXGetTkWindow(
     Window window = None;
     if ([(NSWindow *)w respondsToSelector: @selector (tkWindow)]) {
 	window = [(TKWindow *)w tkWindow];
-    }
-    if (window) {
 	TkDisplay *dispPtr = TkGetDisplayList();
-	return Tk_IdToWindow(dispPtr->display, window);
-    } else {
-	return NULL;
+	if (window && dispPtr && dispPtr->display) {
+	    return Tk_IdToWindow(dispPtr->display, window);
+	}
     }
+    return NULL;
 }
 
 /*

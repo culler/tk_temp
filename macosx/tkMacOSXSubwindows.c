@@ -1138,9 +1138,7 @@ Tk_MacOSXGetNSWindowForDrawable(
 
     } else if (macWin->toplevel && (macWin->toplevel->flags & TK_EMBEDDED)) {
 	TkWindow *contWinPtr = (TkWindow *)Tk_GetOtherWindow((Tk_Window)macWin->toplevel->winPtr);
-
-
-	if (contWinPtr) {
+	if (contWinPtr && contWinPtr->privatePtr) {
 	    result = TkMacOSXGetNSWindowForDrawable((Drawable)contWinPtr->privatePtr);
 	}
     }
