@@ -642,8 +642,6 @@ test unixWm-16.1 {Tk_WmCmd procedure, "deiconify" option} unix {
 test unixWm-16.2 {Tk_WmCmd procedure, "deiconify" option} unix {
     destroy .icon
     toplevel .icon -width 50 -height 50 -bg red
-    # calling update here prevents a crash in 16.3 on macOS
-    update
     wm iconwindow .t .icon
     set result [list [catch {wm deiconify .icon} msg] $msg]
     destroy .icon
@@ -996,7 +994,6 @@ test unixWm-27.5 {Tk_WmCmd procedure, "iconwindow" option} unix {
 test unixWm-27.6 {Tk_WmCmd procedure, "iconwindow" option, changing icons} unix {
     destroy .icon
     destroy .icon2
-    update; # see if this avoids macOS crash on CI runner
     toplevel .icon -width 50 -height 50 -bg green
     toplevel .icon2 -width 50 -height 50 -bg red
     set result {}
@@ -1356,12 +1353,8 @@ test unixWm-38.2 {Tk_WmCmd procedure, "withdraw" option} unix {
 test unixWm-38.3 {Tk_WmCmd procedure, "withdraw" option} unix {
     set result {}
     wm withdraw .t
-    #added to avoid a crash on macOS
-    update
     lappend result [wm state .t] [winfo ismapped .t]
     wm deiconify .t
-    #added to avoid a crash on macOS
-    update
     lappend result [wm state .t] [winfo ismapped .t]
 } {withdrawn 0 normal 1}
 

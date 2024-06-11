@@ -167,13 +167,14 @@ jobs:
             exit 1
           }
         timeout-minutes: 20
-        continue-on-error: true
-      - name: Wait a minute
-        run: |
-          sleep 60
-      - name: Upload crash reports
-        uses: actions/upload-artifact@v3
-        with:
-          name: ClangReports
-          path: ~/Library/Logs/DiagnosticReports/
+# Uncomment to retrieve a crash report as an artifact.
+#        continue-on-error: true
+#      - name: Wait a minute
+#        run: |
+#          sleep 60
+#      - name: Upload crash reports
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: ClangReports
+#          path: ~/Library/Logs/DiagnosticReports/
 
