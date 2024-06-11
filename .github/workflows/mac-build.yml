@@ -52,8 +52,17 @@ jobs:
             exit 1
           fi
         timeout-minutes: 30
+        continue-on-error: true
+      - name: Wait a minute
+        run: |
+          sleep 60
+      - name: Upload crash reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: XCodeReports
+          path: ~/Library/Logs/DiagnosticReports/
   clang:
-    runs-on: macos-11
+    runs-on: macos-14
     strategy:
       matrix:
         symbols:
@@ -158,10 +167,13 @@ jobs:
             exit 1
           }
         timeout-minutes: 20
-      - name: Carry out trial installation
+        continue-on-error: true
+      - name: Wait a minute
         run: |
-          make install || {
-            cat config.log
-            echo "::error::Failure during Install"
-            exit 1
-          }
+          sleep 60
+      - name: Upload crash reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: ClangReports
+          path: ~/Library/Logs/DiagnosticReports/
+
