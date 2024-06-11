@@ -996,6 +996,7 @@ test unixWm-27.5 {Tk_WmCmd procedure, "iconwindow" option} unix {
 test unixWm-27.6 {Tk_WmCmd procedure, "iconwindow" option, changing icons} unix {
     destroy .icon
     destroy .icon2
+    update; # see if this avoids macOS crash on CI runner
     toplevel .icon -width 50 -height 50 -bg green
     toplevel .icon2 -width 50 -height 50 -bg red
     set result {}
