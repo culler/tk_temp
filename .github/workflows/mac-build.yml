@@ -52,15 +52,6 @@ jobs:
             exit 1
           fi
         timeout-minutes: 30
-        continue-on-error: true
-      - name: Wait a minute
-        run: |
-          sleep 60
-      - name: Upload crash reports
-        uses: actions/upload-artifact@v3
-        with:
-          name: XCodeReports
-          path: ~/Library/Logs/DiagnosticReports/
   clang:
     runs-on: macos-14
     strategy:
@@ -70,6 +61,7 @@ jobs:
           - 'mem'
         options:
           - '--enable-aqua'
+          - '--disable-aqua'
     defaults:
       run:
         shell: bash
@@ -149,7 +141,7 @@ jobs:
               echo Xvfb not used, this is a --enable-aqua build
             }
           fi
-          ( runXvfb :0; make TESTFLAGS="-verbose bpest" test-classic; exit $? ) | tee out-classic.txt || {
+          ( runXvfb :0; make test-classic; exit $? ) | tee out-classic.txt || {
             echo "::error::Failure during Test (classic)"
             exit 1
           }
@@ -166,4 +158,10 @@ jobs:
             exit 1
           }
         timeout-minutes: 20
-
+      - name: Carry out trial installation
+        run: |
+          make install || {
+            cat config.log
+            echo "::error::Failure during Install"
+            exit 1
+          }
