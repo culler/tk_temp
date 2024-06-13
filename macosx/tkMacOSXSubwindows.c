@@ -1122,8 +1122,6 @@ Tk_MacOSXGetNSWindowForDrawable(
     MacDrawable *macWin = (MacDrawable *)drawable;
     NSWindow *result = nil;
 
-    if (macWin == NULL) abort();
-
     if (!macWin || macWin->flags & TK_IS_PIXMAP) {
 	result = nil;
 
