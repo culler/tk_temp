@@ -887,17 +887,6 @@ TheWorldHasChanged(
 {
     TkFontInfo *fiPtr = (TkFontInfo *)clientData;
 
-    /*
-     * On macOS it is catastrophic to recompute all widgets while the
-     * [NSView drawRect] method is drawing. The best that we can do in
-     * that situation is to abort the recomputation and hope for the best.
-     * This is ignored on other platforms.
-     */
-
-    if (TkpWillDrawWidget(NULL)) {
-	return;
-    }
-
     fiPtr->updatePending = 0;
     RecomputeWidgets(fiPtr->mainPtr->winPtr);
 }
@@ -1329,7 +1318,6 @@ Tk_GetFontFromObj(
 	    FreeFontObj(objPtr);
 	    fontPtr = NULL;
 	} else if (Tk_Screen(tkwin) == fontPtr->screen) {
-	    fontPtr->resourceRefCount++;
 	    return (Tk_Font) fontPtr;
 	}
     }
@@ -4307,7 +4295,7 @@ Tcl_Obj *
 TkDebugFont(
     Tk_Window tkwin,		/* The window in which the font will be used
 				 * (not currently used). */
-    const char *name)		/* Name of the desired color. */
+    const char *name)		/* Name of the desired font. */
 {
     TkFont *fontPtr;
     Tcl_HashEntry *hashPtr;

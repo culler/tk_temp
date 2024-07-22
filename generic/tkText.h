@@ -172,9 +172,12 @@ typedef struct TkTextSegment {
     Tcl_Size size;			/* Size of this segment (# of bytes of index
 				 * space it occupies). */
     union {
-	char chars[4];	/* Characters that make up character info.
-				 * Actual length varies to hold as many
-				 * characters as needed.*/
+	/* The TKFLEXARRAY macro - unfortunately - doesn't work inside a union. */
+#if defined(__GNUC__) && (__GNUC__ > 2)
+	char chars[0];		/* Characters that make up character info. */
+#else				/* Actual length varies to hold as many */
+	char chars[1];		/* characters as needed. See [dacd18294b] */
+#endif
 	TkTextToggle toggle;	/* Information about tag toggle. */
 	TkTextMark mark;	/* Information about mark. */
 	TkTextEmbWindow ew;	/* Information about embedded window. */
@@ -381,7 +384,7 @@ typedef struct TkTextTag {
     int lMargin2;		/* Left margin for second and later display lines
 				 * of each text line, in pixels. INT_MIN means option not specified. */
     Tk_3DBorder lMarginColor;	/* Used for drawing background in left margins.
-                                 * This is used for both lmargin1 and lmargin2.
+				 * This is used for both lmargin1 and lmargin2.
 				 * NULL means no value specified here. */
 #if TK_MAJOR_VERSION > 8
     Tcl_Obj *offsetObj;		/* -offset option. NULL means option not specified. */
@@ -399,7 +402,7 @@ typedef struct TkTextTag {
     int overstrike;		/* > 0 means draw horizontal line through
 				 * middle of text. -1 means not specified. */
     XColor *overstrikeColor;    /* Color for the overstrike. NULL means same
-                                 * color as foreground. */
+				 * color as foreground. */
 #if TK_MAJOR_VERSION > 8
     Tcl_Obj *rMarginObj;	/* -rmargin option object. NULL
 				 * means option not specified. */
@@ -458,7 +461,7 @@ typedef struct TkTextTag {
     int underline;		/* > 0 means draw underline underneath
 				 * text. -1 means not specified. */
     XColor *underlineColor;     /* Color for the underline. NULL means same
-                                 * color as foreground. */
+				 * color as foreground. */
     TkWrapMode wrapMode;	/* How to handle wrap-around for this tag.
 				 * Must be TEXT_WRAPMODE_CHAR, TEXT_WRAPMODE_WORD,
 				 * TEXT_WRAPMODE_NONE, or TEXT_WRAPMODE_NULL to
@@ -644,7 +647,7 @@ typedef struct TkSharedText {
     struct TkText *peers;
 
     Tcl_Size undoMarkId;             /* Counts undo marks temporarily used during
-                                   undo and redo operations. */
+				   undo and redo operations. */
 } TkSharedText;
 
 /*
@@ -857,7 +860,7 @@ typedef struct TkText {
     int autoSeparators;		/* Non-zero means the separators will be
 				 * inserted automatically. */
     Tcl_Obj *afterSyncCmd;	/* Command to be executed when lines are up to
-                                 * date */
+				 * date */
 } TkText;
 
 /*

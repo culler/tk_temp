@@ -917,8 +917,7 @@ typedef struct {
 #   ifndef XMaxTransChars
 #	define XMaxTransChars 7
 #   endif
-    char trans_chars[XMaxTransChars];
-                            /* translated characters */
+    char trans_chars[XMaxTransChars]; /* translated characters */
     unsigned char nbytes;
 #elif !defined(MAC_OSX_TK)
     char *charValuePtr;		/* A pointer to a string that holds the key's
@@ -1069,10 +1068,6 @@ typedef struct {
     Tcl_ObjType objType;
     size_t version;
 } TkObjType;
-
-#ifndef TCL_OBJTYPE_V0
-#   define TCL_OBJTYPE_V0 /* just empty */
-#endif
 
 MODULE_SCOPE const TkObjType tkBorderObjType;
 MODULE_SCOPE const TkObjType tkBitmapObjType;
@@ -1265,6 +1260,7 @@ MODULE_SCOPE void	TkpDrawFrameEx(Tk_Window tkwin, Drawable drawable,
 			    int borderWidth, int relief);
 MODULE_SCOPE void	TkpShowBusyWindow(TkBusy busy);
 MODULE_SCOPE void	TkpHideBusyWindow(TkBusy busy);
+MODULE_SCOPE Tcl_Size	TkLengthOne(Tcl_Obj *);
 MODULE_SCOPE void	TkpMakeTransparentWindowExist(Tk_Window tkwin,
 			    Window parent);
 MODULE_SCOPE void	TkpCreateBusy(Tk_FakeWin *winPtr, Tk_Window tkRef,

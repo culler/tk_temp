@@ -1468,12 +1468,18 @@ DisplayFrame(
      * off-screen memory, then copies it back on-screen in a single operation.
      * This means there's no point in time where the on-screen image has been
      * cleared.
+     * Also, ensure that the pixmap size is at least 1x1 pixels to prevent
+     * crashes, see [610aa08858].
      */
 
     pixmap = Tk_GetPixmap(framePtr->display, Tk_WindowId(tkwin),
-	    Tk_Width(tkwin), Tk_Height(tkwin), Tk_Depth(tkwin));
+	(Tk_Width(tkwin) > 0 ? Tk_Width(tkwin) : 1),
+	(Tk_Height(tkwin) > 0 ? Tk_Height(tkwin) : 1),
+	Tk_Depth(tkwin));
 #else
     pixmap = Tk_WindowId(tkwin);
+    Tk_ClipDrawableToRect(Tk_Display(tkwin), pixmap, 0, 0,
+			  Tk_Width(tkwin), Tk_Height(tkwin));
 #endif /* TK_NO_DOUBLE_BUFFERING */
 
     if (framePtr->type != TYPE_LABELFRAME) {
