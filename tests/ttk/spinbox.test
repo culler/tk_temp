@@ -211,11 +211,11 @@ test spinbox-3.0 "textarea should expand to fill widget" -setup {
 } -body {
     grid .sb -sticky ew
     wm geometry . "300x80"
-    update idletasks
+    update
     lappend ::spinbox_test [.sb identify 275 10]
     grid columnconfigure . 0 -weight 1
-    update idletasks
-    lappend ::spinbox_test [.sb identify 275 10]
+    update
+    lappend ::spinbox_test [.sb identify 200 10]
     set ::spinbox_test
 } -cleanup {
     destroy .sb
