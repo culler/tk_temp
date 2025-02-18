@@ -4,8 +4,8 @@
  *	Stub object that will be statically linked into extensions that want
  *	to access Tk.
  *
- * Copyright © 1998-1999 Scriptics Corporation.
- * Copyright © 1998 Paul Duffin.
+ * Copyright (c) 1998-1999 Scriptics Corporation.
+ * Copyright (c) 1998 Paul Duffin.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -75,19 +75,15 @@ Tk_InitStubs(
     const char *version,
     int exact)
 {
-    const char *packageName = "tk";
+    const char *packageName = "Tk";
     const char *errMsg = NULL;
-    void *clientData = NULL;
+    ClientData clientData = NULL;
     const char *actualVersion = tclStubsPtr->tcl_PkgRequireEx(interp,
 	    packageName, version, 0, &clientData);
+    const TkStubs *stubsPtr = (const TkStubs *)clientData;
 
     if (actualVersion == NULL) {
-	packageName = "Tk";
-	actualVersion = tclStubsPtr->tcl_PkgRequireEx(interp,
-    	    packageName, version, 0, &clientData);
-	if (actualVersion == NULL) {
-	    return NULL;
-	}
+	return NULL;
     }
 
     if (exact) {
@@ -117,15 +113,15 @@ Tk_InitStubs(
 	    }
 	}
     }
-    if (clientData == NULL) {
+    if (stubsPtr == NULL) {
 	errMsg = "missing stub table pointer";
     } else {
-	tkStubsPtr = (const TkStubs *)clientData;
-	if (tkStubsPtr->hooks) {
-	    tkPlatStubsPtr = tkStubsPtr->hooks->tkPlatStubs;
-	    tkIntStubsPtr = tkStubsPtr->hooks->tkIntStubs;
-	    tkIntPlatStubsPtr = tkStubsPtr->hooks->tkIntPlatStubs;
-	    tkIntXlibStubsPtr = tkStubsPtr->hooks->tkIntXlibStubs;
+	tkStubsPtr = stubsPtr;
+	if (stubsPtr->hooks) {
+	    tkPlatStubsPtr = stubsPtr->hooks->tkPlatStubs;
+	    tkIntStubsPtr = stubsPtr->hooks->tkIntStubs;
+	    tkIntPlatStubsPtr = stubsPtr->hooks->tkIntPlatStubs;
+	    tkIntXlibStubsPtr = stubsPtr->hooks->tkIntXlibStubs;
 	} else {
 	    tkPlatStubsPtr = NULL;
 	    tkIntStubsPtr = NULL;

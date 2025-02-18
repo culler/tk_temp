@@ -25,6 +25,7 @@
 #include <math.h>
 #include <string.h>
 #include <limits.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/file.h>
 #ifdef HAVE_SYS_SELECT_H
@@ -38,7 +39,9 @@
 #	include <sys/time.h>
 #endif
 #include <time.h>
-#include <inttypes.h>
+#ifdef HAVE_INTTYPES_H
+#    include <inttypes.h>
+#endif
 #include <unistd.h>
 #if defined(__GNUC__) && !defined(__cplusplus)
 #   pragma GCC diagnostic ignored "-Wc++-compat"
@@ -115,6 +118,26 @@
 #define REDO_KEYSYM_LOOKUP
 
 /*
+ * Defines for X functions that are used by Tk but are treated as
+ * no-op functions on the Macintosh.
+ */
+
+#undef XFlush
+#define XFlush(display) (0)
+#undef XFree
+#define XFree(data) (((data) != NULL) ? (ckfree(data),0) : 0)
+#undef XGrabServer
+#define XGrabServer(display) (0)
+#undef XNoOp
+#define XNoOp(display) (LastKnownRequestProcessed(display)++,0)
+#undef XUngrabServer
+#define XUngrabServer(display) (0)
+#undef XSynchronize
+#define XSynchronize(display, onoff) (LastKnownRequestProcessed(display)++,NULL)
+#undef XVisualIDFromVisual
+#define XVisualIDFromVisual(visual) (visual->visualid)
+
+/*
  * The following functions are not used on the Mac, so we stub them out.
  */
 
@@ -122,6 +145,17 @@
 #define TkpFreeColor(tkColPtr)
 #define TkSetPixmapColormap(p,c) {}
 #define TkpSync(display)
+
+/*
+ * TkMacOSXGetCapture is a legacy function used on the Mac. When fixing
+ * [943d5ebe51], TkpGetCapture was added to the Windows port. Both
+ * are actually the same feature and should bear the same name. However,
+ * in order to avoid potential backwards incompatibilities, renaming
+ * TkMacOSXGetCapture into TkpGetCapture in *PlatDecls.h shall not be
+ * done in a patch release, therefore use a define here.
+ */
+
+#define TkpGetCapture TkMacOSXGetCapture
 
 /*
  * This macro stores a representation of the window handle in a string.
@@ -149,12 +183,6 @@ MODULE_SCOPE int TkpPutRGBAImage(
 		     Display* display, Drawable drawable, GC gc,XImage* image,
 		     int src_x, int src_y, int dest_x, int dest_y,
 		     unsigned int width, unsigned int height);
-
-/*
- * Inform tkCanvas.c that our XGetImage returns a 32pp pixmap packed as 0xAABBGGRR
- */
-
-#define TK_XGETIMAGE_USES_ABGR32
 
 /*
  * Used by xcolor.c

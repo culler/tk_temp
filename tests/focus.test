@@ -2,8 +2,8 @@
 # other procedures in the file tkFocus.c.  It is organized in the
 # standard fashion for Tcl tests.
 #
-# Copyright © 1994-1996 Sun Microsystems, Inc.
-# Copyright © 1998-1999 Scriptics Corporation.
+# Copyright (c) 1994-1996 Sun Microsystems, Inc.
+# Copyright (c) 1998-1999 Scriptics Corporation.
 # All rights reserved.
 
 package require tcltest 2.2
@@ -43,8 +43,15 @@ proc focusSetupAlt {} {
 # the X server and possibly also the window manager.
 
 proc focusClear {} {
-    dobg {after 200; focus -force .; update}
-    after 400
+    global x;
+    after 200 {set x 1}
+    tkwait variable x
+    dobg {focus -force .; update}
+    while {[focus] != ""} {
+        after 100 {set y 1}
+    	tkwait variable y
+    }
+        
     update
 }
 
@@ -65,7 +72,7 @@ bind all <FocusIn> {
 bind all <FocusOut> {
     append focusInfo "out %W %d\n"
 }
-bind all <Key> {
+bind all <KeyPress> {
     append focusInfo "press %W %K"
 }
 focusSetup
@@ -318,7 +325,7 @@ test focus-2.6 {TkFocusFilterEvent procedure, FocusIn events} -constraints {
     event gen [testwrapper .t] <FocusIn> -detail NotifyAncestor
     set focusInfo {}
     set x [focus]
-    event gen . <x>
+    event gen . <KeyPress-x>
     list $x $focusInfo
 } -result {.t.b1 {press .t.b1 x}}
 test focus-2.7 {TkFocusFilterEvent procedure, FocusOut events} -constraints {
@@ -619,7 +626,7 @@ test focus-5.1 {ChangeXFocus procedure, don't take focus unless have it} -constr
 destroy .t
 bind all <FocusIn> {}
 bind all <FocusOut> {}
-bind all <Key> {}
+bind all <KeyPress> {}
 
 
 fixfocus

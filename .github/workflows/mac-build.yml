@@ -13,7 +13,7 @@ env:
   ERROR_ON_FAILURES: 1
 jobs:
   xcode:
-    runs-on: macos-14
+    runs-on: macos-15
     defaults:
       run:
         shell: bash
@@ -23,11 +23,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: tk
-      - name: Check out Tcl 9.0
+      - name: Checkout Tcl
         uses: actions/checkout@v4
         with:
           repository: tcltk/tcl
-          ref: main
+          ref: core-8-6-branch
           path: tcl
       - name: Prepare checked out repositories
         run: |
@@ -48,7 +48,7 @@ jobs:
           }
       - name: Run Tests
         run: |
-          make test | tee out.txt
+          make TK_NO_STDERR=1 test | tee out.txt
           nmatches=$( grep -c "Failed	0" out.txt )
           if [ $nmatches -lt 4 ]
           then
@@ -57,7 +57,7 @@ jobs:
           fi
         timeout-minutes: 30
   clang:
-    runs-on: macos-14
+    runs-on: macos-15
     strategy:
       matrix:
         symbols:
@@ -65,7 +65,7 @@ jobs:
           - 'mem'
         options:
           - '--enable-aqua'
-#          - '--disable-aqua'
+          - '--disable-aqua'
     defaults:
       run:
         shell: bash
@@ -75,20 +75,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: tk
-      - name: Check out Tcl 9.0
+      - name: Checkout Tcl
         uses: actions/checkout@v4
         with:
           repository: tcltk/tcl
-          ref: main
+          ref: core-8-6-branch
           path: tcl
       - name: Prepare checked out repositories
         env:
           SET_DISPLAY: ${{ contains(matrix.options, '--disable-aqua') }}
         run: |
-          touch tkStubInit.c
+          touch ../generic/tkStubInit.c ../doc/man.macros
           mkdir "$HOME/install dir"
           echo "USE_XVFB=$SET_DISPLAY" >> $GITHUB_ENV
-        working-directory: tk/generic
       - name: Add X11 (if required)
         if: ${{ env.USE_XVFB == 'true' }}
         run: |
@@ -96,8 +95,9 @@ jobs:
           sudo /opt/X11/libexec/privileged_startx || true
         working-directory: .
       - name: Build Tcl
+        # Note that macOS is always a 64 bit platform
         run: |
-          ./configure $CFGOPT --disable-zipfs "--prefix=$HOME/install dir" || {
+          ./configure --enable-64bit $CFGOPT "--prefix=$HOME/install dir" || {
             cat config.log
             echo "::error::Failure during Tcl Configure"
             exit 1
@@ -114,8 +114,9 @@ jobs:
         env:
           CFGOPT: --enable-symbols=${{ matrix.symbols }}
       - name: Configure (symbols=${{ matrix.symbols }} ${{matrix.options }})
+        # Note that macOS is always a 64 bit platform
         run: |
-          ./configure $CFGOPT --disable-zipfs "--prefix=$HOME/install dir" --disable-xft || {
+          ./configure --enable-64bit $CFGOPT "--prefix=$HOME/install dir" --disable-xft || {
             cat config.log
             echo "::error::Failure during Configure"
             exit 1
@@ -124,7 +125,7 @@ jobs:
           CFGOPT: --enable-symbols=${{ matrix.symbols }} ${{matrix.options }}
       - name: Build
         run: |
-          make all tktest || {
+          make binaries libraries tktest || {
             echo "::error::Failure during Build"
             exit 1
           }
@@ -143,6 +144,7 @@ jobs:
           else
             function runXvfb {
               echo Xvfb not used, this is a --enable-aqua build
+              export TK_NO_STDERR=1
             }
           fi
           ( runXvfb :0; make test-classic; exit $? ) | tee out-classic.txt || {

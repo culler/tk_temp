@@ -1,31 +1,31 @@
 /*
- * Copyright © 2004, Joe English
+ * Copyright (c) 2004, Joe English
  *
  * ttk::treeview widget implementation.
  */
 
 #include "tkInt.h"
-#include "ttkThemeInt.h"
+#include "ttkTheme.h"
 #include "ttkWidget.h"
 
 #ifdef _WIN32
 #include "tkWinInt.h"
+#elif defined(MAC_OSX_TK)
+#include "tkMacOSXPrivate.h"
 #endif
 
 #define DEF_TREE_ROWS		"10"
-#define DEF_TITLECOLUMNS	"0"
-#define DEF_TITLEITEMS		"0"
-#define DEF_STRIPED		"0"
 #define DEF_COLWIDTH		"200"
 #define DEF_MINWIDTH		"20"
 
-static const Tk_Anchor DEFAULT_IMAGEANCHOR = TK_ANCHOR_W;
+static const int DEFAULT_ROWHEIGHT 	= 20;
 static const int DEFAULT_INDENT 	= 20;
 static const int HALO   		= 4;	/* heading separator */
 
-#define STATE_CHANGED	 	(0x100)	/* item state option changed */
+#define TTK_STATE_OPEN TTK_STATE_USER1
+#define TTK_STATE_LEAF TTK_STATE_USER2
 
-#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#define STATE_CHANGED	 	(0x100)	/* item state option changed */
 
 /*------------------------------------------------------------------------
  * +++ Tree items.
@@ -54,59 +54,36 @@ struct TreeItemRec {
     Tcl_Obj	*valuesObj;
     Tcl_Obj	*openObj;
     Tcl_Obj	*tagsObj;
-    Tcl_Obj     *selObj;
-    Tcl_Obj     *imageAnchorObj;
-    int 	hidden;
-    int		height; 	/* Height is in number of row heights */
-
-    Ttk_TagSet  *cellTagSets;
-    Tcl_Size	nTagSets;
 
     /*
      * Derived resources:
      */
     Ttk_TagSet	tagset;
     Ttk_ImageSpec *imagespec;
-    int itemPos; 		/* Counting items */
-    int visiblePos; 		/* Counting visible items */
-    int rowPos;			/* Counting rows (visible physical space) */
 };
 
 #define ITEM_OPTION_TAGS_CHANGED	0x100
 #define ITEM_OPTION_IMAGE_CHANGED	0x200
 
-static const Tk_OptionSpec ItemOptionSpecs[] = {
+static Tk_OptionSpec ItemOptionSpecs[] = {
     {TK_OPTION_STRING, "-text", "text", "Text",
-	"", offsetof(TreeItem,textObj), TCL_INDEX_NONE,
-	0,0,0 },
-    {TK_OPTION_INT, "-height", "height", "Height",
-	"1", TCL_INDEX_NONE, offsetof(TreeItem,height),
-	0,0,0 },
-    {TK_OPTION_BOOLEAN, "-hidden", "hidden", "Hidden",
-	"0", TCL_INDEX_NONE, offsetof(TreeItem,hidden),
+	"", Tk_Offset(TreeItem,textObj), -1,
 	0,0,0 },
     {TK_OPTION_STRING, "-image", "image", "Image",
-	NULL, offsetof(TreeItem,imageObj), TCL_INDEX_NONE,
+	NULL, Tk_Offset(TreeItem,imageObj), -1,
 	TK_OPTION_NULL_OK,0,ITEM_OPTION_IMAGE_CHANGED },
-    {TK_OPTION_ANCHOR, "-imageanchor", "imageAnchor", "ImageAnchor",
-	NULL, offsetof(TreeItem,imageAnchorObj), TCL_INDEX_NONE,
-	TK_OPTION_NULL_OK,0,0 },
     {TK_OPTION_STRING, "-values", "values", "Values",
-	NULL, offsetof(TreeItem,valuesObj), TCL_INDEX_NONE,
+	NULL, Tk_Offset(TreeItem,valuesObj), -1,
 	TK_OPTION_NULL_OK,0,0 },
     {TK_OPTION_BOOLEAN, "-open", "open", "Open",
-	"0", offsetof(TreeItem,openObj), TCL_INDEX_NONE,
+	"0", Tk_Offset(TreeItem,openObj), -1,
 	0,0,0 },
     {TK_OPTION_STRING, "-tags", "tags", "Tags",
-	NULL, offsetof(TreeItem,tagsObj), TCL_INDEX_NONE,
+	NULL, Tk_Offset(TreeItem,tagsObj), -1,
 	TK_OPTION_NULL_OK,0,ITEM_OPTION_TAGS_CHANGED },
 
-    {TK_OPTION_END, 0,0,0, NULL, TCL_INDEX_NONE,TCL_INDEX_NONE, 0,0,0}
+    {TK_OPTION_END, 0,0,0, NULL, -1,-1, 0,0,0}
 };
-
-/* Forward declarations */
-static void RemoveTag(TreeItem *, Ttk_Tag);
-static void RemoveTagFromCellsAtItem(TreeItem *, Ttk_Tag);
 
 /* + NewItem --
  * 	Allocate a new, uninitialized, unlinked item
@@ -124,12 +101,6 @@ static TreeItem *NewItem(void)
     item->valuesObj = NULL;
     item->openObj = NULL;
     item->tagsObj = NULL;
-    item->selObj = NULL;
-    item->imageAnchorObj = NULL;
-    item->hidden = 0;
-    item->height = 1;
-    item->cellTagSets = NULL;
-    item->nTagSets = 0;
 
     item->tagset = NULL;
     item->imagespec = NULL;
@@ -142,25 +113,14 @@ static TreeItem *NewItem(void)
  */
 static void FreeItem(TreeItem *item)
 {
-    Tcl_Size i;
     if (item->textObj) { Tcl_DecrRefCount(item->textObj); }
     if (item->imageObj) { Tcl_DecrRefCount(item->imageObj); }
     if (item->valuesObj) { Tcl_DecrRefCount(item->valuesObj); }
     if (item->openObj) { Tcl_DecrRefCount(item->openObj); }
     if (item->tagsObj) { Tcl_DecrRefCount(item->tagsObj); }
-    if (item->selObj) { Tcl_DecrRefCount(item->selObj); }
-    if (item->imageAnchorObj) { Tcl_DecrRefCount(item->imageAnchorObj); }
 
     if (item->tagset)	{ Ttk_FreeTagSet(item->tagset); }
     if (item->imagespec) { TtkFreeImageSpec(item->imagespec); }
-    if (item->cellTagSets) {
-	for (i = 0; i < item->nTagSets; ++i) {
-	    if (item->cellTagSets[i] != NULL) {
-		Ttk_FreeTagSet(item->cellTagSets[i]);
-	    }
-	}
-	ckfree(item->cellTagSets);
-    }
 
     ckfree(item);
 }
@@ -226,52 +186,35 @@ static TreeItem *NextPreorder(TreeItem *item)
 
 typedef struct {
     Tcl_Obj *textObj;		/* taken from item / data cell */
-    Tcl_Obj *imageObj;		/* taken from item or tag*/
-    Tcl_Obj *imageAnchorObj;	/* taken from item or tag */
+    Tcl_Obj *imageObj;		/* taken from item */
     Tcl_Obj *anchorObj;		/* from column <<NOTE-ANCHOR>> */
     Tcl_Obj *backgroundObj;	/* remainder from tag */
-    Tcl_Obj *stripedBgObj;
     Tcl_Obj *foregroundObj;
     Tcl_Obj *fontObj;
-    Tcl_Obj *paddingObj;
 } DisplayItem;
 
-static const Tk_OptionSpec DisplayOptionSpecs[] = {
+static Tk_OptionSpec TagOptionSpecs[] = {
     {TK_OPTION_STRING, "-text", "text", "Text",
-	NULL, offsetof(DisplayItem,textObj), TCL_INDEX_NONE,
+	NULL, Tk_Offset(DisplayItem,textObj), -1,
+	TK_OPTION_NULL_OK,0,0 },
+    {TK_OPTION_STRING, "-image", "image", "Image",
+	NULL, Tk_Offset(DisplayItem,imageObj), -1,
 	TK_OPTION_NULL_OK,0,0 },
     {TK_OPTION_ANCHOR, "-anchor", "anchor", "Anchor",
-	"center", offsetof(DisplayItem,anchorObj), TCL_INDEX_NONE,
+	"center", Tk_Offset(DisplayItem,anchorObj), -1,
 	0, 0, GEOMETRY_CHANGED},	/* <<NOTE-ANCHOR>> */
-    /* From here down are the tags options. The index in TagOptionSpecs
-     * below should be kept in synch with this position.
-     */
-    {TK_OPTION_STRING, "-image", "image", "Image",
-	NULL, offsetof(DisplayItem,imageObj), TCL_INDEX_NONE,
-	TK_OPTION_NULL_OK,0,0 },
-    {TK_OPTION_ANCHOR, "-imageanchor", "imageAnchor", "ImageAnchor",
-	NULL, offsetof(DisplayItem,imageAnchorObj), TCL_INDEX_NONE,
-	TK_OPTION_NULL_OK,0,0 },
     {TK_OPTION_COLOR, "-background", "windowColor", "WindowColor",
-	NULL, offsetof(DisplayItem,backgroundObj), TCL_INDEX_NONE,
-	TK_OPTION_NULL_OK,0,0 },
-    {TK_OPTION_COLOR, "-stripedbackground", "windowColor", "WindowColor",
-	NULL, offsetof(DisplayItem,stripedBgObj), TCL_INDEX_NONE,
+	NULL, Tk_Offset(DisplayItem,backgroundObj), -1,
 	TK_OPTION_NULL_OK,0,0 },
     {TK_OPTION_COLOR, "-foreground", "textColor", "TextColor",
-	NULL, offsetof(DisplayItem,foregroundObj), TCL_INDEX_NONE,
+	NULL, Tk_Offset(DisplayItem,foregroundObj), -1,
 	TK_OPTION_NULL_OK,0,0 },
     {TK_OPTION_FONT, "-font", "font", "Font",
-	NULL, offsetof(DisplayItem,fontObj), TCL_INDEX_NONE,
-	TK_OPTION_NULL_OK,0,GEOMETRY_CHANGED },
-    {TK_OPTION_STRING, "-padding", "padding", "Pad",
-	NULL, offsetof(DisplayItem,paddingObj), TCL_INDEX_NONE,
+	NULL, Tk_Offset(DisplayItem,fontObj), -1,
 	TK_OPTION_NULL_OK,0,GEOMETRY_CHANGED },
 
-    {TK_OPTION_END, 0,0,0, NULL, TCL_INDEX_NONE,TCL_INDEX_NONE, 0,0,0}
+    {TK_OPTION_END, 0,0,0, NULL, -1,-1, 0,0,0}
 };
-
-static const Tk_OptionSpec *TagOptionSpecs = &DisplayOptionSpecs[2];
 
 /*------------------------------------------------------------------------
  * +++ Columns.
@@ -284,7 +227,6 @@ typedef struct {
     int 	width;		/* Column width, in pixels */
     int 	minWidth;	/* Minimum column width, in pixels */
     int 	stretch;	/* Should column stretch while resizing? */
-    int         separator;      /* Should this column have a separator? */
     Tcl_Obj	*idObj;		/* Column identifier, from -columns option */
 
     Tcl_Obj	*anchorObj;	/* -anchor for cell data <<NOTE-ANCHOR>> */
@@ -301,8 +243,6 @@ typedef struct {
     /* Temporary storage for cell data
      */
     Tcl_Obj 	*data;
-    int         selected;
-    Ttk_TagSet	tagset;
 } TreeColumn;
 
 static void InitColumn(TreeColumn *column)
@@ -310,7 +250,6 @@ static void InitColumn(TreeColumn *column)
     column->width = atoi(DEF_COLWIDTH);
     column->minWidth = atoi(DEF_MINWIDTH);
     column->stretch = 1;
-    column->separator = 0;
     column->idObj = 0;
     column->anchorObj = 0;
 
@@ -322,7 +261,6 @@ static void InitColumn(TreeColumn *column)
     column->headingCommandObj = 0;
 
     column->data = 0;
-    column->tagset = NULL;
 }
 
 static void FreeColumn(TreeColumn *column)
@@ -339,45 +277,42 @@ static void FreeColumn(TreeColumn *column)
     /* Don't touch column->data, it's scratch storage */
 }
 
-static const Tk_OptionSpec ColumnOptionSpecs[] = {
+static Tk_OptionSpec ColumnOptionSpecs[] = {
     {TK_OPTION_INT, "-width", "width", "Width",
-	DEF_COLWIDTH, TCL_INDEX_NONE, offsetof(TreeColumn,width),
+	DEF_COLWIDTH, -1, Tk_Offset(TreeColumn,width),
 	0,0,GEOMETRY_CHANGED },
     {TK_OPTION_INT, "-minwidth", "minWidth", "MinWidth",
-	DEF_MINWIDTH, TCL_INDEX_NONE, offsetof(TreeColumn,minWidth),
-	0,0,0 },
-    {TK_OPTION_BOOLEAN, "-separator", "separator", "Separator",
-	"0", TCL_INDEX_NONE, offsetof(TreeColumn,separator),
+	DEF_MINWIDTH, -1, Tk_Offset(TreeColumn,minWidth),
 	0,0,0 },
     {TK_OPTION_BOOLEAN, "-stretch", "stretch", "Stretch",
-	"1", TCL_INDEX_NONE, offsetof(TreeColumn,stretch),
+	"1", -1, Tk_Offset(TreeColumn,stretch),
 	0,0,GEOMETRY_CHANGED },
     {TK_OPTION_ANCHOR, "-anchor", "anchor", "Anchor",
-	"w", offsetof(TreeColumn,anchorObj), TCL_INDEX_NONE,	/* <<NOTE-ANCHOR>> */
+	"w", Tk_Offset(TreeColumn,anchorObj), -1,	/* <<NOTE-ANCHOR>> */
 	0,0,0 },
     {TK_OPTION_STRING, "-id", "id", "ID",
-	NULL, offsetof(TreeColumn,idObj), TCL_INDEX_NONE,
+	NULL, Tk_Offset(TreeColumn,idObj), -1,
 	TK_OPTION_NULL_OK,0,READONLY_OPTION },
-    {TK_OPTION_END, 0,0,0, NULL, TCL_INDEX_NONE,TCL_INDEX_NONE, 0,0,0}
+    {TK_OPTION_END, 0,0,0, NULL, -1,-1, 0,0,0}
 };
 
-static const Tk_OptionSpec HeadingOptionSpecs[] = {
+static Tk_OptionSpec HeadingOptionSpecs[] = {
     {TK_OPTION_STRING, "-text", "text", "Text",
-	"", offsetof(TreeColumn,headingObj), TCL_INDEX_NONE,
+	"", Tk_Offset(TreeColumn,headingObj), -1,
 	0,0,0 },
     {TK_OPTION_STRING, "-image", "image", "Image",
-	"", offsetof(TreeColumn,headingImageObj), TCL_INDEX_NONE,
+	"", Tk_Offset(TreeColumn,headingImageObj), -1,
 	0,0,0 },
     {TK_OPTION_ANCHOR, "-anchor", "anchor", "Anchor",
-	"center", offsetof(TreeColumn,headingAnchorObj), TCL_INDEX_NONE,
+	"center", Tk_Offset(TreeColumn,headingAnchorObj), -1,
 	0,0,0 },
     {TK_OPTION_STRING, "-command", "", "",
-	"", offsetof(TreeColumn,headingCommandObj), TCL_INDEX_NONE,
+	"", Tk_Offset(TreeColumn,headingCommandObj), -1,
 	TK_OPTION_NULL_OK,0,0 },
     {TK_OPTION_STRING, "state", "", "",
-	"", offsetof(TreeColumn,headingStateObj), TCL_INDEX_NONE,
+	"", Tk_Offset(TreeColumn,headingStateObj), -1,
 	0,0,STATE_CHANGED },
-    {TK_OPTION_END, 0,0,0, NULL, TCL_INDEX_NONE,TCL_INDEX_NONE, 0,0,0}
+    {TK_OPTION_END, 0,0,0, NULL, -1,-1, 0,0,0}
 };
 
 /*------------------------------------------------------------------------
@@ -401,7 +336,7 @@ static int GetEnumSetFromObj(
     unsigned *resultPtr)
 {
     unsigned result = 0;
-    Tcl_Size i, objc;
+    int i, objc;
     Tcl_Obj **objv;
 
     if (Tcl_ListObjGetElements(interp, objPtr, &objc, &objv) != TCL_OK)
@@ -436,7 +371,7 @@ typedef struct {
     Tk_OptionTable itemOptionTable;
     Tk_OptionTable columnOptionTable;
     Tk_OptionTable headingOptionTable;
-    Tk_OptionTable displayOptionTable;
+    Tk_OptionTable tagOptionTable;
     Tk_BindingTable bindingTable;
     Ttk_TagTable tagTable;
 
@@ -446,11 +381,9 @@ typedef struct {
     Ttk_Layout cellLayout;
     Ttk_Layout headingLayout;
     Ttk_Layout rowLayout;
-    Ttk_Layout separatorLayout;
 
     int headingHeight;		/* Space for headings */
     int rowHeight;		/* Height of each item */
-    int colSeparatorWidth;	/* Width of column separator, if used (screen units) */
     int indent;			/* Horizontal offset for child items (screen units) */
 
     /* Tree data:
@@ -472,13 +405,9 @@ typedef struct {
 
     Tcl_Obj *heightObj;		/* height (rows) */
     Tcl_Obj *paddingObj;	/* internal padding */
-    Tcl_Size nTitleColumns;	/* -titlecolumns */
-    Tcl_Size nTitleItems;		/* -titleitems */
-    int striped;		/* -striped option */
 
     Tcl_Obj *showObj;		/* -show list */
     Tcl_Obj *selectModeObj;	/* -selectmode option */
-    Tcl_Obj *selectTypeObj;	/* -selecttype option */
 
     Scrollable xscroll;
     ScrollHandle xscrollHandle;
@@ -488,17 +417,15 @@ typedef struct {
     /* Derived resources:
      */
     Tcl_HashTable columnNames;	/* Map: column name -> column table entry */
-    Tcl_Size nColumns; 		/* #columns */
-    Tcl_Size nDisplayColumns;	/* #display columns */
+    int nColumns; 		/* #columns */
+    unsigned showFlags;		/* bitmask of subparts to display */
+
     TreeColumn **displayColumns; /* List of columns for display (incl tree) */
-    int titleWidth;		/* Width of non-scrolled columns */
-    int titleRows;		/* Height of non-scrolled items, in rows */
-    int totalRows;		/* Height of non-hidden items, in rows */
-    int rowPosNeedsUpdate;	/* Internal rowPos data needs update */
+    int nDisplayColumns;	/* #display columns */
     Ttk_Box headingArea;	/* Display area for column headings */
     Ttk_Box treeArea;   	/* Display area for tree */
     int slack;			/* Slack space (see Resizing section) */
-    unsigned showFlags;		/* bitmask of subparts to display */
+
 } TreePart;
 
 typedef struct {
@@ -513,47 +440,34 @@ typedef struct {
 #define SHOW_CHANGED 		(USER_MASK<<3)
 
 static const char *const SelectModeStrings[] = { "none", "browse", "extended", NULL };
-static const char *const SelectTypeStrings[] = { "item", "cell", NULL };
 
-static const Tk_OptionSpec TreeviewOptionSpecs[] = {
+static Tk_OptionSpec TreeviewOptionSpecs[] = {
     {TK_OPTION_STRING, "-columns", "columns", "Columns",
-	"", offsetof(Treeview,tree.columnsObj), TCL_INDEX_NONE,
+	"", Tk_Offset(Treeview,tree.columnsObj), -1,
 	0, 0, COLUMNS_CHANGED | GEOMETRY_CHANGED /*| READONLY_OPTION*/ },
     {TK_OPTION_STRING, "-displaycolumns","displayColumns","DisplayColumns",
-	"#all", offsetof(Treeview,tree.displayColumnsObj), TCL_INDEX_NONE,
+	"#all", Tk_Offset(Treeview,tree.displayColumnsObj), -1,
 	0, 0, DCOLUMNS_CHANGED | GEOMETRY_CHANGED },
     {TK_OPTION_STRING, "-show", "show", "Show",
-	DEFAULT_SHOW, offsetof(Treeview,tree.showObj), TCL_INDEX_NONE,
+	DEFAULT_SHOW, Tk_Offset(Treeview,tree.showObj), -1,
 	0, 0, SHOW_CHANGED | GEOMETRY_CHANGED },
 
     {TK_OPTION_STRING_TABLE, "-selectmode", "selectMode", "SelectMode",
-	"extended", offsetof(Treeview,tree.selectModeObj), TCL_INDEX_NONE,
+	"extended", Tk_Offset(Treeview,tree.selectModeObj), -1,
 	0, SelectModeStrings, 0 },
-    {TK_OPTION_STRING_TABLE, "-selecttype", "selectType", "SelectType",
-	"item", offsetof(Treeview,tree.selectTypeObj), TCL_INDEX_NONE,
-	0, SelectTypeStrings, 0 },
 
     {TK_OPTION_PIXELS, "-height", "height", "Height",
-	DEF_TREE_ROWS, offsetof(Treeview,tree.heightObj), TCL_INDEX_NONE,
+	DEF_TREE_ROWS, Tk_Offset(Treeview,tree.heightObj), -1,
 	0, 0, GEOMETRY_CHANGED},
     {TK_OPTION_STRING, "-padding", "padding", "Pad",
-	NULL, offsetof(Treeview,tree.paddingObj), TCL_INDEX_NONE,
+	NULL, Tk_Offset(Treeview,tree.paddingObj), -1,
 	TK_OPTION_NULL_OK, 0, GEOMETRY_CHANGED },
-    {TK_OPTION_INT, "-titlecolumns", "titlecolumns", "Titlecolumns",
-	DEF_TITLECOLUMNS, TCL_INDEX_NONE, offsetof(Treeview,tree.nTitleColumns),
-	TK_OPTION_VAR(Tcl_Size), 0, GEOMETRY_CHANGED},
-    {TK_OPTION_INT, "-titleitems", "titleitems", "Titleitems",
-	DEF_TITLEITEMS, TCL_INDEX_NONE, offsetof(Treeview,tree.nTitleItems),
-	TK_OPTION_VAR(Tcl_Size), 0, GEOMETRY_CHANGED},
-    {TK_OPTION_BOOLEAN, "-striped", "striped", "Striped",
-	DEF_STRIPED, TCL_INDEX_NONE, offsetof(Treeview,tree.striped),
-	0, 0, GEOMETRY_CHANGED},
 
     {TK_OPTION_STRING, "-xscrollcommand", "xScrollCommand", "ScrollCommand",
-	NULL, TCL_INDEX_NONE, offsetof(Treeview, tree.xscroll.scrollCmd),
+	NULL, -1, Tk_Offset(Treeview, tree.xscroll.scrollCmd),
 	TK_OPTION_NULL_OK, 0, SCROLLCMD_CHANGED},
     {TK_OPTION_STRING, "-yscrollcommand", "yScrollCommand", "ScrollCommand",
-	NULL, TCL_INDEX_NONE, offsetof(Treeview, tree.yscroll.scrollCmd),
+	NULL, -1, Tk_Offset(Treeview, tree.yscroll.scrollCmd),
 	TK_OPTION_NULL_OK, 0, SCROLLCMD_CHANGED},
 
     WIDGET_TAKEFOCUS_TRUE,
@@ -573,20 +487,6 @@ static void foreachHashEntry(Tcl_HashTable *ht, HashEntryIterator func)
 	func(Tcl_GetHashValue(entryPtr));
 	entryPtr = Tcl_NextHashEntry(&search);
     }
-}
-
-static int CellSelectionClear(Treeview *tv)
-{
-    TreeItem *item;
-    int anyChange = 0;
-    for (item=tv->tree.root; item; item = NextPreorder(item)) {
-	if (item->selObj != NULL) {
-	    Tcl_DecrRefCount(item->selObj);
-	    item->selObj = NULL;
-	    anyChange = 1;
-	}
-    }
-    return anyChange;
 }
 
 /* + unshareObj(objPtr) --
@@ -615,33 +515,6 @@ static void DisplayLayout(
     Ttk_DrawLayout(layout, state, d);
 }
 
-/* DisplayLayoutTree --
- *	Like DisplayLayout, but for the tree column.
- */
-static void DisplayLayoutTree(
-    Tk_Anchor imageAnchor, Tk_Anchor textAnchor,
-    Ttk_Layout layout, void *recordPtr, Ttk_State state, Ttk_Box b, Drawable d)
-{
-    Ttk_Element elem;
-    Ttk_RebindSublayout(layout, recordPtr);
-
-    elem = Ttk_FindElement(layout, "image");
-    if (elem != NULL) {
-	Ttk_AnchorElement(elem, imageAnchor);
-    }
-    elem = Ttk_FindElement(layout, "text");
-    if (elem != NULL) {
-	Ttk_AnchorElement(elem, textAnchor);
-    }
-    elem = Ttk_FindElement(layout, "focus");
-    if (elem != NULL) {
-	Ttk_AnchorElement(elem, textAnchor);
-    }
-
-    Ttk_PlaceLayout(layout, state, b);
-    Ttk_DrawLayout(layout, state, d);
-}
-
 /* + GetColumn --
  * 	Look up column by name or number.
  * 	Returns: pointer to column table entry, NULL if not found.
@@ -651,7 +524,7 @@ static TreeColumn *GetColumn(
     Tcl_Interp *interp, Treeview *tv, Tcl_Obj *columnIDObj)
 {
     Tcl_HashEntry *entryPtr;
-    Tcl_Size columnIndex;
+    int columnIndex;
 
     /* Check for named column:
      */
@@ -661,12 +534,12 @@ static TreeColumn *GetColumn(
 	return (TreeColumn *)Tcl_GetHashValue(entryPtr);
     }
 
-    /* Check for index:
+    /* Check for number:
      */
-    if (TkGetIntForIndex(columnIDObj, tv->tree.nColumns - 1, 1, &columnIndex) == TCL_OK) {
+    if (Tcl_GetIntFromObj(NULL, columnIDObj, &columnIndex) == TCL_OK) {
 	if (columnIndex < 0 || columnIndex >= tv->tree.nColumns) {
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		    "Column index \"%s\" out of bounds",
+		    "Column index %s out of bounds",
 		    Tcl_GetString(columnIDObj)));
 	    Tcl_SetErrorCode(interp, "TTK", "TREE", "COLBOUND", NULL);
 	    return NULL;
@@ -675,7 +548,7 @@ static TreeColumn *GetColumn(
 	return tv->tree.columns + columnIndex;
     }
     Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-	"Invalid column index \"%s\"", Tcl_GetString(columnIDObj)));
+	"Invalid column index %s", Tcl_GetString(columnIDObj)));
     Tcl_SetErrorCode(interp, "TTK", "TREE", "COLUMN", NULL);
     return NULL;
 }
@@ -686,9 +559,9 @@ static TreeColumn *GetColumn(
 static TreeColumn *FindColumn(
     Tcl_Interp *interp, Treeview *tv, Tcl_Obj *columnIDObj)
 {
-    Tcl_WideInt colno;
+    int colno;
 
-    if (sscanf(Tcl_GetString(columnIDObj), "#%" TCL_LL_MODIFIER "d", &colno) == 1)
+    if (sscanf(Tcl_GetString(columnIDObj), "#%d", &colno) == 1)
     {	/* Display column specification, #n */
 	if (colno >= 0 && colno < tv->tree.nDisplayColumns) {
 	    return tv->tree.displayColumns[colno];
@@ -734,7 +607,7 @@ static TreeItem **GetItemListFromObj(
 {
     TreeItem **items;
     Tcl_Obj **elements;
-    Tcl_Size i, nElements;
+    int i, nElements;
 
     if (Tcl_ListObjGetElements(interp,objPtr,&nElements,&elements) != TCL_OK) {
 	return NULL;
@@ -778,7 +651,7 @@ static Tcl_Obj *ItemID(Treeview *tv, TreeItem *item)
  */
 static void TreeviewFreeColumns(Treeview *tv)
 {
-    Tcl_Size i;
+    int i;
 
     Tcl_DeleteHashTable(&tv->tree.columnNames);
     Tcl_InitHashTable(&tv->tree.columnNames, TCL_STRING_KEYS);
@@ -798,7 +671,7 @@ static void TreeviewFreeColumns(Treeview *tv)
 static int TreeviewInitColumns(Tcl_Interp *interp, Treeview *tv)
 {
     Tcl_Obj **columns;
-    Tcl_Size i, ncols;
+    int i, ncols;
 
     if (Tcl_ListObjGetElements(
 	    interp, tv->tree.columnsObj, &ncols, &columns) != TCL_OK)
@@ -827,10 +700,10 @@ static int TreeviewInitColumns(Tcl_Interp *interp, Treeview *tv)
 
 	InitColumn(tv->tree.columns + i);
 	Tk_InitOptions(
-	    interp, tv->tree.columns + i,
+	    interp, (void *)(tv->tree.columns + i),
 	    tv->tree.columnOptionTable, tv->core.tkwin);
 	Tk_InitOptions(
-	    interp, tv->tree.columns + i,
+	    interp, (void *)(tv->tree.columns + i),
 	    tv->tree.headingOptionTable, tv->core.tkwin);
 	Tcl_IncrRefCount(columnName);
 	tv->tree.columns[i].idObj = columnName;
@@ -850,7 +723,7 @@ static int TreeviewInitColumns(Tcl_Interp *interp, Treeview *tv)
 static int TreeviewInitDisplayColumns(Tcl_Interp *interp, Treeview *tv)
 {
     Tcl_Obj **dcolumns;
-    Tcl_Size index, ndcols;
+    int index, ndcols;
     TreeColumn **displayColumns = 0;
 
     if (Tcl_ListObjGetElements(interp,
@@ -896,18 +769,11 @@ static int TreeviewInitDisplayColumns(Tcl_Interp *interp, Treeview *tv)
  */
 static int TreeWidth(Treeview *tv)
 {
-    Tcl_Size i = FirstColumn(tv);
+    int i = FirstColumn(tv);
     int width = 0;
 
-    tv->tree.titleWidth = 0;
     while (i < tv->tree.nDisplayColumns) {
-	if (i == tv->tree.nTitleColumns) {
-	    tv->tree.titleWidth = width;
-	}
 	width += tv->tree.displayColumns[i++]->width;
-    }
-    if (tv->tree.nTitleColumns >= tv->tree.nDisplayColumns) {
-	tv->tree.titleWidth = width;
     }
     return width;
 }
@@ -964,9 +830,9 @@ static int Stretch(TreeColumn *c, int n)
  * 	Adjust width of (stretchable) columns to the left by N pixels.
  * 	Returns: leftover slack.
  */
-static int ShoveLeft(Treeview *tv, Tcl_Size i, int n)
+static int ShoveLeft(Treeview *tv, int i, int n)
 {
-    Tcl_Size first = FirstColumn(tv);
+    int first = FirstColumn(tv);
     while (n != 0 && i >= first) {
 	TreeColumn *c = tv->tree.displayColumns[i];
 	if (c->stretch) {
@@ -981,7 +847,7 @@ static int ShoveLeft(Treeview *tv, Tcl_Size i, int n)
  * 	Adjust width of (stretchable) columns to the right by N pixels.
  * 	Returns: leftover slack.
  */
-static int ShoveRight(Treeview *tv, Tcl_Size i, int n)
+static int ShoveRight(Treeview *tv, int i, int n)
 {
     while (n != 0 && i < tv->tree.nDisplayColumns) {
 	TreeColumn *c = tv->tree.displayColumns[i];
@@ -1004,7 +870,7 @@ static int DistributeWidth(Treeview *tv, int n)
 {
     int w = TreeWidth(tv);
     int m = 0;
-    Tcl_Size  i;
+    int i;
     int d, r;
 
     for (i = FirstColumn(tv); i < tv->tree.nDisplayColumns; ++i) {
@@ -1047,7 +913,7 @@ static void ResizeColumns(Treeview *tv, int newWidth)
  * 	Move the separator to the right of specified column,
  * 	adjusting other column widths as necessary.
  */
-static void DragColumn(Treeview *tv, Tcl_Size i, int delta)
+static void DragColumn(Treeview *tv, int i, int delta)
 {
     TreeColumn *c = tv->tree.displayColumns[i];
     int dl = delta - ShoveLeft(tv, i-1, delta - Stretch(c, delta));
@@ -1056,119 +922,10 @@ static void DragColumn(Treeview *tv, Tcl_Size i, int delta)
 }
 
 /*------------------------------------------------------------------------
- * +++ Cells.
- */
-
-typedef struct {
-    TreeItem *item;
-    TreeColumn *column;
-    Tcl_Obj *colObj;
-} TreeCell;
-
-/* + GetCellFromObj
- * 	Get Row and Column from a cell ID.
- */
-static int GetCellFromObj(
-    Tcl_Interp *interp, Treeview *tv, Tcl_Obj *obj,
-    int displayColumnOnly, int *displayColumn,
-    TreeCell *cell)
-{
-    Tcl_Size nElements;
-    Tcl_Obj **elements;
-
-    if (Tcl_ListObjGetElements(interp, obj, &nElements, &elements) != TCL_OK) {
-	return TCL_ERROR;
-    }
-    if (nElements != 2) {
-	Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		"Cell id must be a list of two elements", -1));
-	Tcl_SetErrorCode(interp, "TTK", "TREE", "CELL", NULL);
-	return TCL_ERROR;
-    }
-    /* Valid item/column in each pair? */
-    cell->item = FindItem(interp, tv, elements[0]);
-    if (!cell->item) {
-	return TCL_ERROR;
-    }
-    cell->column = FindColumn(interp, tv, elements[1]);
-    if (!cell->column) {
-	return TCL_ERROR;
-    }
-    /* colObj is short lived and do not keep a reference counted */
-    cell->colObj = elements[1];
-    if (displayColumnOnly) {
-	Tcl_Size i = FirstColumn(tv);
-	while (i < tv->tree.nDisplayColumns) {
-	    if (tv->tree.displayColumns[i] == cell->column) {
-		break;
-	    }
-	    ++i;
-	}
-	if (i == tv->tree.nDisplayColumns) { /* specified column unviewable */
-	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "Cell id must be in a visible column", -1));
-	    Tcl_SetErrorCode(interp, "TTK", "TREE", "CELL", NULL);
-	    return TCL_ERROR;
-	}
-	if (displayColumn != NULL) {
-	    *displayColumn = i;
-	}
-    }
-    return TCL_OK;
-}
-
-/* + GetCellListFromObj --
- * 	Parse a Tcl_Obj * as a list of cells.
- * 	Returns an array of cells; result must be ckfree()d.
- *      On error, returns NULL and leaves an error
- * 	message in interp.
- */
-
-static TreeCell *GetCellListFromObj(
-	Tcl_Interp *interp, Treeview *tv, Tcl_Obj *objPtr, Tcl_Size *nCells)
-{
-    TreeCell *cells;
-    TreeCell cell;
-    Tcl_Obj **elements;
-    Tcl_Obj *oneCell;
-    Tcl_Size i, n;
-
-    if (Tcl_ListObjGetElements(interp, objPtr, &n, &elements) != TCL_OK) {
-	return NULL;
-    }
-
-    /* A two element list might be a single cell */
-    if (n == 2) {
-	if (GetCellFromObj(interp, tv, objPtr, 0, NULL, &cell)
-		== TCL_OK) {
-	    n = 1;
-	    oneCell = objPtr;
-	    elements = &oneCell;
-	} else {
-	    Tcl_ResetResult(interp);
-	}
-    }
-
-    cells = (TreeCell *) ckalloc(n * sizeof(TreeCell));
-    for (i = 0; i < n; ++i) {
-	if (GetCellFromObj(interp, tv, elements[i], 0, NULL, &cells[i]) != TCL_OK) {
-	    ckfree(cells);
-	    return NULL;
-	}
-    }
-
-    if (nCells) {
-	*nCells = n;
-    }
-    return cells;
-}
-
-/*------------------------------------------------------------------------
  * +++ Event handlers.
  */
 
 static TreeItem *IdentifyItem(Treeview *tv, int y); /*forward*/
-static Tcl_Size IdentifyDisplayColumn(Treeview *tv, int x, int *x1); /*forward*/
 
 static const unsigned long TreeviewBindEventMask =
       KeyPressMask|KeyReleaseMask
@@ -1182,9 +939,6 @@ static void TreeviewBindEventProc(void *clientData, XEvent *event)
     Treeview *tv = (Treeview *)clientData;
     TreeItem *item = NULL;
     Ttk_TagSet tagset;
-    int unused;
-    Tcl_Size colno = TCL_INDEX_NONE;
-    TreeColumn *column = NULL;
 
     /*
      * Figure out where to deliver the event.
@@ -1199,11 +953,9 @@ static void TreeviewBindEventProc(void *clientData, XEvent *event)
 	case ButtonPress:
 	case ButtonRelease:
 	    item = IdentifyItem(tv, event->xbutton.y);
-	    colno = IdentifyDisplayColumn(tv, event->xbutton.x, &unused);
 	    break;
 	case MotionNotify:
 	    item = IdentifyItem(tv, event->xmotion.y);
-	    colno = IdentifyDisplayColumn(tv, event->xmotion.x, &unused);
 	    break;
 	default:
 	    break;
@@ -1218,23 +970,6 @@ static void TreeviewBindEventProc(void *clientData, XEvent *event)
      * in case a binding script stomps on -tags.
      */
     tagset = Ttk_GetTagSetFromObj(NULL, tv->tree.tagTable, item->tagsObj);
-
-    /*
-     * Pick up any cell tags.
-     */
-    if (colno >= 0) {
-	column = tv->tree.displayColumns[colno];
-	if (column == &tv->tree.column0) {
-	    colno = 0;
-	} else {
-	    colno = column - tv->tree.columns + 1;
-	}
-	if (colno < item->nTagSets) {
-	    if (item->cellTagSets[colno] != NULL) {
-		Ttk_TagSetAddSet(tagset, item->cellTagSets[colno]);
-	    }
-	}
-    }
 
     /*
      * Fire binding:
@@ -1262,8 +997,8 @@ static void TreeviewInitialize(Tcl_Interp *interp, void *recordPtr)
 	Tk_CreateOptionTable(interp, ColumnOptionSpecs);
     tv->tree.headingOptionTable =
 	Tk_CreateOptionTable(interp, HeadingOptionSpecs);
-    tv->tree.displayOptionTable =
-	Tk_CreateOptionTable(interp, DisplayOptionSpecs);
+    tv->tree.tagOptionTable =
+	Tk_CreateOptionTable(interp, TagOptionSpecs);
 
     tv->tree.tagTable = Ttk_CreateTagTable(
 	interp, tv->core.tkwin, TagOptionSpecs, sizeof(DisplayItem));
@@ -1275,33 +1010,22 @@ static void TreeviewInitialize(Tcl_Interp *interp, void *recordPtr)
 	= tv->tree.cellLayout
 	= tv->tree.headingLayout
 	= tv->tree.rowLayout
-	= tv->tree.separatorLayout
 	= 0;
-    tv->tree.headingHeight = tv->tree.rowHeight = 0;
-    tv->tree.colSeparatorWidth = 1;
+    tv->tree.headingHeight = tv->tree.rowHeight = DEFAULT_ROWHEIGHT;
     tv->tree.indent = DEFAULT_INDENT;
 
     Tcl_InitHashTable(&tv->tree.columnNames, TCL_STRING_KEYS);
     tv->tree.nColumns = tv->tree.nDisplayColumns = 0;
-    tv->tree.nTitleColumns = 0;
-    tv->tree.nTitleItems = 0;
-    tv->tree.titleWidth = 0;
-    tv->tree.titleRows = 0;
-    tv->tree.totalRows = 0;
-    tv->tree.rowPosNeedsUpdate = 1;
-    tv->tree.striped = 0;
     tv->tree.columns = NULL;
     tv->tree.displayColumns = NULL;
     tv->tree.showFlags = ~0;
 
     InitColumn(&tv->tree.column0);
-    tv->tree.column0.idObj = Tcl_NewStringObj("#0", 2);
-    Tcl_IncrRefCount(tv->tree.column0.idObj);
     Tk_InitOptions(
-	interp, &tv->tree.column0,
+	interp, (void *)(&tv->tree.column0),
 	tv->tree.columnOptionTable, tv->core.tkwin);
     Tk_InitOptions(
-	interp, &tv->tree.column0,
+	interp, (void *)(&tv->tree.column0),
 	tv->tree.headingOptionTable, tv->core.tkwin);
 
     Tcl_InitHashTable(&tv->tree.items, TCL_STRING_KEYS);
@@ -1312,7 +1036,7 @@ static void TreeviewInitialize(Tcl_Interp *interp, void *recordPtr)
     /* Create root item "":
      */
     tv->tree.root = NewItem();
-    Tk_InitOptions(interp, tv->tree.root,
+    Tk_InitOptions(interp, (void *)tv->tree.root,
 	tv->tree.itemOptionTable, tv->core.tkwin);
     tv->tree.root->tagset = Ttk_GetTagSetFromObj(NULL, tv->tree.tagTable, NULL);
     tv->tree.root->entryPtr = Tcl_CreateHashEntry(&tv->tree.items, "", &unused);
@@ -1342,13 +1066,11 @@ static void TreeviewCleanup(void *recordPtr)
     if (tv->tree.cellLayout) Ttk_FreeLayout(tv->tree.cellLayout);
     if (tv->tree.headingLayout) Ttk_FreeLayout(tv->tree.headingLayout);
     if (tv->tree.rowLayout) Ttk_FreeLayout(tv->tree.rowLayout);
-    if (tv->tree.separatorLayout) Ttk_FreeLayout(tv->tree.separatorLayout);
 
-    FreeColumn(&tv->tree.column0);
     TreeviewFreeColumns(tv);
 
     if (tv->tree.displayColumns)
-	ckfree(tv->tree.displayColumns);
+	ckfree((void *)tv->tree.displayColumns);
 
     foreachHashEntry(&tv->tree.items, FreeItemCB);
     Tcl_DeleteHashTable(&tv->tree.items);
@@ -1378,23 +1100,6 @@ TreeviewConfigure(Tcl_Interp *interp, void *recordPtr, int mask)
 	if (TreeviewInitDisplayColumns(interp, tv) != TCL_OK)
 	    return TCL_ERROR;
     }
-    if (mask & COLUMNS_CHANGED) {
-	CellSelectionClear(tv);
-    }
-    if (tv->tree.nTitleColumns < 0) {
-	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		"\"#%" TCL_SIZE_MODIFIER "d\" is out of range",
-		tv->tree.nTitleColumns));
-	Tcl_SetErrorCode(interp, "TTK", "TREE", "TITLECOLUMNS", NULL);
-	return TCL_ERROR;
-    }
-    if (tv->tree.nTitleItems < 0) {
-	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		"\"%" TCL_SIZE_MODIFIER "d\" is out of range",
-		tv->tree.nTitleItems));
-	Tcl_SetErrorCode(interp, "TTK", "TREE", "TITLEITEMS", NULL);
-	return TCL_ERROR;
-    }
     if (mask & SCROLLCMD_CHANGED) {
 	TtkScrollbarUpdateRequired(tv->tree.xscrollHandle);
 	TtkScrollbarUpdateRequired(tv->tree.yscrollHandle);
@@ -1409,7 +1114,6 @@ TreeviewConfigure(Tcl_Interp *interp, void *recordPtr, int mask)
 	return TCL_ERROR;
     }
 
-    tv->tree.rowPosNeedsUpdate = 1;
     tv->tree.showFlags = showFlags;
 
     if (mask & (SHOW_CHANGED | DCOLUMNS_CHANGED)) {
@@ -1423,14 +1127,14 @@ TreeviewConfigure(Tcl_Interp *interp, void *recordPtr, int mask)
  */
 static int ConfigureItem(
     Tcl_Interp *interp, Treeview *tv, TreeItem *item,
-    Tcl_Size objc, Tcl_Obj *const objv[])
+    int objc, Tcl_Obj *const objv[])
 {
     Tk_SavedOptions savedOptions;
     int mask;
     Ttk_ImageSpec *newImageSpec = NULL;
     Ttk_TagSet newTagSet = NULL;
 
-    if (Tk_SetOptions(interp, item, tv->tree.itemOptionTable,
+    if (Tk_SetOptions(interp, (void *)item, tv->tree.itemOptionTable,
 		objc, objv, tv->core.tkwin, &savedOptions, &mask)
 		!= TCL_OK)
     {
@@ -1440,18 +1144,9 @@ static int ConfigureItem(
     /* Make sure that -values is a valid list:
      */
     if (item->valuesObj) {
-	Tcl_Size unused;
+	int unused;
 	if (Tcl_ListObjLength(interp, item->valuesObj, &unused) != TCL_OK)
 	    goto error;
-    }
-
-    /* Check -height
-     */
-    if (item->height < 1) {
-	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		"Invalid item height %d", item->height));
-	Tcl_SetErrorCode(interp, "TTK", "TREE", "HEIGHT", NULL);
-	goto error;
     }
 
     /* Check -image.
@@ -1499,7 +1194,6 @@ static int ConfigureItem(
 	if (item->imagespec) { TtkFreeImageSpec(item->imagespec); }
 	item->imagespec = newImageSpec;
     }
-    tv->tree.rowPosNeedsUpdate = 1;
     TtkRedisplayWidget(&tv->core);
     return TCL_OK;
 
@@ -1515,12 +1209,12 @@ error:
  */
 static int ConfigureColumn(
     Tcl_Interp *interp, Treeview *tv, TreeColumn *column,
-    Tcl_Size objc, Tcl_Obj *const objv[])
+    int objc, Tcl_Obj *const objv[])
 {
     Tk_SavedOptions savedOptions;
     int mask;
 
-    if (Tk_SetOptions(interp, column,
+    if (Tk_SetOptions(interp, (void *)column,
 	    tv->tree.columnOptionTable, objc, objv, tv->core.tkwin,
 	    &savedOptions,&mask) != TCL_OK)
     {
@@ -1561,12 +1255,12 @@ error:
  */
 static int ConfigureHeading(
     Tcl_Interp *interp, Treeview *tv, TreeColumn *column,
-    Tcl_Size objc, Tcl_Obj *const objv[])
+    int objc, Tcl_Obj *const objv[])
 {
     Tk_SavedOptions savedOptions;
     int mask;
 
-    if (Tk_SetOptions(interp, column,
+    if (Tk_SetOptions(interp, (void *)column,
 	    tv->tree.headingOptionTable, objc, objv, tv->core.tkwin,
 	    &savedOptions,&mask) != TCL_OK)
     {
@@ -1600,55 +1294,48 @@ error:
  * +++ Geometry routines.
  */
 
-/* + UpdatePositionItem --
- * 	Update position data for all visible items.
+/* + CountRows --
+ * 	Returns the number of viewable rows rooted at item
  */
-static void UpdatePositionItem(
-    Treeview *tv, TreeItem *item, int hidden,
-    int *rowPos, int *itemPos, int *visiblePos)
+static int CountRows(TreeItem *item)
 {
-    TreeItem *child = item->children;
-    item->itemPos = *itemPos;
-    *itemPos += 1;
+    int rows = 1;
 
-    if (item->hidden) {
-	hidden = 1;
-    }
-
-    if (hidden) {
-	item->rowPos = -1;
-	item->visiblePos = -1;
-    } else {
-	item->rowPos = *rowPos;
-	item->visiblePos = *visiblePos;
-	if (*visiblePos == tv->tree.nTitleItems) {
-	    tv->tree.titleRows = *rowPos;
+    if (item->state & TTK_STATE_OPEN) {
+	TreeItem *child = item->children;
+	while (child) {
+	    rows += CountRows(child);
+	    child = child->next;
 	}
-
-	*visiblePos += 1;
-	*rowPos += item->height;
     }
-
-    if (!(item->state & TTK_STATE_OPEN)) {
-	hidden = 1;
-    }
-    while (child) {
-	UpdatePositionItem(tv, child, hidden, rowPos, itemPos, visiblePos);
-	child = child->next;
-    }
+    return rows;
 }
 
-/* + UpdatePositionTree --
- * 	Update position data for all visible items.
+/* + IdentifyRow --
+ * 	Recursive search for item at specified y position.
+ * 	Main work routine for IdentifyItem()
  */
-static void UpdatePositionTree(Treeview *tv)
+static TreeItem *IdentifyRow(
+    Treeview *tv,	/* Widget record */
+    TreeItem *item, 	/* Where to start search */
+    int *ypos,		/* Scan position */
+    int y)		/* Target y coordinate */
 {
-    /* -1 for the invisible root */
-    int rowPos = -1, itemPos = -1, visiblePos = -1;
-    tv->tree.titleRows = 0;
-    UpdatePositionItem(tv, tv->tree.root, 0, &rowPos, &itemPos, &visiblePos);
-    tv->tree.totalRows = rowPos;
-    tv->tree.rowPosNeedsUpdate = 0;
+    while (item) {
+	int next_ypos = *ypos + tv->tree.rowHeight;
+	if (*ypos <= y && y <= next_ypos) {
+	    return item;
+	}
+	*ypos = next_ypos;
+	if (item->state & TTK_STATE_OPEN) {
+	    TreeItem *subitem = IdentifyRow(tv, item->children, ypos, y);
+	    if (subitem) {
+		return subitem;
+	    }
+	}
+	item = item->next;
+    }
+    return 0;
 }
 
 /* + IdentifyItem --
@@ -1656,39 +1343,19 @@ static void UpdatePositionTree(Treeview *tv)
  */
 static TreeItem *IdentifyItem(Treeview *tv, int y)
 {
-    TreeItem *item;
     int rowHeight = tv->tree.rowHeight;
-    int ypos = tv->tree.treeArea.y;
-    int nextRow, row;
-    if (y < ypos) {
-	return NULL;
-    }
-    if (tv->tree.rowPosNeedsUpdate) {
-	UpdatePositionTree(tv);
-    }
-    row = (y - ypos) / rowHeight;
-    if (row >= tv->tree.titleRows) {
-	row += tv->tree.yscroll.first;
-    }
-    for (item = tv->tree.root->children; item; item = NextPreorder(item)) {
-	nextRow = item->rowPos + item->height;
-	if (item->rowPos <= row && row < nextRow) break;
-    }
-    return item;
+    int ypos = tv->tree.treeArea.y - rowHeight * tv->tree.yscroll.first;
+    return IdentifyRow(tv, tv->tree.root->children, &ypos, y);
 }
 
 /* + IdentifyDisplayColumn --
  * 	Returns the display column number at the specified x position,
  * 	or -1 if x is outside any columns.
  */
-static Tcl_Size IdentifyDisplayColumn(Treeview *tv, int x, int *x1)
+static int IdentifyDisplayColumn(Treeview *tv, int x, int *x1)
 {
-    Tcl_Size colno = FirstColumn(tv);
-    int xpos = tv->tree.treeArea.x;
-
-    if (tv->tree.nTitleColumns <= colno) {
-	xpos -= tv->tree.xscroll.first;
-    }
+    int colno = FirstColumn(tv);
+    int xpos = tv->tree.treeArea.x - tv->tree.xscroll.first;
 
     while (colno < tv->tree.nDisplayColumns) {
 	TreeColumn *column = tv->tree.displayColumns[colno];
@@ -1699,12 +1366,40 @@ static Tcl_Size IdentifyDisplayColumn(Treeview *tv, int x, int *x1)
 	}
 	++colno;
 	xpos = next_xpos;
-	if (tv->tree.nTitleColumns == colno) {
-	    xpos -= tv->tree.xscroll.first;
+    }
+
+    return -1;
+}
+
+/* + RowNumber --
+ * 	Calculate which row the specified item appears on;
+ * 	returns -1 if the item is not viewable.
+ * 	Xref: DrawForest, IdentifyItem.
+ */
+static int RowNumber(Treeview *tv, TreeItem *item)
+{
+    TreeItem *p = tv->tree.root->children;
+    int n = 0;
+
+    while (p) {
+	if (p == item)
+	    return n;
+
+	++n;
+
+	/* Find next viewable item in preorder traversal order
+	 */
+	if (p->children && (p->state & TTK_STATE_OPEN)) {
+	    p = p->children;
+	} else {
+	    while (!p->next && p && p->parent)
+		p = p->parent;
+	    if (p)
+		p = p->next;
 	}
     }
 
-    return TCL_INDEX_NONE;
+    return -1;
 }
 
 /* + ItemDepth -- return the depth of a tree item.
@@ -1721,23 +1416,31 @@ static int ItemDepth(TreeItem *item)
     return depth-1;
 }
 
-/* + DisplayRow --
- * 	Returns the position row has on screen, or -1 if off-screen.
+/* + ItemRow --
+ * 	Returns row number of specified item relative to root,
+ * 	-1 if item is not viewable.
  */
-static int DisplayRow(int row, Treeview *tv)
+static int ItemRow(Treeview *tv, TreeItem *p)
 {
-    int visibleRows = tv->tree.treeArea.height / tv->tree.rowHeight
-	    - tv->tree.titleRows;
-    if (row < tv->tree.titleRows) {
-	return row;
+    TreeItem *root = tv->tree.root;
+    int rowNumber = 0;
+
+    for (;;) {
+	if (p->prev) {
+	    p = p->prev;
+	    rowNumber += CountRows(p);
+	} else {
+	    p = p->parent;
+	    if (!(p && (p->state & TTK_STATE_OPEN))) {
+		/* detached or closed ancestor */
+		return -1;
+	    }
+	    if (p == root) {
+		return rowNumber;
+	    }
+	    ++rowNumber;
+	}
     }
-    row -= tv->tree.titleRows;
-    if (row < tv->tree.yscroll.first
-	    || row > tv->tree.yscroll.first + visibleRows) {
-	/* not viewable, or off-screen */
-	return -1;
-    }
-    return row - tv->tree.yscroll.first + tv->tree.titleRows;
 }
 
 /* + BoundingBox --
@@ -1751,27 +1454,27 @@ static int BoundingBox(
     TreeColumn *column,		/* desired column */
     Ttk_Box *bbox_rtn)		/* bounding box of item */
 {
-    int dispRow;
+    int row = ItemRow(tv, item);
     Ttk_Box bbox = tv->tree.treeArea;
 
-    if (tv->tree.rowPosNeedsUpdate) {
-	UpdatePositionTree(tv);
-    }
-    dispRow = DisplayRow(item->rowPos, tv);
-    if (dispRow < 0) {
+    /* Make sure the scroll information is current before use */
+    TtkUpdateScrollInfo(tv->tree.xscrollHandle);
+    TtkUpdateScrollInfo(tv->tree.yscrollHandle);
+
+    if (row < tv->tree.yscroll.first || row > tv->tree.yscroll.last) {
 	/* not viewable, or off-screen */
 	return 0;
     }
 
-    bbox.y += dispRow * tv->tree.rowHeight;
-    bbox.height = tv->tree.rowHeight * item->height;
+    bbox.y += (row - tv->tree.yscroll.first) * tv->tree.rowHeight;
+    bbox.height = tv->tree.rowHeight;
 
     bbox.x -= tv->tree.xscroll.first;
     bbox.width = TreeWidth(tv);
 
     if (column) {
 	int xpos = 0;
-	Tcl_Size i = FirstColumn(tv);
+	int i = FirstColumn(tv);
 	while (i < tv->tree.nDisplayColumns) {
 	    if (tv->tree.displayColumns[i] == column) {
 		break;
@@ -1784,11 +1487,6 @@ static int BoundingBox(
 	}
 	bbox.x += xpos;
 	bbox.width = column->width;
-
-	if (i < tv->tree.nTitleColumns) {
-	    /* Unscrollable column, remove scroll shift */
-	    bbox.x += tv->tree.xscroll.first;
-	}
 
 	/* Account for indentation in tree column:
 	 */
@@ -1820,7 +1518,7 @@ static const char *const regionStrings[] = {
 static TreeRegion IdentifyRegion(Treeview *tv, int x, int y)
 {
     int x1 = 0;
-    Tcl_Size colno = IdentifyDisplayColumn(tv, x, &x1);
+    int colno = IdentifyDisplayColumn(tv, x, &x1);
 
     if (Ttk_BoxContains(tv->tree.headingArea, x, y)) {
 	if (colno < 0) {
@@ -1876,22 +1574,18 @@ static Ttk_Layout TreeviewGetLayout(
     Treeview *tv = (Treeview *)recordPtr;
     Ttk_Layout treeLayout = TtkWidgetGetLayout(interp, themePtr, recordPtr);
     Tcl_Obj *objPtr;
-    int unused, cellHeight;
-    DisplayItem displayItem;
-    Ttk_Style style;
+    int unused;
 
     if (!(
 	treeLayout
      && GetSublayout(interp, themePtr, treeLayout, ".Item",
-	    tv->tree.displayOptionTable, &tv->tree.itemLayout)
+	    tv->tree.tagOptionTable, &tv->tree.itemLayout)
      && GetSublayout(interp, themePtr, treeLayout, ".Cell",
-	    tv->tree.displayOptionTable, &tv->tree.cellLayout)
+	    tv->tree.tagOptionTable, &tv->tree.cellLayout)
      && GetSublayout(interp, themePtr, treeLayout, ".Heading",
 	    tv->tree.headingOptionTable, &tv->tree.headingLayout)
      && GetSublayout(interp, themePtr, treeLayout, ".Row",
-	    tv->tree.displayOptionTable, &tv->tree.rowLayout)
-     && GetSublayout(interp, themePtr, treeLayout, ".Separator",
-	    tv->tree.displayOptionTable, &tv->tree.separatorLayout)
+	    tv->tree.tagOptionTable, &tv->tree.rowLayout)
     )) {
 	return 0;
     }
@@ -1901,34 +1595,16 @@ static Ttk_Layout TreeviewGetLayout(
     Ttk_RebindSublayout(tv->tree.headingLayout, &tv->tree.column0);
     Ttk_LayoutSize(tv->tree.headingLayout, 0, &unused, &tv->tree.headingHeight);
 
-    /* Get row height from style, or compute it to fit Item and Cell.
-     * Pick up default font from the Treeview style.
+    /* Get item height, indent from style:
      */
-    style = Ttk_LayoutStyle(treeLayout);
-    Ttk_TagSetDefaults(tv->tree.tagTable, style, &displayItem);
-
-    Ttk_RebindSublayout(tv->tree.itemLayout, &displayItem);
-    Ttk_LayoutSize(tv->tree.itemLayout, 0, &unused, &tv->tree.rowHeight);
-
-    Ttk_RebindSublayout(tv->tree.cellLayout, &displayItem);
-    Ttk_LayoutSize(tv->tree.cellLayout, 0, &unused, &cellHeight);
-
-    if (cellHeight > tv->tree.rowHeight) {
-	tv->tree.rowHeight = cellHeight;
-    }
-
+    tv->tree.rowHeight = DEFAULT_ROWHEIGHT;
+    tv->tree.indent = DEFAULT_INDENT;
     if ((objPtr = Ttk_QueryOption(treeLayout, "-rowheight", 0))) {
 	(void)Tk_GetPixelsFromObj(NULL, tv->core.tkwin, objPtr, &tv->tree.rowHeight);
+	if (tv->tree.rowHeight < 1) {
+	    tv->tree.rowHeight = 1;
+	}
     }
-    tv->tree.rowHeight = MAX(tv->tree.rowHeight, 1);
-
-    if ((objPtr = Ttk_QueryOption(treeLayout, "-columnseparatorwidth", 0))) {
-	(void)Tk_GetPixelsFromObj(NULL, tv->core.tkwin, objPtr, &tv->tree.colSeparatorWidth);
-    }
-
-    /* Get item indent from style:
-     */
-    tv->tree.indent = DEFAULT_INDENT;
     if ((objPtr = Ttk_QueryOption(treeLayout, "-indent", 0))) {
 	(void)Tk_GetPixelsFromObj(NULL, tv->core.tkwin, objPtr, &tv->tree.indent);
     }
@@ -1948,17 +1624,16 @@ static void TreeviewDoLayout(void *clientData)
 {
     Treeview *tv = (Treeview *)clientData;
     int visibleRows;
-    int first, last, total;
 
     Ttk_PlaceLayout(tv->core.layout,tv->core.state,Ttk_WinBox(tv->core.tkwin));
     tv->tree.treeArea = Ttk_ClientRegion(tv->core.layout, "treearea");
 
     ResizeColumns(tv, tv->tree.treeArea.width);
 
-    first = tv->tree.xscroll.first;
-    last = first + tv->tree.treeArea.width - tv->tree.titleWidth;
-    total = TreeWidth(tv) - tv->tree.titleWidth;
-    TtkScrolled(tv->tree.xscrollHandle, first, last, total);
+    TtkScrolled(tv->tree.xscrollHandle,
+	    tv->tree.xscroll.first,
+	    tv->tree.xscroll.first + tv->tree.treeArea.width,
+	    TreeWidth(tv));
 
     if (tv->tree.showFlags & SHOW_HEADINGS) {
 	tv->tree.headingArea = Ttk_PackBox(
@@ -1967,22 +1642,12 @@ static void TreeviewDoLayout(void *clientData)
 	tv->tree.headingArea = Ttk_MakeBox(0,0,0,0);
     }
 
-    visibleRows = tv->tree.treeArea.height / tv->tree.rowHeight;
     tv->tree.root->state |= TTK_STATE_OPEN;
-    UpdatePositionTree(tv);
-    first = tv->tree.yscroll.first;
-    last = tv->tree.yscroll.first + visibleRows - tv->tree.titleRows;
-    total = tv->tree.totalRows - tv->tree.titleRows;
-    if (tv->tree.treeArea.height % tv->tree.rowHeight) {
-	/* When the treeview height doesn't correspond to an exact number
-	 * of rows, the last row count must be incremented to draw a
-	 * partial row at the bottom. The total row count must also be
-	 * incremented to be able to scroll all the way to the bottom.
-	 */
-	last++;
-	total++;
-    }
-    TtkScrolled(tv->tree.yscrollHandle, first, last, total);
+    visibleRows = tv->tree.treeArea.height / tv->tree.rowHeight;
+    TtkScrolled(tv->tree.yscrollHandle,
+	    tv->tree.yscroll.first,
+	    tv->tree.yscroll.first + visibleRows,
+	    CountRows(tv->tree.root) - 1);
 }
 
 /* + TreeviewSize --
@@ -2026,32 +1691,13 @@ static Ttk_State ItemState(Treeview *tv, TreeItem *item)
  */
 static void DrawHeadings(Treeview *tv, Drawable d)
 {
-    int x0 = tv->tree.headingArea.x - tv->tree.xscroll.first;
+    const int x0 = tv->tree.headingArea.x - tv->tree.xscroll.first;
     const int y0 = tv->tree.headingArea.y;
     const int h0 = tv->tree.headingArea.height;
-    Tcl_Size i = FirstColumn(tv);
+    int i = FirstColumn(tv);
     int x = 0;
 
-    if (tv->tree.nTitleColumns > i) {
-	x = tv->tree.titleWidth;
-	i = tv->tree.nTitleColumns;
-    }
-
     while (i < tv->tree.nDisplayColumns) {
-	TreeColumn *column = tv->tree.displayColumns[i];
-	Ttk_Box parcel = Ttk_MakeBox(x0+x, y0, column->width, h0);
-	if (x0+x+column->width > tv->tree.titleWidth) {
-	    DisplayLayout(tv->tree.headingLayout,
-		    column, column->headingState, parcel, d);
-	}
-	x += column->width;
-	++i;
-    }
-
-    x0 = tv->tree.headingArea.x;
-    i = FirstColumn(tv);
-    x = 0;
-    while ((i < tv->tree.nTitleColumns) && (i < tv->tree.nDisplayColumns)) {
 	TreeColumn *column = tv->tree.displayColumns[i];
 	Ttk_Box parcel = Ttk_MakeBox(x0+x, y0, column->width, h0);
 	DisplayLayout(tv->tree.headingLayout,
@@ -2061,200 +1707,53 @@ static void DrawHeadings(Treeview *tv, Drawable d)
     }
 }
 
-/* + DrawSeparators --
- *	Draw separators between columns
- */
-static void DrawSeparators(Treeview *tv, Drawable d)
-{
-    const int y0 = tv->tree.treeArea.y;
-    const int h0 = tv->tree.treeArea.height;
-    DisplayItem displayItem;
-    Ttk_Style style = Ttk_LayoutStyle(tv->tree.separatorLayout);
-    int x = tv->tree.treeArea.x;
-    Tcl_Size i;
-
-    Ttk_TagSetDefaults(tv->tree.tagTable, style, &displayItem);
-
-    for (i = FirstColumn(tv); i < tv->tree.nDisplayColumns; ++i) {
-	TreeColumn *column = tv->tree.displayColumns[i];
-	Ttk_Box parcel;
-	int xDraw = x + column->width;
-	x += column->width;
-
-	if (!column->separator) continue;
-
-	if (i >= tv->tree.nTitleColumns) {
-	    xDraw -= tv->tree.xscroll.first;
-	    if (xDraw < tv->tree.titleWidth) continue;
-	}
-
-	parcel = Ttk_MakeBox(xDraw - (tv->tree.colSeparatorWidth+1)/2, y0,
-		tv->tree.colSeparatorWidth, h0);
-	DisplayLayout(tv->tree.separatorLayout, &displayItem, 0, parcel, d);
-    }
-}
-
-/* + OverrideStriped --
- * 	Each level of settings might add stripedbackground, and it should
- * 	override background if this is indeed on a striped item.
- * 	By copying it between each level, and NULL-ing stripedBgObj,
- * 	it can be detected if the next level overrides it.
- */
- static void OverrideStriped(
-    Treeview *tv, TreeItem *item, DisplayItem *displayItem)
-{
-    int striped = item->visiblePos % 2 && tv->tree.striped;
-    if (striped && displayItem->stripedBgObj) {
-	displayItem->backgroundObj = displayItem->stripedBgObj;
-	displayItem->stripedBgObj = NULL;
-    }
-}
-
 /* + PrepareItem --
  * 	Fill in a displayItem record.
  */
 static void PrepareItem(
-    Treeview *tv, TreeItem *item, DisplayItem *displayItem, Ttk_State state)
+    Treeview *tv, TreeItem *item, DisplayItem *displayItem)
 {
     Ttk_Style style = Ttk_LayoutStyle(tv->core.layout);
+    Ttk_State state = ItemState(tv, item);
 
-    Ttk_TagSetDefaults(tv->tree.tagTable, style, displayItem);
-    OverrideStriped(tv, item, displayItem);
     Ttk_TagSetValues(tv->tree.tagTable, item->tagset, displayItem);
-    OverrideStriped(tv, item, displayItem);
     Ttk_TagSetApplyStyle(tv->tree.tagTable, style, state, displayItem);
-}
-
-/* Fill in data from item to temporary storage in columns. */
-static void PrepareCells(
-   Treeview *tv, TreeItem *item)
-{
-    Tcl_Size i, nValues = 0;
-    Tcl_Obj **values = NULL;
-    TreeColumn *column;
-
-    if (item->valuesObj) {
-	Tcl_ListObjGetElements(NULL, item->valuesObj, &nValues, &values);
-    }
-    for (i = 0; i < tv->tree.nColumns; ++i) {
-	tv->tree.columns[i].data = (i < nValues) ? values[i] : 0;
-	tv->tree.columns[i].selected = 0;
-	tv->tree.columns[i].tagset = NULL;
-    }
-    tv->tree.column0.data = NULL;
-    tv->tree.column0.selected = 0;
-    tv->tree.column0.tagset = NULL;
-
-    if (item->selObj != NULL) {
-	Tcl_ListObjGetElements(NULL, item->selObj, &nValues, &values);
-	for (i = 0; i < nValues; ++i) {
-	    column = FindColumn(NULL, tv, values[i]);
-	    /* Just in case. It should not be possible for column to be NULL */
-	    if (column != NULL) {
-		column->selected = 1;
-	    }
-	}
-    }
-    if (item->nTagSets > 0) {
-	tv->tree.column0.tagset = item->cellTagSets[0];
-    }
-    for (i = 1; i < item->nTagSets && i <= tv->tree.nColumns; ++i) {
-	tv->tree.columns[i-1].tagset = item->cellTagSets[i];
-    }
 }
 
 /* + DrawCells --
  *	Draw data cells for specified item.
  */
 static void DrawCells(
-    Treeview *tv, TreeItem *item,
-    DisplayItem *displayItem, DisplayItem *displayItemSel,
-    Drawable d, int x, int y, int title)
+    Treeview *tv, TreeItem *item, DisplayItem *displayItem,
+    Drawable d, int x, int y)
 {
     Ttk_Layout layout = tv->tree.cellLayout;
-    Ttk_Style style = Ttk_LayoutStyle(tv->core.layout);
     Ttk_State state = ItemState(tv, item);
     Ttk_Padding cellPadding = {4, 0, 4, 0};
-    DisplayItem displayItemLocal;
-    DisplayItem displayItemCell, displayItemCellSel;
-    int rowHeight = tv->tree.rowHeight * item->height;
-    int xPad = 0, defaultPadding = 1;
-    Tcl_Size i;
+    int rowHeight = tv->tree.rowHeight;
+    int nValues = 0;
+    Tcl_Obj **values = 0;
+    int i;
 
-    /* Adjust if the tree column has a separator */
-    if (tv->tree.showFlags & SHOW_TREE && tv->tree.column0.separator) {
-	xPad = tv->tree.colSeparatorWidth/2;
+    if (!item->valuesObj) {
+	return;
     }
 
-    /* An Item's image should not propagate to a Cell.
-       A Cell's image can only be set by cell tags. */
-    displayItemCell = *displayItem;
-    displayItemCellSel = *displayItemSel;
-    displayItemCell.imageObj = NULL;
-    displayItemCellSel.imageObj = NULL;
-    displayItemCell.imageAnchorObj = NULL;
-    displayItemCellSel.imageAnchorObj = NULL;
-
-    /* If explicit padding was asked for, skip default. */
-    if (Ttk_QueryStyle(Ttk_LayoutStyle(tv->tree.cellLayout), &displayItemCell,
-		    tv->tree.displayOptionTable, "-padding", state) != NULL) {
-	defaultPadding = 0;
+    Tcl_ListObjGetElements(NULL, item->valuesObj, &nValues, &values);
+    for (i = 0; i < tv->tree.nColumns; ++i) {
+	tv->tree.columns[i].data = (i < nValues) ? values[i] : 0;
     }
 
     for (i = 1; i < tv->tree.nDisplayColumns; ++i) {
 	TreeColumn *column = tv->tree.displayColumns[i];
-	int parcelX = x + xPad;
-	int parcelWidth = column->separator ?
-		column->width - tv->tree.colSeparatorWidth : column->width;
-	Ttk_Box parcel = Ttk_MakeBox(parcelX, y, parcelWidth, rowHeight);
-	DisplayItem *displayItemUsed = &displayItemCell;
-	Ttk_State stateCell = state;
-	Tk_Anchor textAnchor, imageAnchor;
-	xPad = column->separator ? tv->tree.colSeparatorWidth/2 : 0;
+	Ttk_Box parcel = Ttk_PadBox(
+	    Ttk_MakeBox(x, y, column->width, rowHeight), cellPadding);
 
+	displayItem->textObj = column->data;
+	displayItem->anchorObj = column->anchorObj;	/* <<NOTE-ANCHOR>> */
+
+	DisplayLayout(layout, displayItem, state, parcel, d);
 	x += column->width;
-	if (title  && i >= tv->tree.nTitleColumns) break;
-	if (!title && i <  tv->tree.nTitleColumns) continue;
-	if (!title && x <  tv->tree.titleWidth) continue;
-
-	if (column->selected) {
-	    displayItemUsed = &displayItemCellSel;
-	    stateCell |= TTK_STATE_SELECTED;
-	}
-
-	if (column->tagset) {
-	    displayItemLocal = *displayItemUsed;
-	    displayItemUsed = &displayItemLocal;
-	    Ttk_TagSetValues(tv->tree.tagTable, column->tagset,
-		    displayItemUsed);
-	    OverrideStriped(tv, item, displayItemUsed);
-	    Ttk_TagSetApplyStyle(tv->tree.tagTable, style, stateCell,
-		    displayItemUsed);
-	}
-
-	displayItemUsed->textObj = column->data;
-	displayItemUsed->anchorObj = column->anchorObj;/* <<NOTE-ANCHOR>> */
-	Tk_GetAnchorFromObj(NULL, column->anchorObj, &textAnchor);
-
-	imageAnchor = DEFAULT_IMAGEANCHOR;
-	if (displayItemUsed->imageAnchorObj) {
-	    Tk_GetAnchorFromObj(NULL, displayItemUsed->imageAnchorObj,
-		    &imageAnchor);
-	}
-	/* displayItem was used to draw the full item backgound.
-	   Redraw cell background if needed. */
-	if (displayItemUsed != &displayItemCell) {
-	    DisplayLayout(tv->tree.rowLayout, displayItemUsed, stateCell,
-		    parcel, d);
-	}
-
-	if (defaultPadding && displayItemUsed->paddingObj == NULL) {
-	    /* If no explicit padding was asked for, add some default. */
-	    parcel = Ttk_PadBox(parcel, cellPadding);
-	}
-
-	DisplayLayoutTree(imageAnchor, textAnchor,
-		layout, displayItemUsed, state, parcel, d);
     }
 }
 
@@ -2262,139 +1761,100 @@ static void DrawCells(
  * 	Draw an item (row background, tree label, and cells).
  */
 static void DrawItem(
-    Treeview *tv, TreeItem *item, Drawable d, int depth)
+    Treeview *tv, TreeItem *item, Drawable d, int depth, int row)
 {
-    Ttk_Style style = Ttk_LayoutStyle(tv->core.layout);
     Ttk_State state = ItemState(tv, item);
-    DisplayItem displayItem, displayItemSel, displayItemLocal;
-    int rowHeight = tv->tree.rowHeight * item->height;
-    int x = tv->tree.treeArea.x - tv->tree.xscroll.first;
-    int xTitle = tv->tree.treeArea.x;
-    int dispRow = DisplayRow(item->rowPos, tv);
-    int y = tv->tree.treeArea.y + tv->tree.rowHeight * dispRow;
+    DisplayItem displayItem;
+    int x, y, h, rowHeight;
 
-    PrepareItem(tv, item, &displayItem, state);
-    PrepareItem(tv, item, &displayItemSel, state | TTK_STATE_SELECTED);
+    rowHeight = tv->tree.rowHeight;
+    h = rowHeight * (row - tv->tree.yscroll.first);
+    if (h >= tv->tree.treeArea.height) {
+	/* The item is outside the visible area */
+	return;
+    }
+    x = tv->tree.treeArea.x - tv->tree.xscroll.first;
+    y = tv->tree.treeArea.y + h;
+
+    if (row % 2) state |= TTK_STATE_ALTERNATE;
+
+    PrepareItem(tv, item, &displayItem);
 
     /* Draw row background:
      */
     {
-	Ttk_Box rowBox = Ttk_MakeBox(x, y, TreeWidth(tv), rowHeight);
-	DisplayLayout(tv->tree.rowLayout, &displayItem, state, rowBox, d);
-    }
-
-    /* Make room for tree label:
-     */
-    if (tv->tree.showFlags & SHOW_TREE) {
-	x += tv->tree.column0.width;
-    }
-
-    /* Draw data cells:
-     */
-    PrepareCells(tv, item);
-    DrawCells(tv, item, &displayItem, &displayItemSel, d, x, y, 0);
-
-    /* Draw row background for non-scrolled area:
-     */
-    if (tv->tree.nTitleColumns >= 1) {
 	Ttk_Box rowBox = Ttk_MakeBox(tv->tree.treeArea.x, y,
-		tv->tree.titleWidth, rowHeight);
+				     TreeWidth(tv), rowHeight);
 	DisplayLayout(tv->tree.rowLayout, &displayItem, state, rowBox, d);
     }
 
     /* Draw tree label:
      */
-    x = tv->tree.treeArea.x - tv->tree.xscroll.first;
     if (tv->tree.showFlags & SHOW_TREE) {
-	TreeColumn *column = &tv->tree.column0;
 	int indent = depth * tv->tree.indent;
-	int colwidth = tv->tree.column0.width -
-		(tv->tree.column0.separator ? tv->tree.colSeparatorWidth/2 : 0);
-	int xTree = tv->tree.nTitleColumns >= 1 ? xTitle : x;
-	Ttk_Box parcel = Ttk_MakeBox(xTree, y, colwidth, rowHeight);
-	DisplayItem *displayItemUsed = &displayItem;
-	Ttk_State stateCell = state;
-	Tk_Anchor textAnchor, imageAnchor = DEFAULT_IMAGEANCHOR;
-	Ttk_Padding cellPadding = {(short)indent, 0, 0, 0};
-
-	if (column->selected) {
-	    displayItemUsed = &displayItemSel;
- 	    stateCell |= TTK_STATE_SELECTED;
-	}
-
-	if (column->tagset) {
-	    displayItemLocal = *displayItemUsed;
-	    displayItemUsed = &displayItemLocal;
-	    Ttk_TagSetValues(tv->tree.tagTable, column->tagset,
-		    displayItemUsed);
-	    OverrideStriped(tv, item, displayItemUsed);
-	    Ttk_TagSetApplyStyle(tv->tree.tagTable, style, stateCell,
-		    displayItemUsed);
-	}
-
+	int colwidth = tv->tree.column0.width;
+	Ttk_Box parcel = Ttk_MakeBox(
+		x+indent, y, colwidth-indent, rowHeight);
+	if (item->textObj) { displayItem.textObj = item->textObj; }
+	if (item->imageObj) { displayItem.imageObj = item->imageObj; }
 	displayItem.anchorObj = tv->tree.column0.anchorObj;
-	Tk_GetAnchorFromObj(NULL, column->anchorObj, &textAnchor);
-	displayItemUsed->textObj = item->textObj;
-	/* Item's image can be null, and may come from the tag */
-	if (item->imageObj) {
-	    displayItemUsed->imageObj = item->imageObj;
-	}
-	if (item->imageAnchorObj) {
-	    displayItemUsed->imageAnchorObj = item->imageAnchorObj;
-	}
-	if (displayItemUsed->imageAnchorObj) {
-	    Tk_GetAnchorFromObj(NULL, displayItemUsed->imageAnchorObj,
-		    &imageAnchor);
-	}
-
-	if (displayItemUsed != &displayItem) {
-	    DisplayLayout(tv->tree.rowLayout, displayItemUsed, stateCell,
-		    parcel, d);
-	}
-
-	parcel = Ttk_PadBox(parcel, cellPadding);
-	DisplayLayoutTree(imageAnchor, textAnchor,
-		tv->tree.itemLayout, displayItemUsed, state, parcel, d);
-	xTitle += colwidth;
+	DisplayLayout(tv->tree.itemLayout, &displayItem, state, parcel, d);
+	x += colwidth;
     }
 
-    /* Draw non-scrolled data cells:
+    /* Draw data cells:
      */
-    if (tv->tree.nTitleColumns > 1) {
-	DrawCells(tv, item, &displayItem, &displayItemSel, d, xTitle, y, 1);
-    }
+    DrawCells(tv, item, &displayItem, d, x, y);
 }
 
 /* + DrawSubtree --
  * 	Draw an item and all of its (viewable) descendants.
+ *
+ * Returns:
+ * 	Row number of the last item drawn.
  */
 
-static void DrawForest(	/* forward */
-    Treeview *tv, TreeItem *item, Drawable d, int depth);
+static int DrawForest(	/* forward */
+    Treeview *tv, TreeItem *item, Drawable d, int depth, int row);
 
-static void DrawSubtree(
-    Treeview *tv, TreeItem *item, Drawable d, int depth)
+static int DrawSubtree(
+    Treeview *tv, TreeItem *item, Drawable d, int depth, int row)
 {
-    int dispRow = DisplayRow(item->rowPos, tv);
-    if (dispRow >= 0) {
-	DrawItem(tv, item, d, depth);
+    if (row >= tv->tree.yscroll.first) {
+	DrawItem(tv, item, d, depth, row);
     }
 
     if (item->state & TTK_STATE_OPEN) {
-	DrawForest(tv, item->children, d, depth + 1);
+	return DrawForest(tv, item->children, d, depth + 1, row + 1);
+    } else {
+	return row + 1;
     }
 }
 
 /* + DrawForest --
  * 	Draw a sequence of items and their visible descendants.
+ *
+ * Returns:
+ * 	Row number of the last item drawn.
  */
-static void DrawForest(
-    Treeview *tv, TreeItem *item, Drawable d, int depth)
+static int DrawForest(
+    Treeview *tv, TreeItem *item, Drawable d, int depth, int row)
 {
-    while (item) {
-	DrawSubtree(tv, item, d, depth);
+    while (item && row <= tv->tree.yscroll.last) {
+	row = DrawSubtree(tv, item, d, depth, row);
 	item = item->next;
     }
+    return row;
+}
+
+/* + DrawTreeArea --
+ * 	Draw the tree area including the headings, if any
+ */
+static void DrawTreeArea(Treeview *tv, Drawable d) {
+    if (tv->tree.showFlags & SHOW_HEADINGS) {
+	DrawHeadings(tv, d);
+    }
+    DrawForest(tv, tv->tree.root->children, d, 0, 0);
 }
 
 /* + TreeviewDisplay --
@@ -2403,13 +1863,83 @@ static void DrawForest(
 static void TreeviewDisplay(void *clientData, Drawable d)
 {
     Treeview *tv = (Treeview *)clientData;
+    Tk_Window tkwin = tv->core.tkwin;
+    int width, height, winWidth, winHeight;
 
+    /* Draw the general layout of the treeview widget */
     Ttk_DrawLayout(tv->core.layout, tv->core.state, d);
-    if (tv->tree.showFlags & SHOW_HEADINGS) {
-	DrawHeadings(tv, d);
+
+    /* When the tree area does not fit in the available space, there is a
+     * risk that it will be drawn over other areas of the layout.
+     */
+
+    winWidth = Tk_Width(tkwin);
+    winHeight = Tk_Height(tkwin);
+    width = tv->tree.treeArea.width;
+    height = tv->tree.headingArea.height + tv->tree.treeArea.height;
+
+    if ((width == winWidth && height == winHeight)
+      || (tv->tree.treeArea.height % tv->tree.rowHeight == 0
+	&& TreeWidth(tv) <= width)) {
+	/* No protection is needed; either the tree area fills the entire
+	 * widget, or everything fits within the available area.
+	 */
+	DrawTreeArea(tv, d);
+    } else {
+	/* The tree area needs to be clipped
+	 */
+
+	int x, y;
+#ifndef TK_NO_DOUBLE_BUFFERING
+	Drawable p;
+	XGCValues gcValues;
+	GC gc;
+#endif /* TK_NO_DOUBLE_BUFFERING */
+
+	x = tv->tree.treeArea.x;
+	if (tv->tree.showFlags & SHOW_HEADINGS) {
+	    y = tv->tree.headingArea.y;
+	} else {
+	    y = tv->tree.treeArea.y;
+	}
+
+#ifndef TK_NO_DOUBLE_BUFFERING
+	/* Create a temporary helper drawable */
+	p = Tk_GetPixmap(Tk_Display(tkwin), Tk_WindowId(tkwin),
+	  winWidth, winHeight, Tk_Depth(tkwin));
+
+	/* Get a graphics context for copying the drawable content */
+	gcValues.function = GXcopy;
+	gcValues.graphics_exposures = False;
+	gc = Tk_GetGC(tkwin, GCFunction|GCGraphicsExposures, &gcValues);
+
+	/* Copy the widget background into the helper */
+	XCopyArea(Tk_Display(tkwin), d, p, gc, 0, 0,
+	  (unsigned) winWidth, (unsigned) winHeight, 0, 0);
+
+	/* Draw the tree onto the helper without regard for borders */
+	DrawTreeArea(tv, p);
+
+	/* Copy only the tree area inside the borders back */
+	XCopyArea(Tk_Display(tkwin), p, d, gc, x, y,
+	  (unsigned) width, (unsigned) height, x, y);
+
+	/* Clean up the temporary resources */
+	Tk_FreePixmap(Tk_Display(tkwin), p);
+	Tk_FreeGC(Tk_Display(tkwin), gc);
+#else
+	Ttk_Theme currentTheme = Ttk_GetCurrentTheme(tv->core.interp);
+	Ttk_Theme aquaTheme = Ttk_GetTheme(tv->core.interp, "aqua");
+	if (currentTheme == aquaTheme && [NSApp macOSVersion] > 100800) {
+	    y -= 4;
+	    height += 4;
+	}
+
+	TkpClipDrawableToRect(Tk_Display(tkwin), d, x, y, width, height);
+	DrawTreeArea(tv, d);
+	TkpClipDrawableToRect(Tk_Display(tkwin), d, 0, 0, -1, -1);
+#endif
     }
-    DrawForest(tv, tv->tree.root->children, d, 0);
-    DrawSeparators(tv, d);
 }
 
 /*------------------------------------------------------------------------
@@ -2515,7 +2045,7 @@ static TreeItem *DeleteItems(TreeItem *item, TreeItem *delq)
  * 	Return the list of children associated with $item
  */
 static int TreeviewChildrenCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item;
@@ -2585,7 +2115,6 @@ static int TreeviewChildrenCommand(
 	}
 
 	ckfree(newChildren);
-	tv->tree.rowPosNeedsUpdate = 1;
 	TtkRedisplayWidget(&tv->core);
     }
 
@@ -2596,7 +2125,7 @@ static int TreeviewChildrenCommand(
  * 	Return the item ID of $item's parent.
  */
 static int TreeviewParentCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item;
@@ -2624,7 +2153,7 @@ static int TreeviewParentCommand(
  * 	Return the ID of $item's next sibling.
  */
 static int TreeviewNextCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item;
@@ -2649,7 +2178,7 @@ static int TreeviewNextCommand(
  * 	Return the ID of $item's previous sibling.
  */
 static int TreeviewPrevCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item;
@@ -2674,11 +2203,11 @@ static int TreeviewPrevCommand(
  * 	Return the index of $item within its parent.
  */
 static int TreeviewIndexCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item;
-    Tcl_Size index = 0;
+    int index = 0;
 
     if (objc != 3) {
 	Tcl_WrongNumArgs(interp, 2, objv, "item");
@@ -2694,7 +2223,7 @@ static int TreeviewIndexCommand(
 	item = item->prev;
     }
 
-    Tcl_SetObjResult(interp, TkNewIndexObj(index));
+    Tcl_SetObjResult(interp, Tcl_NewIntObj(index));
     return TCL_OK;
 }
 
@@ -2702,7 +2231,7 @@ static int TreeviewIndexCommand(
  * 	Test if the specified item id is present in the tree.
  */
 static int TreeviewExistsCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     Tcl_HashEntry *entryPtr;
@@ -2721,7 +2250,7 @@ static int TreeviewExistsCommand(
  * 	Return bounding box [x y width height] of specified item.
  */
 static int TreeviewBBoxCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item = 0;
@@ -2759,14 +2288,14 @@ static int TreeviewBBoxCommand(
  */
 static int TreeviewHorribleIdentify(
     Tcl_Interp *interp,
-    TCL_UNUSED(Tcl_Size), /* objc */
+    TCL_UNUSED(int), /* objc */
     Tcl_Obj *const objv[],
     Treeview *tv)
 {
     const char *what = "nothing", *detail = NULL;
     TreeItem *item = 0;
     Tcl_Obj *result;
-    Tcl_Size dColumnNumber;
+    int dColumnNumber;
     char dcolbuf[32];
     int x, y, x1;
 
@@ -2781,7 +2310,7 @@ static int TreeviewHorribleIdentify(
     if (dColumnNumber < 0) {
 	goto done;
     }
-    snprintf(dcolbuf, sizeof(dcolbuf), "#%" TCL_SIZE_MODIFIER "d", dColumnNumber);
+    snprintf(dcolbuf, sizeof(dcolbuf), "#%d", dColumnNumber);
 
     if (Ttk_BoxContains(tv->tree.headingArea,x,y)) {
 	if (-HALO <= x1 - x  && x1 - x <= HALO) {
@@ -2800,14 +2329,13 @@ static int TreeviewHorribleIdentify(
 	    Ttk_Box itemBox;
 	    DisplayItem displayItem;
 	    Ttk_Element element;
-	    Ttk_State state = ItemState(tv, item);
 
 	    BoundingBox(tv, item, NULL, &itemBox);
-	    PrepareItem(tv, item, &displayItem, state);
+	    PrepareItem(tv, item, &displayItem);
 	    if (item->textObj) { displayItem.textObj = item->textObj; }
 	    if (item->imageObj) { displayItem.imageObj = item->imageObj; }
 	    Ttk_RebindSublayout(layout, &displayItem);
-	    Ttk_PlaceLayout(layout, state, itemBox);
+	    Ttk_PlaceLayout(layout, ItemState(tv,item), itemBox);
 	    element = Ttk_IdentifyElement(layout, x, y);
 
 	    if (element) {
@@ -2836,11 +2364,11 @@ done:
  */
 
 static int TreeviewIdentifyCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     static const char *const submethodStrings[] =
-	 { "region", "item", "column", "row", "element", "cell", NULL };
-    enum { I_REGION, I_ITEM, I_COLUMN, I_ROW, I_ELEMENT, I_CELL };
+	 { "region", "item", "column", "row", "element", NULL };
+    enum { I_REGION, I_ITEM, I_COLUMN, I_ROW, I_ELEMENT };
 
     Treeview *tv = (Treeview *)recordPtr;
     int submethod;
@@ -2850,7 +2378,7 @@ static int TreeviewIdentifyCommand(
     Ttk_Box bbox;
     TreeItem *item;
     TreeColumn *column = 0;
-    Tcl_Size colno;
+    int colno;
     int x1;
 
     if (objc == 4) {	/* Old form */
@@ -2867,6 +2395,10 @@ static int TreeviewIdentifyCommand(
     ) {
 	return TCL_ERROR;
     }
+
+    /* Make sure the scroll information is current before use */
+    TtkUpdateScrollInfo(tv->tree.xscrollHandle);
+    TtkUpdateScrollInfo(tv->tree.yscrollHandle);
 
     region = IdentifyRegion(tv, x, y);
     item = IdentifyItem(tv, y);
@@ -2888,16 +2420,7 @@ static int TreeviewIdentifyCommand(
 
 	case I_COLUMN :
 	    if (colno >= 0) {
-		Tcl_SetObjResult(interp, Tcl_ObjPrintf("#%" TCL_SIZE_MODIFIER "d", colno));
-	    }
-	    break;
-
-	case I_CELL :
-	    if (item && colno >= 0) {
-		Tcl_Obj *elem[2];
-		elem[0] = ItemID(tv, item);
-		elem[1] = Tcl_ObjPrintf("#%" TCL_SIZE_MODIFIER "d", colno);
-		Tcl_SetObjResult(interp, Tcl_NewListObj(2, elem));
+		Tcl_SetObjResult(interp, Tcl_ObjPrintf("#%d", colno));
 	    }
 	    break;
 
@@ -2906,7 +2429,6 @@ static int TreeviewIdentifyCommand(
 	    Ttk_Layout layout = 0;
 	    DisplayItem displayItem;
 	    Ttk_Element element;
-	    Ttk_State state;
 
 	    switch (region) {
 		case REGION_NOTHING:
@@ -2924,18 +2446,15 @@ static int TreeviewIdentifyCommand(
 		    break;
 	    }
 
-	    if (item == NULL) {
-		return TCL_OK;
-	    }
 	    if (!BoundingBox(tv, item, column, &bbox)) {
 		return TCL_OK;
 	    }
-	    state = ItemState(tv, item);
-	    PrepareItem(tv, item, &displayItem, state);
+
+	    PrepareItem(tv, item, &displayItem);
 	    if (item->textObj) { displayItem.textObj = item->textObj; }
 	    if (item->imageObj) { displayItem.imageObj = item->imageObj; }
 	    Ttk_RebindSublayout(layout, &displayItem);
-	    Ttk_PlaceLayout(layout, state, bbox);
+	    Ttk_PlaceLayout(layout, ItemState(tv,item), bbox);
 	    element = Ttk_IdentifyElement(layout, x, y);
 
 	    if (element) {
@@ -2956,13 +2475,13 @@ static int TreeviewIdentifyCommand(
  * 	Query or configure item options.
  */
 static int TreeviewItemCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item;
 
     if (objc < 3) {
-	Tcl_WrongNumArgs(interp, 2, objv, "item ?-option ?value??...");
+	Tcl_WrongNumArgs(interp, 2, objv, "item ?option ?value??...");
 	return TCL_ERROR;
     }
     if (!(item = FindItem(interp, tv, objv[2]))) {
@@ -2984,7 +2503,7 @@ static int TreeviewItemCommand(
  * 	Column data accessor
  */
 static int TreeviewColumnCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeColumn *column;
@@ -3012,7 +2531,7 @@ static int TreeviewColumnCommand(
  * 	Heading data accessor
  */
 static int TreeviewHeadingCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     Tk_OptionTable optionTable = tv->tree.headingOptionTable;
@@ -3042,12 +2561,12 @@ static int TreeviewHeadingCommand(
  * 	Query or configure cell values
  */
 static int TreeviewSetCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item;
     TreeColumn *column;
-    Tcl_Size columnNumber;
+    int columnNumber;
 
     if (objc < 3 || objc > 5) {
 	Tcl_WrongNumArgs(interp, 2, objv, "item ?column ?value??");
@@ -3107,7 +2626,7 @@ static int TreeviewSetCommand(
 	Tcl_SetObjResult(interp, result);
 	return TCL_OK;
     } else {		/* set column */
-	Tcl_Size length;
+	int length;
 
 	item->valuesObj = unshareObj(item->valuesObj);
 
@@ -3136,7 +2655,7 @@ static int TreeviewSetCommand(
  * 	Insert a new item.
  */
 static int TreeviewInsertCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *parent, *sibling, *newItem;
@@ -3194,10 +2713,10 @@ static int TreeviewInsertCommand(
      */
     newItem = NewItem();
     Tk_InitOptions(
-	interp, newItem, tv->tree.itemOptionTable, tv->core.tkwin);
+	interp, (void *)newItem, tv->tree.itemOptionTable, tv->core.tkwin);
     newItem->tagset = Ttk_GetTagSetFromObj(NULL, tv->tree.tagTable, NULL);
     if (ConfigureItem(interp, tv, newItem, objc, objv) != TCL_OK) {
-    	Tcl_DeleteHashEntry(entryPtr);
+	Tcl_DeleteHashEntry(entryPtr);
 	FreeItem(newItem);
 	return TCL_ERROR;
     }
@@ -3207,7 +2726,6 @@ static int TreeviewInsertCommand(
     Tcl_SetHashValue(entryPtr, newItem);
     newItem->entryPtr = entryPtr;
     InsertItem(parent, sibling, newItem);
-    tv->tree.rowPosNeedsUpdate = 1;
     TtkRedisplayWidget(&tv->core);
 
     Tcl_SetObjResult(interp, ItemID(tv, newItem));
@@ -3218,11 +2736,11 @@ static int TreeviewInsertCommand(
  * 	Unlink each item in $items from the tree.
  */
 static int TreeviewDetachCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem **items;
-    Tcl_Size i;
+    int i;
 
     if (objc != 3) {
 	Tcl_WrongNumArgs(interp, 2, objv, "item");
@@ -3247,56 +2765,11 @@ static int TreeviewDetachCommand(
 	DetachItem(items[i]);
     }
 
-    tv->tree.rowPosNeedsUpdate = 1;
     TtkRedisplayWidget(&tv->core);
     ckfree(items);
     return TCL_OK;
 }
 
-/* Is an item detached? The root is never detached. */
-static int IsDetached(Treeview *tv, TreeItem *item)
-{
-	return item->next == NULL && item->prev == NULL &&
-			item->parent == NULL && item != tv->tree.root;
-}
-
-/* + $tv detached ?$item? --
- * 	List detached items (in arbitrary order) or query the detached state of
- * 	$item.
- */
-static int TreeviewDetachedCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
-{
-    Treeview *tv = (Treeview *)recordPtr;
-    TreeItem *item;
-
-    if (objc == 2) {
-	/* List detached items */
-	Tcl_HashSearch search;
-	Tcl_HashEntry *entryPtr = Tcl_FirstHashEntry(&tv->tree.items, &search);
-	Tcl_Obj *objPtr = Tcl_NewObj();
-
-	while (entryPtr != NULL) {
-	    item = (TreeItem *)Tcl_GetHashValue(entryPtr);
-	    entryPtr = Tcl_NextHashEntry(&search);
-	    if (IsDetached(tv, item)) {
-		Tcl_ListObjAppendElement(NULL, objPtr, ItemID(tv, item));
-	    }
-	}
-	Tcl_SetObjResult(interp, objPtr);
-	return TCL_OK;
-    } else if (objc == 3) {
-	/* Query; the root is never reported as detached */
-	if (!(item = FindItem(interp, tv, objv[2]))) {
-	    return TCL_ERROR;
-	}
-	Tcl_SetObjResult(interp, Tcl_NewBooleanObj(IsDetached(tv, item)));
-	return TCL_OK;
-    } else {
-	Tcl_WrongNumArgs(interp, 2, objv, "?item?");
-	return TCL_ERROR;
-    }
-}
 /* + $tv delete $items --
  * 	Delete each item in $items.
  *
@@ -3310,11 +2783,11 @@ static int TreeviewDetachedCommand(
  */
 
 static int TreeviewDeleteCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem **items, *delq;
-    Tcl_Size i;
+    int i;
     int selChange = 0;
 
     if (objc != 3) {
@@ -3344,12 +2817,6 @@ static int TreeviewDeleteCommand(
     for (i = 0; items[i]; ++i) {
 	if (items[i]->state & TTK_STATE_SELECTED) {
 	    selChange = 1;
-	} else if (items[i]->selObj != NULL) {
-	    Tcl_Size length;
-	    Tcl_ListObjLength(interp, items[i]->selObj, &length);
-	    if (length > 0) {
-		selChange = 1;
-	    }
 	}
 	delq = DeleteItems(items[i], delq);
     }
@@ -3368,9 +2835,8 @@ static int TreeviewDeleteCommand(
 
     ckfree(items);
     if (selChange) {
-	Tk_SendVirtualEvent(tv->core.tkwin, "TreeviewSelect", NULL);
+	TtkSendVirtualEvent(tv->core.tkwin, "TreeviewSelect");
     }
-    tv->tree.rowPosNeedsUpdate = 1;
     TtkRedisplayWidget(&tv->core);
     return TCL_OK;
 }
@@ -3379,7 +2845,7 @@ static int TreeviewDeleteCommand(
  * 	Move $item to the specified $index in $parent's child list.
  */
 static int TreeviewMoveCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item, *parent;
@@ -3432,7 +2898,6 @@ static int TreeviewMoveCommand(
     DetachItem(item);
     InsertItem(parent, sibling, item);
 
-    tv->tree.rowPosNeedsUpdate = 1;
     TtkRedisplayWidget(&tv->core);
     return TCL_OK;
 }
@@ -3442,14 +2907,14 @@ static int TreeviewMoveCommand(
  */
 
 static int TreeviewXViewCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     return TtkScrollviewCommand(interp, objc, objv, tv->tree.xscrollHandle);
 }
 
 static int TreeviewYViewCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     return TtkScrollviewCommand(interp, objc, objv, tv->tree.yscrollHandle);
@@ -3459,11 +2924,11 @@ static int TreeviewYViewCommand(
  * 	Ensure that $item is visible.
  */
 static int TreeviewSeeCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     TreeItem *item, *parent;
-    int scrollRow1, scrollRow2, visibleRows;
+    int rowNumber;
 
     if (objc != 3) {
 	Tcl_WrongNumArgs(interp, 2, objv, "item");
@@ -3480,28 +2945,30 @@ static int TreeviewSeeCommand(
 	    parent->openObj = unshareObj(parent->openObj);
 	    Tcl_SetBooleanObj(parent->openObj, 1);
 	    parent->state |= TTK_STATE_OPEN;
-	    tv->tree.rowPosNeedsUpdate = 1;
 	    TtkRedisplayWidget(&tv->core);
 	}
     }
-    if (tv->tree.rowPosNeedsUpdate) {
-	UpdatePositionTree(tv);
-    }
+
+    /* Update the scroll information, if necessary */
+    TtkUpdateScrollInfo(tv->tree.yscrollHandle);
 
     /* Make sure item is visible:
      */
-    if (item->rowPos < tv->tree.titleRows) {
+    rowNumber = RowNumber(tv, item);
+    if (rowNumber < 0) {
+	/* The item cannot be moved into view because it is detached */
 	return TCL_OK;
     }
-    visibleRows = tv->tree.treeArea.height / tv->tree.rowHeight
-	    - tv->tree.titleRows;
-    scrollRow1 = item->rowPos - tv->tree.titleRows;
-    scrollRow2 = scrollRow1 + item->height - 1;
-    if (scrollRow1 < tv->tree.yscroll.first || item->height > visibleRows) {
-	TtkScrollTo(tv->tree.yscrollHandle, scrollRow1, 1);
-    } else if (scrollRow2 >= tv->tree.yscroll.first + visibleRows) {
-	scrollRow1 = 1 + scrollRow2 - visibleRows;
-	TtkScrollTo(tv->tree.yscrollHandle, scrollRow1, 1);
+    if (rowNumber >= tv->tree.yscroll.last) {
+	TtkScrollTo(tv->tree.yscrollHandle,
+	    tv->tree.yscroll.first + (1+rowNumber - tv->tree.yscroll.last), 1);
+    }
+    /* On small widgets (shorter than one row high, which is also the case
+     * before the widget is initially mapped) the above command will have
+     * scrolled down too far. This is why both conditions must be checked.
+     */
+    if (rowNumber < tv->tree.yscroll.first) {
+	TtkScrollTo(tv->tree.yscrollHandle, rowNumber, 1);
     }
 
     return TCL_OK;
@@ -3515,11 +2982,11 @@ static int TreeviewSeeCommand(
  * 	Set right edge of display column $column to x position $X
  */
 static int TreeviewDragCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     int left = tv->tree.treeArea.x - tv->tree.xscroll.first;
-    Tcl_Size i = FirstColumn(tv);
+    int i = FirstColumn(tv);
     TreeColumn *column;
     int newx;
 
@@ -3537,10 +3004,6 @@ static int TreeviewDragCommand(
 	TreeColumn *c = tv->tree.displayColumns[i];
 	int right = left + c->width;
 	if (c == column) {
-	    if (i < tv->tree.nTitleColumns) {
-		/* Unscrollable column, remove scroll shift */
-		right += tv->tree.xscroll.first;
-	    }
 	    DragColumn(tv, i, newx - right);
 	    TtkRedisplayWidget(&tv->core);
 	    return TCL_OK;
@@ -3555,7 +3018,7 @@ static int TreeviewDragCommand(
 }
 
 static int TreeviewDropCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
 
@@ -3575,7 +3038,7 @@ static int TreeviewDropCommand(
 /* + $tree focus ?item?
  */
 static int TreeviewFocusCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
 
@@ -3600,7 +3063,7 @@ static int TreeviewFocusCommand(
 /* + $tree selection ?add|remove|set|toggle $items?
  */
 static int TreeviewSelectionCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     enum {
 	SELECTION_SET, SELECTION_ADD, SELECTION_REMOVE, SELECTION_TOGGLE
@@ -3624,7 +3087,7 @@ static int TreeviewSelectionCommand(
     }
 
     if (objc != 4) {
-    	Tcl_WrongNumArgs(interp, 2, objv, "?add|remove|set|toggle items?");
+	Tcl_WrongNumArgs(interp, 2, objv, "?add|remove|set|toggle items?");
 	return TCL_ERROR;
     }
 
@@ -3679,252 +3142,7 @@ static int TreeviewSelectionCommand(
 
     ckfree(items);
     if (selChange) {
-	Tk_SendVirtualEvent(tv->core.tkwin, "TreeviewSelect", NULL);
-    }
-    TtkRedisplayWidget(&tv->core);
-
-    return TCL_OK;
-}
-
-/* + SelObjChangeElement --
- * 	Change an element in a cell selection list.
- */
-static int SelObjChangeElement(
-    Treeview *tv, Tcl_Obj *listPtr, Tcl_Obj *elemPtr,
-    int add,
-    TCL_UNUSED(int) /*remove*/,
-    int toggle)
-{
-    Tcl_Size i, nElements;
-    int anyChange = 0;
-    TreeColumn *column, *elemColumn;
-    Tcl_Obj **elements;
-
-    elemColumn = FindColumn(NULL, tv, elemPtr);
-    Tcl_ListObjGetElements(NULL, listPtr, &nElements, &elements);
-    for (i = 0; i < nElements; i++) {
-	column = FindColumn(NULL, tv, elements[i]);
-	if (column == elemColumn) {
-	    if (add) {
-		return anyChange;
-	    }
-	    Tcl_ListObjReplace(NULL, listPtr, i, 1, 0, NULL);
-	    anyChange = 1;
-	    return anyChange;
-	}
-    }
-    if (add || toggle) {
-	Tcl_ListObjAppendElement(NULL, listPtr, elemColumn->idObj);
-	anyChange = 1;
-    }
-    return anyChange;
-}
-
-/* + $tree cellselection ?add|remove|set|toggle $items?
- */
-static int CellSelectionRange(
-    Tcl_Interp *interp, Treeview *tv, Tcl_Obj *fromCell, Tcl_Obj *toCell,
-    int add, int remove, int toggle)
-{
-    TreeCell cellFrom, cellTo;
-    TreeItem *item;
-    Tcl_Obj *columns, **elements;
-    int colno, fromNo, toNo, anyChange = 0;
-    Tcl_Size i, nElements;
-    int set = !(add || remove || toggle);
-
-    if (GetCellFromObj(interp, tv, fromCell, 1, &fromNo, &cellFrom)
-	    != TCL_OK) {
-	return TCL_ERROR;
-    }
-    if (GetCellFromObj(interp, tv, toCell, 1, &toNo, &cellTo)
-	    != TCL_OK) {
-	return TCL_ERROR;
-    }
-
-    /* Correct order.
-     */
-    if (fromNo > toNo) {
-	colno = fromNo;
-	fromNo = toNo;
-	toNo = colno;
-    }
-
-    /* Make a list of columns in this rectangle.
-     */
-    columns = Tcl_NewListObj(0, 0);
-    Tcl_IncrRefCount(columns);
-    for (colno = fromNo; colno <= toNo; colno++) {
-	Tcl_ListObjAppendElement(NULL, columns,
-		tv->tree.displayColumns[colno]->idObj);
-    }
-
-    /* Set is the only operation that affects items outside its rectangle.
-     * Start with clearing out.
-     */
-    if (set) {
-	anyChange = CellSelectionClear(tv);
-    }
-
-    /* Correct order.
-     */
-    if (tv->tree.rowPosNeedsUpdate) {
-	UpdatePositionTree(tv);
-    }
-    if (cellFrom.item->itemPos > cellTo.item->itemPos) {
-	item = cellFrom.item;
-	cellFrom.item = cellTo.item;
-	cellTo.item = item;
-    }
-
-    /* Go through all items in this rectangle.
-     */
-    for (item = cellFrom.item; item; item = NextPreorder(item)) {
-	if (item->selObj != NULL) {
-	    item->selObj = unshareObj(item->selObj);
-
-	    Tcl_ListObjGetElements(NULL, columns, &nElements, &elements);
-	    for (i = 0; i < nElements; ++i) {
-		anyChange |= SelObjChangeElement(tv, item->selObj, elements[i],
-			add, remove, toggle);
-	    }
-	} else {
-	    /* Set, add and toggle do the same thing when empty before.
-	     */
-	    if (!remove) {
-		item->selObj = columns;
-		Tcl_IncrRefCount(item->selObj);
-		anyChange = 1;
-	    }
-	}
-	if (item == cellTo.item) {
-	    break;
-	}
-    }
-
-    Tcl_DecrRefCount(columns);
-
-    if (anyChange) {
-	Tk_SendVirtualEvent(tv->core.tkwin, "TreeviewSelect", NULL);
-    }
-    TtkRedisplayWidget(&tv->core);
-    return TCL_OK;
-}
-
-/* + $tree cellselection ?add|remove|set|toggle $items?
- */
-static int TreeviewCellSelectionCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
-{
-    enum {
-	SELECTION_SET, SELECTION_ADD, SELECTION_REMOVE, SELECTION_TOGGLE
-    };
-    static const char *const selopStrings[] = {
-	"set", "add", "remove", "toggle", NULL
-    };
-
-    Treeview *tv = (Treeview *)recordPtr;
-    int selop, anyChange = 0;
-    Tcl_Size i, nCells;
-    TreeCell *cells;
-    TreeItem *item;
-
-    if (objc == 2) {
-	Tcl_Obj *result = Tcl_NewListObj(0,0);
-	for (item = tv->tree.root->children; item; item = NextPreorder(item)) {
-	    if (item->selObj != NULL) {
-		Tcl_Size n, elemc;
-		Tcl_Obj **elemv;
-
-		Tcl_ListObjGetElements(interp, item->selObj, &n, &elemv);
-		elemc = n;
-		for (i = 0; i < elemc; ++i) {
-		    Tcl_Obj *elem[2];
-		    elem[0] = ItemID(tv, item);
-		    elem[1] = elemv[i];
-		    Tcl_ListObjAppendElement(NULL, result,
-			    Tcl_NewListObj(2, elem));
-		}
-	    }
-	}
-	Tcl_SetObjResult(interp, result);
-	return TCL_OK;
-    }
-
-    if (objc < 4 || objc > 5) {
-    	Tcl_WrongNumArgs(interp, 2, objv, "?add|remove|set|toggle arg...?");
-	return TCL_ERROR;
-    }
-
-    if (Tcl_GetIndexFromObjStruct(interp, objv[2], selopStrings,
-	    sizeof(char *), "cellselection operation", 0, &selop) != TCL_OK) {
-	return TCL_ERROR;
-    }
-
-    if (objc == 5) {
-	switch (selop)
-	{
-	    case SELECTION_SET:
-		return CellSelectionRange(interp, tv, objv[3], objv[4], 0, 0, 0);
-	    case SELECTION_ADD:
-		return CellSelectionRange(interp, tv, objv[3], objv[4], 1, 0, 0);
-	    case SELECTION_REMOVE:
-		return CellSelectionRange(interp, tv, objv[3], objv[4], 0, 1, 0);
-	    case SELECTION_TOGGLE:
-		return CellSelectionRange(interp, tv, objv[3], objv[4], 0, 0, 1);
-	}
-    }
-
-    cells = GetCellListFromObj(interp, tv, objv[3], &nCells);
-    if (cells == NULL) {
-	return TCL_ERROR;
-    }
-
-    switch (selop)
-    {
-	case SELECTION_SET:
-	    anyChange = CellSelectionClear(tv);
-	    /*FALLTHRU*/
-	case SELECTION_ADD:
-	    for (i = 0; i < nCells; i++) {
-		item = cells[i].item;
-		if (item->selObj == NULL) {
-		    item->selObj = Tcl_NewListObj(0, 0);
-		    Tcl_IncrRefCount(item->selObj);
-		}
-		item->selObj = unshareObj(item->selObj);
-		anyChange |= SelObjChangeElement(tv, item->selObj,
-			cells[i].colObj, 1, 0, 0);
-	    }
-	    break;
-	case SELECTION_REMOVE:
-	    for (i = 0; i < nCells; i++) {
-		item = cells[i].item;
-		if (item->selObj == NULL) {
-		    continue;
-		}
-		item->selObj = unshareObj(item->selObj);
-		anyChange |= SelObjChangeElement(tv, item->selObj,
-			cells[i].colObj, 0, 1, 0);
-	    }
-	    break;
-	case SELECTION_TOGGLE:
-	    for (i = 0; i < nCells; i++) {
-		item = cells[i].item;
-		if (item->selObj == NULL) {
-		    item->selObj = Tcl_NewListObj(0, 0);
-		    Tcl_IncrRefCount(item->selObj);
-		}
-		item->selObj = unshareObj(item->selObj);
-		anyChange = SelObjChangeElement(tv, item->selObj,
-			cells[i].colObj, 0, 0, 1);
-	    }
-	    break;
-    }
-
-    ckfree(cells);
-    if (anyChange) {
-	Tk_SendVirtualEvent(tv->core.tkwin, "TreeviewSelect", NULL);
+	TtkSendVirtualEvent(tv->core.tkwin, "TreeviewSelect");
     }
     TtkRedisplayWidget(&tv->core);
 
@@ -3938,7 +3156,7 @@ static int TreeviewCellSelectionCommand(
 /* + $tv tag bind $tag ?$sequence ?$script??
  */
 static int TreeviewTagBindCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     Ttk_TagTable tagTable = tv->tree.tagTable;
@@ -3946,7 +3164,7 @@ static int TreeviewTagBindCommand(
     Ttk_Tag tag;
 
     if (objc < 4 || objc > 6) {
-    	Tcl_WrongNumArgs(interp, 3, objv, "tagName ?sequence? ?script?");
+	Tcl_WrongNumArgs(interp, 3, objv, "tagName ?sequence? ?script?");
 	return TCL_ERROR;
     }
 
@@ -3991,7 +3209,7 @@ static int TreeviewTagBindCommand(
 /* + $tv tag configure $tag ?-option ?value -option value...??
  */
 static int TreeviewTagConfigureCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     Ttk_TagTable tagTable = tv->tree.tagTable;
@@ -4019,40 +3237,10 @@ static int TreeviewTagConfigureCommand(
     return Ttk_ConfigureTag(interp, tagTable, tag, objc - 4, objv + 4);
 }
 
-/* + $tv tag delete $tag
- */
-static int TreeviewTagDeleteCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
-{
-    Treeview *tv = (Treeview *)recordPtr;
-    Ttk_TagTable tagTable = tv->tree.tagTable;
-    TreeItem *item = tv->tree.root;
-    Ttk_Tag tag;
-
-    if (objc != 4) {
-	Tcl_WrongNumArgs(interp, 3, objv, "tagName");
-	return TCL_ERROR;
-    }
-
-    tag = Ttk_GetTagFromObj(tagTable, objv[3]);
-    /* remove the tag from all cells and items */
-    while (item) {
-	RemoveTagFromCellsAtItem(item, tag);
-	RemoveTag(item, tag);
-	item = NextPreorder(item);
-    }
-    /* then remove the tag from the tag table */
-    Tk_DeleteAllBindings(tv->tree.bindingTable, tag);
-    Ttk_DeleteTagFromTable(tagTable, tag);
-    TtkRedisplayWidget(&tv->core);
-
-    return TCL_OK;
-}
-
 /* + $tv tag has $tag ?$item?
  */
 static int TreeviewTagHasCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
 
@@ -4080,69 +3268,7 @@ static int TreeviewTagHasCommand(
 	    Tcl_NewBooleanObj(Ttk_TagSetContains(item->tagset, tag)));
 	return TCL_OK;
     } else {
-    	Tcl_WrongNumArgs(interp, 3, objv, "tagName ?item?");
-	return TCL_ERROR;
-    }
-}
-
-/* + $tv tag cell has $tag ?$cell?
- */
-static int TreeviewCtagHasCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
-{
-    Treeview *tv = (Treeview *)recordPtr;
-    TreeCell cell;
-    Tcl_Size i, columnNumber;
-
-    if (objc == 5) {	/* Return list of all cells with tag */
-	Ttk_Tag tag = Ttk_GetTagFromObj(tv->tree.tagTable, objv[4]);
-	TreeItem *item = tv->tree.root;
-	Tcl_Obj *result = Tcl_NewListObj(0,0);
-
-	while (item) {
-	    for (i = 0; i < item->nTagSets && i <= tv->tree.nColumns; ++i) {
-		if (item->cellTagSets[i] != NULL) {
-		    if (Ttk_TagSetContains(item->cellTagSets[i], tag)) {
-			Tcl_Obj *elem[2];
-			elem[0] = ItemID(tv, item);
-			if (i == 0) {
-			    elem[1] = tv->tree.column0.idObj;
-			} else {
-			    elem[1] = tv->tree.columns[i-1].idObj;
-			}
-			Tcl_ListObjAppendElement(NULL, result,
-				Tcl_NewListObj(2, elem));
-		    }
-		}
-	    }
-	    item = NextPreorder(item);
-	}
-
-	Tcl_SetObjResult(interp, result);
-	return TCL_OK;
-    } else if (objc == 6) {	/* Test if cell has specified tag */
-	Ttk_Tag tag = Ttk_GetTagFromObj(tv->tree.tagTable, objv[4]);
-	int result = 0;
-	if (GetCellFromObj(interp, tv, objv[5], 0, NULL, &cell) != TCL_OK) {
-	    return TCL_ERROR;
-	}
-	if (cell.column == &tv->tree.column0) {
-	    columnNumber = 0;
-	} else {
-	    columnNumber = cell.column - tv->tree.columns + 1;
-	}
-	if (columnNumber < cell.item->nTagSets) {
-	    if (cell.item->cellTagSets[columnNumber] != NULL) {
-		result = Ttk_TagSetContains(
-			cell.item->cellTagSets[columnNumber],
-			tag);
-	    }
-	}
-
-	Tcl_SetObjResult(interp, Tcl_NewWideIntObj(result));
-	return TCL_OK;
-    } else {
-    	Tcl_WrongNumArgs(interp, 4, objv, "tagName ?cell?");
+	Tcl_WrongNumArgs(interp, 3, objv, "tagName ?item?");
 	return TCL_ERROR;
     }
 }
@@ -4150,7 +3276,7 @@ static int TreeviewCtagHasCommand(
 /* + $tv tag names
  */
 static int TreeviewTagNamesCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
 
@@ -4174,12 +3300,12 @@ static void AddTag(TreeItem *item, Ttk_Tag tag)
 }
 
 static int TreeviewTagAddCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     Ttk_Tag tag;
     TreeItem **items;
-    Tcl_Size i;
+    int i;
 
     if (objc != 5) {
 	Tcl_WrongNumArgs(interp, 3, objv, "tagName items");
@@ -4196,72 +3322,7 @@ static int TreeviewTagAddCommand(
     for (i = 0; items[i]; ++i) {
 	AddTag(items[i], tag);
     }
-    ckfree(items);
 
-    TtkRedisplayWidget(&tv->core);
-
-    return TCL_OK;
-}
-
-/* Make sure tagset at column is allocated and initialised */
-static void AllocCellTagSets(Treeview *tv, TreeItem *item, Tcl_Size columnNumber)
-{
-    Tcl_Size i, newSize = MAX(columnNumber + 1, tv->tree.nColumns + 1);
-    if (item->nTagSets < newSize) {
-	if (item->cellTagSets == NULL) {
-	    item->cellTagSets = (Ttk_TagSet *)
-		    ckalloc(sizeof(Ttk_TagSet)*newSize);
-	} else {
-	    item->cellTagSets = (Ttk_TagSet *)
-		    ckrealloc(item->cellTagSets, sizeof(Ttk_TagSet) * newSize);
-	}
-	for (i = item->nTagSets; i < newSize; i++) {
-	    item->cellTagSets[i] = NULL;
-	}
-	item->nTagSets = newSize;
-    }
-
-    if (item->cellTagSets[columnNumber] == NULL) {
-	item->cellTagSets[columnNumber] =
-		Ttk_GetTagSetFromObj(NULL, tv->tree.tagTable, NULL);
-    }
-}
-
-/* + $tv tag cell add $tag $cells
- */
-static int TreeviewCtagAddCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
-{
-    Treeview *tv = (Treeview *)recordPtr;
-    Ttk_Tag tag;
-    TreeCell *cells;
-    TreeItem *item;
-    Tcl_Size i, nCells, columnNumber;
-
-    if (objc != 6) {
-	Tcl_WrongNumArgs(interp, 4, objv, "tagName cells");
-	return TCL_ERROR;
-    }
-
-    cells = GetCellListFromObj(interp, tv, objv[5], &nCells);
-    if (cells == NULL) {
-	return TCL_ERROR;
-    }
-
-    tag = Ttk_GetTagFromObj(tv->tree.tagTable, objv[4]);
-
-    for (i = 0; i < nCells; i++) {
-	if (cells[i].column == &tv->tree.column0) {
-	    columnNumber = 0;
-	} else {
-	    columnNumber = cells[i].column - tv->tree.columns  + 1;
-	}
-	item = cells[i].item;
-	AllocCellTagSets(tv, item, columnNumber);
-	Ttk_TagSetAdd(item->cellTagSets[columnNumber], tag);
-    }
-
-    ckfree(cells);
     TtkRedisplayWidget(&tv->core);
 
     return TCL_OK;
@@ -4278,27 +3339,14 @@ static void RemoveTag(TreeItem *item, Ttk_Tag tag)
     }
 }
 
-/* Remove tag from all cells at row 'item'
- */
-static void RemoveTagFromCellsAtItem(TreeItem *item, Ttk_Tag tag)
-{
-    Tcl_Size i;
-
-    for (i = 0; i < item->nTagSets; i++) {
-	if (item->cellTagSets[i] != NULL) {
-	    Ttk_TagSetRemove(item->cellTagSets[i], tag);
-	}
-    }
-}
-
 static int TreeviewTagRemoveCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
+    void *recordPtr, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[])
 {
     Treeview *tv = (Treeview *)recordPtr;
     Ttk_Tag tag;
 
-    if (objc < 4 || objc > 5) {
-	Tcl_WrongNumArgs(interp, 3, objv, "tagName ?items?");
+    if (objc < 4) {
+	Tcl_WrongNumArgs(interp, 3, objv, "tagName items");
 	return TCL_ERROR;
     }
 
@@ -4314,7 +3362,6 @@ static int TreeviewTagRemoveCommand(
 	for (i = 0; items[i]; ++i) {
 	    RemoveTag(items[i], tag);
 	}
-	ckfree(items);
     } else if (objc == 4) {
 	TreeItem *item = tv->tree.root;
 	while (item) {
@@ -4328,67 +3375,10 @@ static int TreeviewTagRemoveCommand(
     return TCL_OK;
 }
 
-/* + $tv tag cell remove $tag ?$cells?
- */
-static int TreeviewCtagRemoveCommand(
-    void *recordPtr, Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[])
-{
-    Treeview *tv = (Treeview *)recordPtr;
-    Ttk_Tag tag;
-    TreeCell *cells;
-    TreeItem *item;
-    Tcl_Size i, nCells, columnNumber;
-
-    if (objc < 5 || objc > 6) {
-	Tcl_WrongNumArgs(interp, 4, objv, "tagName ?cells?");
-	return TCL_ERROR;
-    }
-
-    tag = Ttk_GetTagFromObj(tv->tree.tagTable, objv[4]);
-
-    if (objc == 6) {
-	cells = GetCellListFromObj(interp, tv, objv[5], &nCells);
-	if (cells == NULL) {
-	    return TCL_ERROR;
-	}
-
-	for (i = 0; i < nCells; i++) {
-	    if (cells[i].column == &tv->tree.column0) {
-		columnNumber = 0;
-	    } else {
-		columnNumber = cells[i].column - tv->tree.columns  + 1;
-	    }
-	    item = cells[i].item;
-	    AllocCellTagSets(tv, item, columnNumber);
-	    Ttk_TagSetRemove(item->cellTagSets[columnNumber], tag);
-	}
-	ckfree(cells);
-    } else {
-	item = tv->tree.root;
-	while (item) {
-	    RemoveTagFromCellsAtItem(item, tag);
-	    item = NextPreorder(item);
-	}
-    }
-
-    TtkRedisplayWidget(&tv->core);
-
-    return TCL_OK;
-}
-
-static const Ttk_Ensemble TreeviewCtagCommands[] = {
-    { "add",		TreeviewCtagAddCommand,0 },
-    { "has",		TreeviewCtagHasCommand,0 },
-    { "remove",		TreeviewCtagRemoveCommand,0 },
-    { 0,0,0 }
-};
-
 static const Ttk_Ensemble TreeviewTagCommands[] = {
     { "add",		TreeviewTagAddCommand,0 },
     { "bind",		TreeviewTagBindCommand,0 },
-    { "cell",    	0,TreeviewCtagCommands },
     { "configure",	TreeviewTagConfigureCommand,0 },
-    { "delete",		TreeviewTagDeleteCommand,0 },
     { "has",		TreeviewTagHasCommand,0 },
     { "names",		TreeviewTagNamesCommand,0 },
     { "remove",		TreeviewTagRemoveCommand,0 },
@@ -4400,14 +3390,12 @@ static const Ttk_Ensemble TreeviewTagCommands[] = {
  */
 static const Ttk_Ensemble TreeviewCommands[] = {
     { "bbox",  		TreeviewBBoxCommand,0 },
-    { "cellselection",	TreeviewCellSelectionCommand,0 },
     { "children",	TreeviewChildrenCommand,0 },
     { "cget",		TtkWidgetCgetCommand,0 },
     { "column", 	TreeviewColumnCommand,0 },
     { "configure",	TtkWidgetConfigureCommand,0 },
     { "delete", 	TreeviewDeleteCommand,0 },
     { "detach", 	TreeviewDetachCommand,0 },
-    { "detached", 	TreeviewDetachedCommand,0 },
     { "drag",   	TreeviewDragCommand,0 },
     { "drop",   	TreeviewDropCommand,0 },
     { "exists", 	TreeviewExistsCommand,0 },
@@ -4415,18 +3403,17 @@ static const Ttk_Ensemble TreeviewCommands[] = {
     { "heading", 	TreeviewHeadingCommand,0 },
     { "identify",  	TreeviewIdentifyCommand,0 },
     { "index",  	TreeviewIndexCommand,0 },
-    { "insert", 	TreeviewInsertCommand,0 },
     { "instate",	TtkWidgetInstateCommand,0 },
+    { "insert", 	TreeviewInsertCommand,0 },
     { "item", 		TreeviewItemCommand,0 },
     { "move", 		TreeviewMoveCommand,0 },
     { "next", 		TreeviewNextCommand,0 },
     { "parent", 	TreeviewParentCommand,0 },
     { "prev", 		TreeviewPrevCommand,0 },
     { "see", 		TreeviewSeeCommand,0 },
-    { "selection",	TreeviewSelectionCommand,0 },
+    { "selection" ,	TreeviewSelectionCommand,0 },
     { "set",  		TreeviewSetCommand,0 },
     { "state",  	TtkWidgetStateCommand,0 },
-    { "style",		TtkWidgetStyleCommand,0 },
     { "tag",    	0,TreeviewTagCommands },
     { "xview",  	TreeviewXViewCommand,0 },
     { "yview",  	TreeviewYViewCommand,0 },
@@ -4437,7 +3424,7 @@ static const Ttk_Ensemble TreeviewCommands[] = {
  * +++ Widget definition.
  */
 
-static const WidgetSpec TreeviewWidgetSpec = {
+static WidgetSpec TreeviewWidgetSpec = {
     "Treeview",			/* className */
     sizeof(Treeview),   	/* recordSize */
     TreeviewOptionSpecs,	/* optionSpecs */
@@ -4471,7 +3458,6 @@ TTK_LAYOUT("Item",
 
 TTK_LAYOUT("Cell",
     TTK_GROUP("Treedata.padding", TTK_FILL_BOTH,
-	TTK_NODE("Treeitem.image", TTK_PACK_LEFT)
 	TTK_NODE("Treeitem.text", TTK_FILL_BOTH)))
 
 TTK_LAYOUT("Heading",
@@ -4483,9 +3469,6 @@ TTK_LAYOUT("Heading",
 
 TTK_LAYOUT("Row",
     TTK_NODE("Treeitem.row", TTK_FILL_BOTH))
-
-TTK_LAYOUT("Separator",
-    TTK_NODE("Treeitem.separator", TTK_FILL_BOTH))
 
 TTK_END_LAYOUT_TABLE
 
@@ -4499,13 +3482,13 @@ typedef struct {
     Tcl_Obj *marginsObj;
 } TreeitemIndicator;
 
-static const Ttk_ElementOptionSpec TreeitemIndicatorOptions[] = {
+static Ttk_ElementOptionSpec TreeitemIndicatorOptions[] = {
     { "-foreground", TK_OPTION_COLOR,
-	offsetof(TreeitemIndicator,colorObj), DEFAULT_FOREGROUND },
+	Tk_Offset(TreeitemIndicator,colorObj), DEFAULT_FOREGROUND },
     { "-indicatorsize", TK_OPTION_PIXELS,
-	offsetof(TreeitemIndicator,sizeObj), "12" },
+	Tk_Offset(TreeitemIndicator,sizeObj), "12" },
     { "-indicatormargins", TK_OPTION_STRING,
-	offsetof(TreeitemIndicator,marginsObj), "2 2 4 2" },
+	Tk_Offset(TreeitemIndicator,marginsObj), "2 2 4 2" },
     { NULL, TK_OPTION_BOOLEAN, 0, NULL }
 };
 
@@ -4518,11 +3501,12 @@ static void TreeitemIndicatorSize(
     TCL_UNUSED(Ttk_Padding *))
 {
     TreeitemIndicator *indicator = (TreeitemIndicator *)elementRecord;
-    Ttk_Padding margins;
     int size = 0;
+    Ttk_Padding margins;
 
-    Ttk_GetPaddingFromObj(NULL, tkwin, indicator->marginsObj, &margins);
     Tk_GetPixelsFromObj(NULL, tkwin, indicator->sizeObj, &size);
+    if (size % 2 == 0) --size;	/* An odd size is better for the indicator. */
+    Ttk_GetPaddingFromObj(NULL, tkwin, indicator->marginsObj, &margins);
 
     *widthPtr = size + Ttk_PaddingWidth(margins);
     *heightPtr = size + Ttk_PaddingHeight(margins);
@@ -4540,14 +3524,33 @@ static void TreeitemIndicatorDraw(
     ArrowDirection direction =
 	(state & TTK_STATE_OPEN) ? ARROW_DOWN : ARROW_RIGHT;
     Ttk_Padding margins;
+    int cx, cy;
     XColor *borderColor = Tk_GetColorFromObj(tkwin, indicator->colorObj);
     XGCValues gcvalues; GC gc; unsigned mask;
 
     if (state & TTK_STATE_LEAF) /* don't draw anything */
 	return;
 
-    Ttk_GetPaddingFromObj(NULL,tkwin,indicator->marginsObj,&margins);
+    Ttk_GetPaddingFromObj(NULL, tkwin, indicator->marginsObj, &margins);
     b = Ttk_PadBox(b, margins);
+
+    switch (direction) {
+	case ARROW_DOWN:
+	    TtkArrowSize(b.width/2, direction, &cx, &cy);
+	    if ((b.height - cy) % 2 == 1) {
+		++cy;
+	    }
+	    break;
+	case ARROW_RIGHT:
+	default:
+	    TtkArrowSize(b.height/2, direction, &cx, &cy);
+	    if ((b.width - cx) % 2 == 1) {
+		++cx;
+	    }
+	    break;
+    }
+
+    b = Ttk_AnchorBox(b, cx, cy, TK_ANCHOR_CENTER);
 
     gcvalues.foreground = borderColor->pixel;
     gcvalues.line_width = 1;
@@ -4559,7 +3562,7 @@ static void TreeitemIndicatorDraw(
     Tk_FreeGC(Tk_Display(tkwin), gc);
 }
 
-static const Ttk_ElementSpec TreeitemIndicatorElementSpec = {
+static Ttk_ElementSpec TreeitemIndicatorElementSpec = {
     TK_STYLE_VERSION_2,
     sizeof(TreeitemIndicator),
     TreeitemIndicatorOptions,
@@ -4576,11 +3579,11 @@ typedef struct {
     Tcl_Obj *rowNumberObj;
 } RowElement;
 
-static const Ttk_ElementOptionSpec RowElementOptions[] = {
+static Ttk_ElementOptionSpec RowElementOptions[] = {
     { "-background", TK_OPTION_COLOR,
-	offsetof(RowElement,backgroundObj), DEFAULT_BACKGROUND },
+	Tk_Offset(RowElement,backgroundObj), DEFAULT_BACKGROUND },
     { "-rownumber", TK_OPTION_INT,
-	offsetof(RowElement,rowNumberObj), "0" },
+	Tk_Offset(RowElement,rowNumberObj), "0" },
     { NULL, TK_OPTION_BOOLEAN, 0, NULL }
 };
 
@@ -4600,7 +3603,7 @@ static void RowElementDraw(
 	    b.x, b.y, b.width, b.height);
 }
 
-static const Ttk_ElementSpec RowElementSpec = {
+static Ttk_ElementSpec RowElementSpec = {
     TK_STYLE_VERSION_2,
     sizeof(RowElement),
     RowElementOptions,
@@ -4622,7 +3625,6 @@ TtkTreeview_Init(Tcl_Interp *interp)
     Ttk_RegisterElement(interp, theme, "Treeitem.indicator",
 	    &TreeitemIndicatorElementSpec, 0);
     Ttk_RegisterElement(interp, theme, "Treeitem.row", &RowElementSpec, 0);
-    Ttk_RegisterElement(interp, theme, "Treeitem.separator", &RowElementSpec, 0);
     Ttk_RegisterElement(interp, theme, "Treeheading.cell", &RowElementSpec, 0);
     Ttk_RegisterElement(interp, theme, "treearea", &ttkNullElementSpec, 0);
 

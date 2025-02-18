@@ -4,7 +4,7 @@
  *	This file implements the Unix specific portion of the menubutton
  *	widget.
  *
- * Copyright © 1996-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1996-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -56,7 +56,7 @@ TkpCreateMenuButton(
 
 void
 TkpDisplayMenuButton(
-    void *clientData)	/* Information about widget. */
+    ClientData clientData)	/* Information about widget. */
 {
     TkMenuButton *mbPtr = (TkMenuButton *)clientData;
     GC gc;
@@ -279,7 +279,7 @@ TkpDisplayMenuButton(
 		Tk_Height(tkwin) - 2*mbPtr->highlightWidth,
 		mbPtr->borderWidth, mbPtr->relief);
     }
-    if (mbPtr->highlightWidth > 0) {
+    if (mbPtr->highlightWidth != 0) {
 	if (mbPtr->flags & GOT_FOCUS) {
 	    gc = Tk_GCForColor(mbPtr->highlightColorPtr, pixmap);
 	} else {
@@ -317,7 +317,7 @@ TkpDisplayMenuButton(
 
 void
 TkpDestroyMenuButton(
-    TCL_UNUSED(TkMenuButton *))
+    TkMenuButton *mbPtr)
 {
 }
 
@@ -368,7 +368,7 @@ TkpComputeMenuButtonGeometry(
 	Tk_FreeTextLayout(mbPtr->textLayout);
 
 	mbPtr->textLayout = Tk_ComputeTextLayout(mbPtr->tkfont, mbPtr->text,
-		TCL_INDEX_NONE, mbPtr->wrapLength, mbPtr->justify, 0, &mbPtr->textWidth,
+		-1, mbPtr->wrapLength, mbPtr->justify, 0, &mbPtr->textWidth,
 		&mbPtr->textHeight);
 	txtWidth = mbPtr->textWidth;
 	txtHeight = mbPtr->textHeight;

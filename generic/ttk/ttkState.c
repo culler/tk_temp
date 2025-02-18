@@ -1,7 +1,7 @@
 /*
  * Tk widget state utilities.
  *
- * Copyright © 2003 Joe English.  Freely redistributable.
+ * Copyright (c) 2003 Joe English.  Freely redistributable.
  *
  */
 
@@ -16,21 +16,21 @@ static const struct {
     int value;
 } stateNames[] = {
     {"active", TTK_STATE_ACTIVE},		/* Mouse cursor is over widget or element */
-    {"alternate", TTK_STATE_ALTERNATE},	/* Widget-specific alternate display style */
-    {"background", TTK_STATE_BACKGROUND},	/* Top-level window lost focus (Mac,Win "inactive") */
     {"disabled", TTK_STATE_DISABLED},		/* Widget is disabled */
     {"focus", TTK_STATE_FOCUS},		/* Widget has keyboard focus */
-    {"hover", TTK_STATE_HOVER},		/* Mouse cursor is over widget */
-    {"invalid", TTK_STATE_INVALID},		/* Bad value */
     {"pressed", TTK_STATE_PRESSED},		/* Pressed or "armed" */
-    {"readonly", TTK_STATE_READONLY},		/* Editing/modification disabled */
     {"selected", TTK_STATE_SELECTED},		/* "on", "true", "current", etc. */
-    {"user1", TTK_STATE_USER1},		/* User-definable state */
-    {"user2", TTK_STATE_USER2},		/* User-definable state */
-    {"user3", TTK_STATE_USER3},		/* User-definable state */
-    {"user4", TTK_STATE_USER4},		/* User-definable state */
-    {"user5", TTK_STATE_USER5},		/* User-definable state */
+    {"background", TTK_STATE_BACKGROUND},	/* Top-level window lost focus (Mac,Win "inactive") */
+    {"alternate", TTK_STATE_ALTERNATE},	/* Widget-specific alternate display style */
+    {"invalid", TTK_STATE_INVALID},		/* Bad value */
+    {"readonly", TTK_STATE_READONLY},		/* Editing/modification disabled */
+    {"hover", TTK_STATE_HOVER},		/* Mouse cursor is over widget */
     {"user6", TTK_STATE_USER6},		/* User-definable state */
+    {"user5", TTK_STATE_USER5},		/* User-definable state */
+    {"user4", TTK_STATE_USER4},		/* User-definable state */
+    {"user3", TTK_STATE_USER3},		/* User-definable state */
+    {"user2", TTK_STATE_USER2},		/* User-definable state */
+    {"user1", TTK_STATE_USER1},		/* User-definable state */
     {"", 0}
 };
 
@@ -40,38 +40,37 @@ static const struct {
  * The string representation consists of a list of state names,
  * each optionally prefixed by an exclamation point (!).
  *
- * The internal representation uses the upper half of the wideValue
+ * The internal representation uses the upper half of the longValue
  * to store the on bits and the lower half to store the off bits.
- * If we ever get more than 32 states, this will need to be reconsidered...
+ * If we ever get more than 16 states, this will need to be reconsidered...
  */
 
 static int  StateSpecSetFromAny(Tcl_Interp *interp, Tcl_Obj *obj);
 static void StateSpecDupIntRep(Tcl_Obj *, Tcl_Obj *);
 static void StateSpecUpdateString(Tcl_Obj *);
 
-static const
-TkObjType StateSpecObjType =
+static
+struct Tcl_ObjType StateSpecObjType =
 {
-    {"StateSpec",
+    "StateSpec",
     0,
     StateSpecDupIntRep,
     StateSpecUpdateString,
-    StateSpecSetFromAny,
-    TCL_OBJTYPE_V0},
-    0
+    StateSpecSetFromAny
 };
 
 static void StateSpecDupIntRep(Tcl_Obj *srcPtr, Tcl_Obj *copyPtr)
 {
-    copyPtr->internalRep.wideValue = srcPtr->internalRep.wideValue;
-    copyPtr->typePtr = &StateSpecObjType.objType;
+    copyPtr->internalRep.longValue = srcPtr->internalRep.longValue;
+    copyPtr->typePtr = &StateSpecObjType;
 }
 
 static int StateSpecSetFromAny(Tcl_Interp *interp, Tcl_Obj *objPtr)
 {
     int status;
-    Tcl_Size i, objc;
+    int objc;
     Tcl_Obj **objv;
+    int i;
     unsigned int onbits = 0, offbits = 0;
 
     status = Tcl_ListObjGetElements(interp, objPtr, &objc, &objv);
@@ -116,16 +115,16 @@ static int StateSpecSetFromAny(Tcl_Interp *interp, Tcl_Obj *objPtr)
 	objPtr->typePtr->freeIntRepProc(objPtr);
     }
 
-    objPtr->typePtr = &StateSpecObjType.objType;
-    objPtr->internalRep.wideValue = ((Tcl_WideInt)onbits << 32) | offbits;
+    objPtr->typePtr = &StateSpecObjType;
+    objPtr->internalRep.longValue = (onbits << 16) | offbits;
 
     return TCL_OK;
 }
 
 static void StateSpecUpdateString(Tcl_Obj *objPtr)
 {
-    unsigned int onbits = objPtr->internalRep.wideValue >> 32;
-    unsigned int offbits = objPtr->internalRep.wideValue & 0xFFFFFFFFLL;
+    unsigned int onbits = objPtr->internalRep.longValue >> 16;
+    unsigned int offbits = objPtr->internalRep.longValue & 0x0000FFFF;
     unsigned int mask = onbits | offbits;
     Tcl_DString result;
     int i;
@@ -138,7 +137,7 @@ static void StateSpecUpdateString(Tcl_Obj *objPtr)
 	    if (offbits & stateNames[i].value) {
 		Tcl_DStringAppend(&result, "!", 1);
 	    }
-	    Tcl_DStringAppend(&result, stateNames[i].name, TCL_INDEX_NONE);
+	    Tcl_DStringAppend(&result, stateNames[i].name, -1);
 	    Tcl_DStringAppend(&result, " ", 1);
 	}
     }
@@ -165,8 +164,8 @@ Tcl_Obj *Ttk_NewStateSpecObj(unsigned int onbits, unsigned int offbits)
     Tcl_Obj *objPtr = Tcl_NewObj();
 
     Tcl_InvalidateStringRep(objPtr);
-    objPtr->typePtr = &StateSpecObjType.objType;
-    objPtr->internalRep.wideValue = ((Tcl_WideInt)onbits << 32) | offbits;
+    objPtr->typePtr = &StateSpecObjType;
+    objPtr->internalRep.longValue = (onbits << 16) | offbits;
 
     return objPtr;
 }
@@ -176,14 +175,14 @@ int Ttk_GetStateSpecFromObj(
     Tcl_Obj *objPtr,
     Ttk_StateSpec *spec)
 {
-    if (objPtr->typePtr != &StateSpecObjType.objType) {
+    if (objPtr->typePtr != &StateSpecObjType) {
 	int status = StateSpecSetFromAny(interp, objPtr);
 	if (status != TCL_OK)
 	    return status;
     }
 
-    spec->onbits = objPtr->internalRep.wideValue >> 32;
-    spec->offbits = objPtr->internalRep.wideValue & 0xFFFFFFFFLL;
+    spec->onbits = objPtr->internalRep.longValue >> 16;
+    spec->offbits = objPtr->internalRep.longValue & 0x0000FFFF;
     return TCL_OK;
 }
 
@@ -201,7 +200,7 @@ Tcl_Obj *Ttk_StateMapLookup(
     Ttk_State state)    	/* State to look up */
 {
     Tcl_Obj **specs;
-    Tcl_Size j, nSpecs;
+    int j, nSpecs;
     int status;
 
     status = Tcl_ListObjGetElements(interp, map, &nSpecs, &specs);
@@ -233,7 +232,7 @@ Ttk_StateMap Ttk_GetStateMapFromObj(
     Tcl_Obj *mapObj)		/* State map */
 {
     Tcl_Obj **specs;
-    Tcl_Size j, nSpecs;
+    int j, nSpecs;
     int status;
 
     status = Tcl_ListObjGetElements(interp, mapObj, &nSpecs, &specs);
@@ -262,7 +261,7 @@ Ttk_StateMap Ttk_GetStateMapFromObj(
  * Ttk_StateTableLooup --
  * 	Look up an index from a statically allocated state table.
  */
-int Ttk_StateTableLookup(const Ttk_StateTable *map, Ttk_State state)
+int Ttk_StateTableLookup(Ttk_StateTable *map, Ttk_State state)
 {
     while ((state & map->onBits) != map->onBits
 	    || (~state & map->offBits) != map->offBits)

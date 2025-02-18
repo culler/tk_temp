@@ -14,28 +14,31 @@ Tk_ComputeTextLayout, Tk_FreeTextLayout, Tk_DrawTextLayout, Tk_UnderlineTextLayo
 \fB#include <tk.h>\fR
 .sp
 Tk_TextLayout
-\fBTk_ComputeTextLayout\fR(\fItkfont, string, numChars, wrapLength, justify, flags, widthPtr, heightPtr\fR)
+\fBTk_ComputeTextLayout(\fItkfont, string, numChars, wrapLength, justify, flags, widthPtr, heightPtr\fB)\fR
 .sp
-\fBTk_FreeTextLayout\fR(\fIlayout\fR)
+void
+\fBTk_FreeTextLayout(\fIlayout\fB)\fR
 .sp
-\fBTk_DrawTextLayout\fR(\fIdisplay, drawable, gc, layout, x, y, firstChar, lastChar\fR)
+void
+\fBTk_DrawTextLayout(\fIdisplay, drawable, gc, layout, x, y, firstChar, lastChar\fB)\fR
 .sp
-\fBTk_UnderlineTextLayout\fR(\fIdisplay, drawable, gc, layout, x, y, underline\fR)
-.sp
-int
-\fBTk_PointToChar\fR(\fIlayout, x, y\fR)
-.sp
-int
-\fBTk_CharBbox\fR(\fIlayout, index, xPtr, yPtr, widthPtr, heightPtr\fR)
+void
+\fBTk_UnderlineTextLayout(\fIdisplay, drawable, gc, layout, x, y, underline\fB)\fR
 .sp
 int
-\fBTk_DistanceToTextLayout\fR(\fIlayout, x, y\fR)
+\fBTk_PointToChar(\fIlayout, x, y\fB)\fR
 .sp
 int
-\fBTk_IntersectTextLayout\fR(\fIlayout, x, y, width, height\fR)
+\fBTk_CharBbox(\fIlayout, index, xPtr, yPtr, widthPtr, heightPtr\fB)\fR
 .sp
-\fBTk_TextLayoutToPostscript\fR(\fIinterp, layout\fR)
-.fi
+int
+\fBTk_DistanceToTextLayout(\fIlayout, x, y\fB)\fR
+.sp
+int
+\fBTk_IntersectTextLayout(\fIlayout, x, y, width, height\fB)\fR
+.sp
+void
+\fBTk_TextLayoutToPostscript(\fIinterp, layout\fB)\fR
 .SH ARGUMENTS
 .AS Tk_TextLayout "*xPtr, *yPtr"
 .AP Tk_Font tkfont in
@@ -48,7 +51,7 @@ stored in the text layout.  The \fIstring\fR must remain valid for the
 lifetime of the text layout.
 .AP int numChars in
 The number of characters to consider from \fIstring\fR.  If
-\fInumChars\fR is negative, then assumes \fIstring\fR is null
+\fInumChars\fR is less than 0, then assumes \fIstring\fR is null
 terminated and uses \fBTcl_NumUtfChars\fR to determine the length of
 \fIstring\fR.
 .AP int wrapLength in
@@ -97,18 +100,17 @@ Point, in pixels, at which to place the upper-left hand corner of the
 text layout when it is being drawn, or the coordinates of a point (with
 respect to the upper-left hand corner of the text layout) to check
 against the text layout.
-.AP Tcl_Size firstChar in
+.AP int firstChar in
 The index of the first character to draw from the given text layout.
 The number 0 means to draw from the beginning.
-.AP Tcl_Size lastChar in
+.AP int lastChar in
 The index of the last character up to which to draw.  The character
 specified by \fIlastChar\fR itself will not be drawn.  A number less
 than 0 means to draw all characters in the text layout.
 .AP int underline in
-Index of the single character to underline in the text layout, or a
-negative number counting backwards from the end of the string. Any
-out-of-range number (e.g. INT_MIN) means no underline.
-.AP Tcl_Size index in
+Index of the single character to underline in the text layout, or a number
+less than 0 for no underline.
+.AP int index in
 The index of the character whose bounding box is desired.  The bounding
 box is computed with respect to the upper-left hand corner of the text layout.
 .AP int "*xPtr, *yPtr" out
@@ -176,7 +178,7 @@ located at (0, 0).  Any point whose \fIy\fR-value is less that 0 will be
 considered closest to the first character in the text layout; any point
 whose \fIy\fR-value is greater than the height of the text layout will be
 considered closest to the last character in the text layout.  Any point
-whose \fIx\fR-value is negative will be considered closest to the first
+whose \fIx\fR-value is less than 0 will be considered closest to the first
 character on that line; any point whose \fIx\fR-value is greater than the
 width of the text layout will be considered closest to the last character on
 that line.  The return value is the index of the character that was closest

@@ -4,8 +4,8 @@
  *	This file manages the selection for the Tk toolkit, translating
  *	between the standard X ICCCM conventions and Tcl commands.
  *
- * Copyright © 1990-1993 The Regents of the University of California.
- * Copyright © 1994-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1990-1993 The Regents of the University of California.
+ * Copyright (c) 1994-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -26,11 +26,11 @@
 
 typedef struct {
     Tcl_Interp *interp;		/* Interpreter in which to invoke command. */
-    Tcl_Size cmdLength;		/* # of non-NULL bytes in command. */
-    Tcl_Size charOffset;		/* The offset of the next char to retrieve. */
-    Tcl_Size byteOffset;	/* The expected byte offset of the next
+    int cmdLength;		/* # of non-NULL bytes in command. */
+    int charOffset;		/* The offset of the next char to retrieve. */
+    int byteOffset;		/* The expected byte offset of the next
 				 * chunk. */
-    char buffer[4];		/* A buffer to hold part of a UTF character
+    char buffer[4];	/* A buffer to hold part of a UTF character
 				 * that is split across chunks. */
     char command[TKFLEXARRAY];		/* Command to invoke. Actual space is
 				 * allocated as large as necessary. This must
@@ -63,10 +63,10 @@ static Tcl_ThreadDataKey dataKey;
  * Forward declarations for functions defined in this file:
  */
 
-static Tcl_Size	HandleTclCommand(void *clientData,
-			    Tcl_Size offset, char *buffer, Tcl_Size maxBytes);
-static void		LostSelection(void *clientData);
-static int		SelGetProc(void *clientData,
+static int		HandleTclCommand(ClientData clientData,
+			    int offset, char *buffer, int maxBytes);
+static void		LostSelection(ClientData clientData);
+static int		SelGetProc(ClientData clientData,
 			    Tcl_Interp *interp, const char *portion);
 
 /*
@@ -92,7 +92,7 @@ static int		SelGetProc(void *clientData,
  *
  *	int
  *	proc(
- *	    void *clientData,
+ *	    ClientData clientData,
  *	    int offset,
  *	    char *buffer,
  *	    int maxBytes)
@@ -122,7 +122,7 @@ Tk_CreateSelHandler(
 				 * STRING. */
     Tk_SelectionProc *proc,	/* Function to invoke to convert selection to
 				 * type "target". */
-    void *clientData,	/* Value to pass to proc. */
+    ClientData clientData,	/* Value to pass to proc. */
     Atom format)		/* Format in which the selection information
 				 * should be returned to the requestor.
 				 * XA_STRING is best by far, but anything
@@ -194,7 +194,7 @@ Tk_CreateSelHandler(
 		     * should make a copy for this selPtr.
 		     */
 
-		    size_t cmdInfoLen = offsetof(CommandInfo, command) + 1 +
+		    unsigned cmdInfoLen = Tk_Offset(CommandInfo, command) + 1 +
 			    ((CommandInfo *)clientData)->cmdLength;
 
 		    selPtr->clientData = ckalloc(cmdInfoLen);
@@ -354,14 +354,14 @@ Tk_OwnSelection(
     Atom selection,		/* Selection that window should own. */
     Tk_LostSelProc *proc,	/* Function to call when selection is taken
 				 * away from tkwin. */
-    void *clientData)	/* Arbitrary one-word argument to pass to
+    ClientData clientData)	/* Arbitrary one-word argument to pass to
 				 * proc. */
 {
     TkWindow *winPtr = (TkWindow *) tkwin;
     TkDisplay *dispPtr = winPtr->dispPtr;
     TkSelectionInfo *infoPtr;
     Tk_LostSelProc *clearProc = NULL;
-    void *clearData = NULL;/* Initialization needed only to prevent
+    ClientData clearData = NULL;/* Initialization needed only to prevent
 				 * compiler warning. */
 
     if (dispPtr->multipleAtom == None) {
@@ -470,7 +470,7 @@ Tk_ClearSelection(
     TkSelectionInfo *prevPtr;
     TkSelectionInfo *nextPtr;
     Tk_LostSelProc *clearProc = NULL;
-    void *clearData = NULL;/* Initialization needed only to prevent
+    ClientData clearData = NULL;/* Initialization needed only to prevent
 				 * compiler warning. */
 
     if (dispPtr->multipleAtom == None) {
@@ -524,7 +524,7 @@ Tk_ClearSelection(
  *
  *	int
  *	proc(
- *	    void *clientData,
+ *	    ClientData clientData,
  *	    Tcl_Interp *interp,
  *	    char *portion)
  *	{
@@ -555,7 +555,7 @@ Tk_GetSelection(
 				 * returned. */
     Tk_GetSelProc *proc,	/* Function to call to process the selection,
 				 * once it has been retrieved. */
-    void *clientData)	/* Arbitrary value to pass to proc. */
+    ClientData clientData)	/* Arbitrary value to pass to proc. */
 {
     TkWindow *winPtr = (TkWindow *) tkwin;
     TkDisplay *dispPtr = winPtr->dispPtr;
@@ -582,8 +582,7 @@ Tk_GetSelection(
     }
     if (infoPtr != NULL) {
 	TkSelHandler *selPtr;
-	Tcl_Size offset, count;
-	int result;
+	int offset, result, count;
 	char buffer[TK_SEL_BYTES_AT_ONCE+1];
 	TkSelInProgress ip;
 
@@ -598,10 +597,11 @@ Tk_GetSelection(
 
 	    count = TkSelDefaultSelection(infoPtr, target, buffer,
 		    TK_SEL_BYTES_AT_ONCE, &type);
+	    if (count > TK_SEL_BYTES_AT_ONCE) {
+		Tcl_Panic("selection handler returned too many bytes");
+	    }
 	    if (count < 0) {
 		goto cantget;
-	    } else if (count > TK_SEL_BYTES_AT_ONCE) {
-		Tcl_Panic("selection handler returned too many bytes");
 	    }
 	    buffer[count] = 0;
 	    result = proc(clientData, interp, buffer);
@@ -668,7 +668,7 @@ Tk_GetSelection(
 
 int
 Tk_SelectionObjCmd(
-    void *clientData,	/* Main window associated with
+    ClientData clientData,	/* Main window associated with
 				 * interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
@@ -680,7 +680,7 @@ Tk_SelectionObjCmd(
     const char *selName = NULL;
     const char *string;
     int count, index;
-    Tcl_Obj *const *objs;
+    Tcl_Obj **objs;
     static const char *const optionStrings[] = {
 	"clear", "get", "handle", "own", NULL
     };
@@ -706,7 +706,7 @@ Tk_SelectionObjCmd(
 	enum clearOptions { CLEAR_DISPLAYOF, CLEAR_SELECTION };
 	int clearIndex;
 
-	for (count = objc-2, objs = objv+2; count > 0;
+	for (count = objc-2, objs = ((Tcl_Obj **)objv)+2; count > 0;
 		count-=2, objs+=2) {
 	    string = Tcl_GetString(objs[0]);
 	    if (string[0] != '-') {
@@ -715,7 +715,7 @@ Tk_SelectionObjCmd(
 	    if (count < 2) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"value for \"%s\" missing", string));
-		Tcl_SetErrorCode(interp, "TK", "SELECTION", "VALUE", (char *)NULL);
+		Tcl_SetErrorCode(interp, "TK", "SELECTION", "VALUE", NULL);
 		return TCL_ERROR;
 	    }
 
@@ -775,7 +775,7 @@ Tk_SelectionObjCmd(
 	    if (count < 2) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"value for \"%s\" missing", string));
-		Tcl_SetErrorCode(interp, "TK", "SELECTION", "VALUE", (char *)NULL);
+		Tcl_SetErrorCode(interp, "TK", "SELECTION", "VALUE", NULL);
 		return TCL_ERROR;
 	    }
 
@@ -835,7 +835,7 @@ Tk_SelectionObjCmd(
 	const char *targetName = NULL;
 	const char *formatName = NULL;
 	CommandInfo *cmdInfoPtr;
-	Tcl_Size cmdLength;
+	int cmdLength;
 	static const char *const handleOptionStrings[] = {
 	    "-format", "-selection", "-type", NULL
 	};
@@ -853,7 +853,7 @@ Tk_SelectionObjCmd(
 	    if (count < 2) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"value for \"%s\" missing", string));
-		Tcl_SetErrorCode(interp, "TK", "SELECTION", "VALUE", (char *)NULL);
+		Tcl_SetErrorCode(interp, "TK", "SELECTION", "VALUE", NULL);
 		return TCL_ERROR;
 	    }
 
@@ -908,7 +908,7 @@ Tk_SelectionObjCmd(
 	if (cmdLength == 0) {
 	    Tk_DeleteSelHandler(tkwin, selection, target);
 	} else {
-	    cmdInfoPtr = (CommandInfo *)ckalloc(offsetof(CommandInfo, command)
+	    cmdInfoPtr = (CommandInfo *)ckalloc(Tk_Offset(CommandInfo, command)
 		    + 1 + cmdLength);
 	    cmdInfoPtr->interp = interp;
 	    cmdInfoPtr->charOffset = 0;
@@ -940,7 +940,7 @@ Tk_SelectionObjCmd(
 	    if (count < 2) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"value for \"%s\" missing", string));
-		Tcl_SetErrorCode(interp, "TK", "SELECTION", "VALUE", (char *)NULL);
+		Tcl_SetErrorCode(interp, "TK", "SELECTION", "VALUE", NULL);
 		return TCL_ERROR;
 	    }
 
@@ -996,7 +996,7 @@ Tk_SelectionObjCmd(
 
 	    if ((infoPtr != NULL)
 		    && (infoPtr->owner != winPtr->dispPtr->clipWindow)) {
-		Tcl_SetObjResult(interp, Tk_NewWindowObj(infoPtr->owner));
+		Tcl_SetObjResult(interp, TkNewWindowObj(infoPtr->owner));
 	    }
 	    return TCL_OK;
 	}
@@ -1250,7 +1250,7 @@ TkSelClearSelection(
     }
 
     if (infoPtr != NULL && (infoPtr->owner == tkwin) &&
-	    (eventPtr->xselectionclear.serial >= (unsigned long) infoPtr->serial)) {
+	    (eventPtr->xselectionclear.serial >= (unsigned) infoPtr->serial)) {
 	if (prevPtr == NULL) {
 	    dispPtr->selectionInfoPtr = infoPtr->nextPtr;
 	} else {
@@ -1291,13 +1291,13 @@ TkSelClearSelection(
 
 static int
 SelGetProc(
-    void *clientData,	/* Dynamic string holding partially assembled
+    ClientData clientData,	/* Dynamic string holding partially assembled
 				 * selection. */
     TCL_UNUSED(Tcl_Interp *),	/* Interpreter used for error reporting (not
 				 * used). */
     const char *portion)	/* New information to be appended. */
 {
-    Tcl_DStringAppend((Tcl_DString *)clientData, portion, TCL_INDEX_NONE);
+    Tcl_DStringAppend((Tcl_DString *)clientData, portion, -1);
     return TCL_OK;
 }
 
@@ -1321,22 +1321,21 @@ SelGetProc(
  *----------------------------------------------------------------------
  */
 
-static Tcl_Size
+static int
 HandleTclCommand(
-    void *clientData,	/* Information about command to execute. */
-    Tcl_Size offset,			/* Return selection bytes starting at this
+    ClientData clientData,	/* Information about command to execute. */
+    int offset,			/* Return selection bytes starting at this
 				 * offset. */
     char *buffer,		/* Place to store converted selection. */
-    Tcl_Size maxBytes)		/* Maximum # of bytes to store at buffer. */
+    int maxBytes)		/* Maximum # of bytes to store at buffer. */
 {
     CommandInfo *cmdInfoPtr = (CommandInfo *)clientData;
-    Tcl_Size length;
+    int length;
     Tcl_Obj *command;
     const char *string;
     Tcl_Interp *interp = cmdInfoPtr->interp;
     Tcl_InterpState savedState;
-    int code;
-    Tcl_Size extraBytes, charOffset, numChars, count;
+    int extraBytes, charOffset, count, numChars, code;
     const char *p;
 
     /*
@@ -1372,7 +1371,7 @@ HandleTclCommand(
      * the offset and maximum # of bytes.
      */
 
-    command = Tcl_ObjPrintf("%s %" TCL_SIZE_MODIFIER "d %" TCL_SIZE_MODIFIER "d",
+    command = Tcl_ObjPrintf("%s %d %d",
 	    cmdInfoPtr->command, charOffset, maxBytes);
     Tcl_IncrRefCount(command);
 
@@ -1391,7 +1390,7 @@ HandleTclCommand(
 
 	string = Tcl_GetStringFromObj(Tcl_GetObjResult(interp), &length);
 	count = (length > maxBytes) ? maxBytes : length;
-	memcpy(buffer, string, count);
+	memcpy(buffer, string, (size_t) count);
 	buffer[count] = '\0';
 
 	/*
@@ -1401,7 +1400,7 @@ HandleTclCommand(
 
 	if (cmdInfoPtr->interp != NULL) {
 	    if (length <= maxBytes) {
-		cmdInfoPtr->charOffset += Tcl_NumUtfChars(string, TCL_INDEX_NONE);
+		cmdInfoPtr->charOffset += Tcl_NumUtfChars(string, -1);
 		cmdInfoPtr->buffer[0] = '\0';
 	    } else {
 		Tcl_UniChar ch = 0;
@@ -1432,7 +1431,7 @@ HandleTclCommand(
 	    Tcl_AddErrorInfo(interp, "\n    (command handling selection)");
 	    Tcl_BackgroundException(interp, code);
 	}
-	count = TCL_INDEX_NONE;
+	count = -1;
     }
     (void) Tcl_RestoreInterpState(interp, savedState);
 
@@ -1457,7 +1456,7 @@ HandleTclCommand(
  *	in *typePtr, and the return value is a count of the # of non-NULL
  *	bytes at buffer. If the target wasn't understood, or if there isn't
  *	enough space at buffer to hold the entire selection (no INCR-mode
- *	transfers for this stuff!), then TCL_INDEX_NONE is returned.
+ *	transfers for this stuff!), then -1 is returned.
  *
  * Side effects:
  *	None.
@@ -1465,12 +1464,12 @@ HandleTclCommand(
  *----------------------------------------------------------------------
  */
 
-Tcl_Size
+int
 TkSelDefaultSelection(
     TkSelectionInfo *infoPtr,	/* Info about selection being retrieved. */
     Atom target,		/* Desired form of selection. */
     char *buffer,		/* Place to put selection characters. */
-    Tcl_Size maxBytes,		/* Maximum # of bytes to store at buffer. */
+    int maxBytes,		/* Maximum # of bytes to store at buffer. */
     Atom *typePtr)		/* Store here the type of the selection, for
 				 * use in converting to proper X format. */
 {
@@ -1479,7 +1478,7 @@ TkSelDefaultSelection(
 
     if (target == dispPtr->timestampAtom) {
 	if (maxBytes < 20) {
-	    return TCL_INDEX_NONE;
+	    return -1;
 	}
 	snprintf(buffer, maxBytes, "0x%x", (unsigned int) infoPtr->time);
 	*typePtr = XA_INTEGER;
@@ -1488,15 +1487,15 @@ TkSelDefaultSelection(
 
     if (target == dispPtr->targetsAtom) {
 	TkSelHandler *selPtr;
-	Tcl_Size length;
+	int length;
 	Tcl_DString ds;
 
 	if (maxBytes < 50) {
-	    return TCL_INDEX_NONE;
+	    return -1;
 	}
 	Tcl_DStringInit(&ds);
 	Tcl_DStringAppend(&ds,
-		"MULTIPLE TARGETS TIMESTAMP TK_APPLICATION TK_WINDOW", TCL_INDEX_NONE);
+		"MULTIPLE TARGETS TIMESTAMP TK_APPLICATION TK_WINDOW", -1);
 	for (selPtr = winPtr->selHandlerList; selPtr != NULL;
 		selPtr = selPtr->nextPtr) {
 	    if ((selPtr->selection == infoPtr->selection)
@@ -1511,7 +1510,7 @@ TkSelDefaultSelection(
 	length = Tcl_DStringLength(&ds);
 	if (length >= maxBytes) {
 	    Tcl_DStringFree(&ds);
-	    return TCL_INDEX_NONE;
+	    return -1;
 	}
 	memcpy(buffer, Tcl_DStringValue(&ds), length + 1);
 	Tcl_DStringFree(&ds);
@@ -1520,12 +1519,12 @@ TkSelDefaultSelection(
     }
 
     if (target == dispPtr->applicationAtom) {
-	Tcl_Size length;
+	int length;
 	Tk_Uid name = winPtr->mainPtr->winPtr->nameUid;
 
 	length = strlen(name);
 	if (maxBytes <= length) {
-	    return TCL_INDEX_NONE;
+	    return -1;
 	}
 	strcpy(buffer, name);
 	*typePtr = XA_STRING;
@@ -1533,19 +1532,19 @@ TkSelDefaultSelection(
     }
 
     if (target == dispPtr->windowAtom) {
-	Tcl_Size length;
+	int length;
 	char *name = winPtr->pathName;
 
 	length = strlen(name);
 	if (maxBytes <= length) {
-	    return TCL_INDEX_NONE;
+	    return -1;
 	}
 	strcpy(buffer, name);
 	*typePtr = XA_STRING;
 	return length;
     }
 
-    return TCL_INDEX_NONE;
+    return -1;
 }
 
 /*
@@ -1568,7 +1567,7 @@ TkSelDefaultSelection(
 
 static void
 LostSelection(
-    void *clientData)	/* Pointer to LostCommand structure. */
+    ClientData clientData)	/* Pointer to LostCommand structure. */
 {
     LostCommand *lostPtr = (LostCommand *)clientData;
     Tcl_Interp *interp = lostPtr->interp;

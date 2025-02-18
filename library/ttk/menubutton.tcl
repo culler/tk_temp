@@ -57,7 +57,7 @@ if {[tk windowingsystem] eq "x11"} {
     bind TMenubutton <Button-1>  \
 	{ %W state pressed ; ttk::menubutton::Popdown %W }
     bind TMenubutton <ButtonRelease-1>  \
-	{ if {[winfo exists %W]} { %W state {!pressed}} }
+	{ if {[winfo exists %W]} { %W state !pressed } }
 }
 
 # PostPosition --
@@ -77,7 +77,6 @@ if {[tk windowingsystem] eq "aqua"} {
 	set menuPad 5
 	set buttonPad 1
 	set bevelPad 4
-	set flushPad 4
 	set mh [winfo reqheight $menu]
 	set bh [expr {[winfo height $mb]} + $buttonPad]
 	set bbh [expr {[winfo height $mb]} + $bevelPad]
@@ -106,11 +105,8 @@ if {[tk windowingsystem] eq "aqua"} {
 		incr y $menuPad
 		incr x $bw
 	    }
-	    flush {
-		incr y $flushPad
-		incr x -$flushPad
-	    }
-	    default {
+	    default {  # flush
+		incr y $bbh
 	    }
 	}
 	return [list $x $y $entry]
@@ -138,7 +134,7 @@ if {[tk windowingsystem] eq "aqua"} {
 		# if we go offscreen to the top, show as 'below'
 		if {$y < [winfo vrooty $mb]} {
 		    set y [expr {[winfo vrooty $mb] + [winfo rooty $mb]\
-                           + [winfo reqheight $mb]}]
+			    + [winfo reqheight $mb]}]
 		}
 	    }
 	    below {
@@ -211,7 +207,7 @@ proc ttk::menubutton::TransferGrab {mb} {
 
 	set menu [$mb cget -menu]
 	foreach {x y entry} [PostPosition $mb $menu] { break }
-	tk_popup $menu [winfo rootx $menu] [winfo rooty $menu]
+    	tk_popup $menu [winfo rootx $menu] [winfo rooty $menu]
     }
 }
 
@@ -222,7 +218,7 @@ proc ttk::menubutton::TransferGrab {mb} {
 #
 proc ttk::menubutton::FindMenuEntry {menu s} {
     set last [$menu index last]
-    if {$last < 0} {
+    if {$last eq "none" || $last < 0} {
 	return ""
     }
     for {set i 0} {$i <= $last} {incr i} {

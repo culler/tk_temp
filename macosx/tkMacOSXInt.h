@@ -24,9 +24,7 @@
 
 #ifndef _TKMAC
 #include "tkMacOSX.h"
-#define Cursor QDCursor
 #import <Cocoa/Cocoa.h>
-#undef Cursor
 #endif
 
 /*
@@ -101,6 +99,24 @@ typedef struct TkWindowPrivate MacDrawable;
  */
 
 /*
+ * This structure is for handling Netscape-type in process
+ * embedding where Tk does not control the top-level. It contains
+ * various functions that are needed by Mac specific routines, like
+ * TkMacOSXGetDrawablePort. The definitions of the function types
+ * are in tkMacOSX.h.
+ */
+
+typedef struct {
+    Tk_MacOSXEmbedRegisterWinProc *registerWinProc;
+    Tk_MacOSXEmbedGetGrafPortProc *getPortProc;
+    Tk_MacOSXEmbedMakeContainerExistProc *containerExistProc;
+    Tk_MacOSXEmbedGetClipProc *getClipProc;
+    Tk_MacOSXEmbedGetOffsetInParentProc *getOffsetProc;
+} TkMacOSXEmbedHandler;
+
+MODULE_SCOPE TkMacOSXEmbedHandler *tkMacOSXEmbedHandler;
+
+/*
  * Undef compatibility platform types defined above.
  */
 
@@ -160,6 +176,8 @@ typedef struct TkWindowPrivate MacDrawable;
  */
 
 MODULE_SCOPE void TkMacOSXDefaultStartupScript(void);
+MODULE_SCOPE void TkpClipDrawableToRect(Display *display, Drawable d, int x,
+	int y, int width, int height);
 MODULE_SCOPE Bool TkTestLogDisplay(Drawable drawable);
 
 /*

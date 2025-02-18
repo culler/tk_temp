@@ -2,8 +2,8 @@
 #
 # This file contains procedures that implement tear-off menus.
 #
-# Copyright © 1994 The Regents of the University of California.
-# Copyright © 1994-1997 Sun Microsystems, Inc.
+# Copyright (c) 1994 The Regents of the University of California.
+# Copyright (c) 1994-1997 Sun Microsystems, Inc.
 #
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -138,12 +138,14 @@ proc ::tk::MenuDup {src dst type} {
     # Copy the meny entries, if any
 
     set last [$src index last]
-    for {set i [$src cget -tearoff]} {$i <= $last} {incr i} {
-	set cmd [list $dst add [$src type $i] [$src id $i]]
-	foreach option [$src entryconfigure $i]  {
-	    lappend cmd [lindex $option 0] [lindex $option 4]
+    if {$last ne "none"} {
+	for {set i [$src cget -tearoff]} {$i <= $last} {incr i} {
+	    set cmd [list $dst add [$src type $i]]
+	    foreach option [$src entryconfigure $i]  {
+		lappend cmd [lindex $option 0] [lindex $option 4]
+	    }
+	    eval $cmd
 	}
-	eval $cmd
     }
 
     # Duplicate the binding tags from the source menu, replacing src with dst

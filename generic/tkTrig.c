@@ -5,8 +5,8 @@
  *	are used by Tk and in particular by the canvas code. It also has
  *	miscellaneous geometry functions used by canvases.
  *
- * Copyright © 1992-1994 The Regents of the University of California.
- * Copyright © 1994-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1992-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -282,6 +282,7 @@ TkLineToArea(
  *--------------------------------------------------------------
  */
 
+	/* ARGSUSED */
 int
 TkThickPolyLineToArea(
     double *coordPtr,		/* Points to an array of coordinates for the
@@ -651,6 +652,7 @@ TkPolygonToArea(
  *--------------------------------------------------------------
  */
 
+	/* ARGSUSED */
 double
 TkOvalToPoint(
     double ovalPtr[],		/* Pointer to array of four coordinates (x1,
@@ -865,6 +867,7 @@ TkOvalToArea(
  *--------------------------------------------------------------
  */
 
+	/* ARGSUSED */
 void
 TkIncludePoint(
     Tk_Item *itemPtr,	/* Item whose bounding box is being

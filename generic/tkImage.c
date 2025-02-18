@@ -4,8 +4,8 @@
  *	This module implements the image protocol, which allows lots of
  *	different kinds of images to be used in lots of different widgets.
  *
- * Copyright © 1994 The Regents of the University of California.
- * Copyright © 1994-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1994 The Regents of the University of California.
+ * Copyright (c) 1994-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -33,12 +33,12 @@ typedef struct Image {
     struct ImageModel *modelPtr;
 				/* Model for this image (identifiers image
 				 * manager, for example). */
-    void *instanceData;	/* One word argument to pass to image manager
+    ClientData instanceData;	/* One word argument to pass to image manager
 				 * when dealing with this image instance. */
     Tk_ImageChangedProc *changeProc;
 				/* Code in widget to call when image changes
 				 * in a way that affects redisplay. */
-    void *widgetClientData;/* Argument to pass to changeProc. */
+    ClientData widgetClientData;/* Argument to pass to changeProc. */
     struct Image *nextPtr;	/* Next in list of all image instances
 				 * associated with the same name. */
     struct Image *prevPtr;	/* Previous in list of all image instances
@@ -55,7 +55,7 @@ typedef struct ImageModel {
     Tk_ImageType *typePtr;	/* Information about image type. NULL means
 				 * that no image manager owns this image: the
 				 * image was deleted. */
-    void *modelData;	/* One-word argument to pass to image mgr when
+    ClientData modelData;	/* One-word argument to pass to image mgr when
 				 * dealing with the model, as opposed to
 				 * instances. */
     int width, height;		/* Last known dimensions for image. */
@@ -87,7 +87,7 @@ static Tcl_ThreadDataKey dataKey;
  * Prototypes for local functions:
  */
 
-static void		ImageTypeThreadExitProc(void *clientData);
+static void		ImageTypeThreadExitProc(ClientData clientData);
 static Tcl_FreeProc	DeleteImage;
 static void		EventuallyDeleteImage(ImageModel *modelPtr,
 			    int forgetImageHashNow);
@@ -131,7 +131,7 @@ ImageTypeThreadExitProc(
 /*
  *----------------------------------------------------------------------
  *
- * Tk_CreateImageType --
+ * Tk_CreateOldImageType, Tk_CreateImageType --
  *
  *	This function is invoked by an image manager to tell Tk about a new
  *	kind of image and the functions that manage the new type. The function
@@ -146,6 +146,27 @@ ImageTypeThreadExitProc(
  *
  *----------------------------------------------------------------------
  */
+
+void
+Tk_CreateOldImageType(
+    const Tk_ImageType *typePtr)
+				/* Structure describing the type. All of the
+				 * fields except "nextPtr" must be filled in
+				 * by caller. */
+{
+    Tk_ImageType *copyPtr;
+    ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
+	    Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData));
+
+    if (!tsdPtr->initialized) {
+	tsdPtr->initialized = 1;
+	Tcl_CreateThreadExitHandler(ImageTypeThreadExitProc, NULL);
+    }
+    copyPtr = (Tk_ImageType *)ckalloc(sizeof(Tk_ImageType));
+    *copyPtr = *typePtr;
+    copyPtr->nextPtr = tsdPtr->oldImageTypeList;
+    tsdPtr->oldImageTypeList = copyPtr;
+}
 
 void
 Tk_CreateImageType(
@@ -187,7 +208,7 @@ Tk_CreateImageType(
 
 int
 Tk_ImageObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument strings. */
@@ -259,7 +280,7 @@ Tk_ImageObjCmd(
 	if (typePtr == NULL) {
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "image type \"%s\" doesn't exist", arg));
-	    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "IMAGE_TYPE", arg, (char *)NULL);
+	    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "IMAGE_TYPE", arg, NULL);
 	    return TCL_ERROR;
 	}
 
@@ -292,7 +313,7 @@ Tk_ImageObjCmd(
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
 			"images may not be named the same as the main window",
 			-1));
-		Tcl_SetErrorCode(interp, "TK", "IMAGE", "SMASH_MAIN", (char *)NULL);
+		Tcl_SetErrorCode(interp, "TK", "IMAGE", "SMASH_MAIN", NULL);
 		return TCL_ERROR;
 	    }
 	}
@@ -354,8 +375,8 @@ Tk_ImageObjCmd(
 	}
 	Tcl_Preserve(modelPtr);
 	if (oldimage) {
-	    typedef int (OldCreateProc)(Tcl_Interp*, char*, Tcl_Size, char**,
-		Tk_ImageType*, Tk_ImageModel, void **);
+	    typedef int (OldCreateProc)(Tcl_Interp*, char*, int, char**,
+		Tk_ImageType*, Tk_ImageModel, ClientData*);
 	    i = ((OldCreateProc*)typePtr->createProc)(interp,
 		(char*)name, objc, (char**)args, typePtr,
 		(Tk_ImageModel)modelPtr, &modelPtr->modelData);
@@ -382,7 +403,7 @@ Tk_ImageObjCmd(
 		    modelPtr->modelData);
 	}
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		(const char *)Tcl_GetHashKey(&winPtr->mainPtr->imageTable, hPtr), TCL_INDEX_NONE));
+		(const char *)Tcl_GetHashKey(&winPtr->mainPtr->imageTable, hPtr), -1));
 	break;
     }
     case IMAGE_DELETE:
@@ -412,7 +433,7 @@ Tk_ImageObjCmd(
 		continue;
 	    }
 	    Tcl_ListObjAppendElement(NULL, resultObj, Tcl_NewStringObj(
-		    (const char *)Tcl_GetHashKey(&winPtr->mainPtr->imageTable, hPtr), TCL_INDEX_NONE));
+		    (const char *)Tcl_GetHashKey(&winPtr->mainPtr->imageTable, hPtr), -1));
 	}
 	Tcl_SetObjResult(interp, resultObj);
 	break;
@@ -425,12 +446,12 @@ Tk_ImageObjCmd(
 	for (typePtr = tsdPtr->imageTypeList; typePtr != NULL;
 		typePtr = typePtr->nextPtr) {
 	    Tcl_ListObjAppendElement(NULL, resultObj, Tcl_NewStringObj(
-		    typePtr->name, TCL_INDEX_NONE));
+		    typePtr->name, -1));
 	}
 	for (typePtr = tsdPtr->oldImageTypeList; typePtr != NULL;
 		typePtr = typePtr->nextPtr) {
 	    Tcl_ListObjAppendElement(NULL, resultObj, Tcl_NewStringObj(
-		    typePtr->name, TCL_INDEX_NONE));
+		    typePtr->name, -1));
 	}
 	Tcl_SetObjResult(interp, resultObj);
 	break;
@@ -466,7 +487,7 @@ Tk_ImageObjCmd(
 
 	switch ((enum options) index) {
 	case IMAGE_HEIGHT:
-	    Tcl_SetObjResult(interp, Tcl_NewWideIntObj(modelPtr->height));
+	    Tcl_SetObjResult(interp, Tcl_NewIntObj(modelPtr->height));
 	    break;
 	case IMAGE_INUSE:
 	    Tcl_SetObjResult(interp, Tcl_NewBooleanObj(
@@ -475,11 +496,11 @@ Tk_ImageObjCmd(
 	case IMAGE_TYPE:
 	    if (modelPtr->typePtr != NULL) {
 		Tcl_SetObjResult(interp,
-			Tcl_NewStringObj(modelPtr->typePtr->name, TCL_INDEX_NONE));
+			Tcl_NewStringObj(modelPtr->typePtr->name, -1));
 	    }
 	    break;
 	case IMAGE_WIDTH:
-	    Tcl_SetObjResult(interp, Tcl_NewWideIntObj(modelPtr->width));
+	    Tcl_SetObjResult(interp, Tcl_NewIntObj(modelPtr->width));
 	    break;
 	default:
 	    Tcl_Panic("can't happen");
@@ -490,7 +511,7 @@ Tk_ImageObjCmd(
 
   alreadyDeleted:
     Tcl_SetObjResult(interp, Tcl_ObjPrintf("image \"%s\" doesn't exist",arg));
-    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "IMAGE", arg, (char *)NULL);
+    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "IMAGE", arg, NULL);
     return TCL_ERROR;
 }
 
@@ -599,7 +620,7 @@ Tk_GetImage(
     Tk_ImageChangedProc *changeProc,
 				/* Function to invoke when redisplay is needed
 				 * because image's pixels or size changed. */
-    void *clientData)	/* One-word argument to pass to damageProc. */
+    ClientData clientData)	/* One-word argument to pass to damageProc. */
 {
     Tcl_HashEntry *hPtr;
     ImageModel *modelPtr;
@@ -636,7 +657,7 @@ Tk_GetImage(
     if (interp) {
 	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		"image \"%s\" doesn't exist", name));
-	Tcl_SetErrorCode(interp, "TK", "LOOKUP", "IMAGE", name, (char *)NULL);
+	Tcl_SetErrorCode(interp, "TK", "LOOKUP", "IMAGE", name, NULL);
     }
     return NULL;
 }
@@ -953,11 +974,7 @@ Tk_DeleteImage(
 
 static void
 DeleteImage(
-#if TCL_MAJOR_VERSION > 8
-    void *blockPtr)	/* Pointer to main data structure for image. */
-#else
-    char *blockPtr)
-#endif
+    char *blockPtr)	/* Pointer to main data structure for image. */
 {
     Image *imagePtr;
     Tk_ImageType *typePtr;
@@ -1072,7 +1089,7 @@ TkDeleteAllImages(
  *----------------------------------------------------------------------
  */
 
-void *
+ClientData
 Tk_GetImageModelData(
     Tcl_Interp *interp,		/* Interpreter in which the image was
 				 * created. */

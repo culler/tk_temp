@@ -4,24 +4,16 @@
  *	This file provides basic low-level facilities for managing X events in
  *	Tk.
  *
- * Copyright © 1990-1994 The Regents of the University of California.
- * Copyright © 1994-1995 Sun Microsystems, Inc.
- * Copyright © 1998-2000 Ajuba Solutions.
- * Copyright © 2004 George Peter Staplin
+ * Copyright (c) 1990-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1995 Sun Microsystems, Inc.
+ * Copyright (c) 1998-2000 Ajuba Solutions.
+ * Copyright (c) 2004 George Peter Staplin
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
  */
 
 #include "tkInt.h"
-
-#ifdef _WIN32
-#include "tkWinInt.h"
-#elif defined(MAC_OSX_TK)
-#include "tkMacOSXInt.h"
-#else
-#include "tkUnixInt.h"
-#endif
 
 /*
  * There's a potential problem if a handler is deleted while it's current
@@ -51,7 +43,7 @@ typedef struct InProgress {
 
 typedef struct GenericHandler {
     Tk_GenericProc *proc;	/* Function to dispatch on all X events. */
-    void *clientData;	/* Client data to pass to function. */
+    ClientData clientData;	/* Client data to pass to function. */
     int deleteFlag;		/* Flag to set when this handler is
 				 * deleted. */
     struct GenericHandler *nextPtr;
@@ -123,8 +115,7 @@ static const unsigned long eventMasks[TK_LASTEVENT] = {
     VirtualEventMask,			/* VirtualEvents */
     ActivateMask,			/* ActivateNotify */
     ActivateMask,			/* DeactivateNotify */
-    MouseWheelMask,			/* MouseWheelEvent */
-    TouchpadScrollMask			/* TouchpadScroll */
+    MouseWheelMask			/* MouseWheelEvent */
 };
 
 /*
@@ -134,7 +125,7 @@ static const unsigned long eventMasks[TK_LASTEVENT] = {
 
 typedef struct ExitHandler {
     Tcl_ExitProc *proc;		/* Function to call when process exits. */
-    void *clientData;	/* One word of information to pass to proc. */
+    ClientData clientData;	/* One word of information to pass to proc. */
     struct ExitHandler *nextPtr;/* Next in list of all exit handlers for this
 				 * application, or NULL for end of list. */
 } ExitHandler;
@@ -174,7 +165,7 @@ typedef struct {
     Tk_RestrictProc *restrictProc;
 				/* Function to call. NULL means no
 				 * restrictProc is currently in effect. */
-    void *restrictArg;	/* Argument to pass to restrictProc. */
+    ClientData restrictArg;	/* Argument to pass to restrictProc. */
     ExitHandler *firstExitPtr;	/* First in list of all exit handlers for this
 				 * thread. */
     int inExit;			/* True when this thread is exiting. This is
@@ -198,7 +189,7 @@ TCL_DECLARE_MUTEX(exitMutex)
  */
 
 static void		CleanUpTkEvent(XEvent *eventPtr);
-static void		DelayedMotionProc(void *clientData);
+static void		DelayedMotionProc(ClientData clientData);
 static unsigned long    GetEventMaskFromXEvent(XEvent *eventPtr);
 static TkWindow *	GetTkWindowFromXEvent(XEvent *eventPtr);
 static void		InvokeClientMessageHandlers(ThreadSpecificData *tsdPtr,
@@ -211,10 +202,12 @@ static int		InvokeMouseHandlers(TkWindow *winPtr,
 			    unsigned long mask, XEvent *eventPtr);
 static Window		ParentXId(Display *display, Window w);
 static int		RefreshKeyboardMappingIfNeeded(XEvent *eventPtr);
-static int		TkXErrorHandler(void *clientData,
+static int		TkXErrorHandler(ClientData clientData,
 			    XErrorEvent *errEventPtr);
 static int		WindowEventProc(Tcl_Event *evPtr, int flags);
+#ifdef TK_USE_INPUT_METHODS
 static void		CreateXIC(TkWindow *winPtr);
+#endif /* TK_USE_INPUT_METHODS */
 
 /*
  *----------------------------------------------------------------------
@@ -322,6 +315,7 @@ InvokeMouseHandlers(
  *----------------------------------------------------------------------
  */
 
+#ifdef TK_USE_INPUT_METHODS
 static void
 CreateXIC(
     TkWindow *winPtr)
@@ -368,6 +362,7 @@ CreateXIC(
 	XSelectInput(winPtr->display, winPtr->window, winPtr->atts.event_mask);
     }
 }
+#endif
 
 /*
  *----------------------------------------------------------------------
@@ -514,12 +509,9 @@ RefreshKeyboardMappingIfNeeded(
 /*
  *----------------------------------------------------------------------
  *
- * Tk_GetButtonMask --
+ * TkGetButtonMask --
  *
- *	Return the proper Button${n}Mask for the button. Don't care about
- *	Button4 - Button7, because those are not actually buttons: Those
- *	are used for the horizontal or vertical mouse wheels. Button4Mask
- *	and higher is actually used for Button 8 and higher.
+ *	Return the proper Button${n}Mask for the button.
  *
  * Results:
  *	A button mask.
@@ -531,15 +523,14 @@ RefreshKeyboardMappingIfNeeded(
  */
 
 static const unsigned buttonMasks[] = {
-    0, Button1Mask, Button2Mask, Button3Mask, 0, 0, 0, 0, Button4Mask, \
-	    Button5Mask, Button6Mask, Button7Mask, Button8Mask, Button9Mask
+    0, Button1Mask, Button2Mask, Button3Mask, Button4Mask, Button5Mask
 };
 
 unsigned
-Tk_GetButtonMask(
+TkGetButtonMask(
     unsigned button)
 {
-    return (button > Button9) ? 0 : buttonMasks[button];
+    return (button > Button5) ? 0 : buttonMasks[button];
 }
 
 /*
@@ -692,7 +683,7 @@ Tk_CreateEventHandler(
 				 * handler. */
     unsigned long mask,		/* Events for which proc should be called. */
     Tk_EventProc *proc,		/* Function to call for each selected event */
-    void *clientData)	/* Arbitrary data to pass to proc. */
+    ClientData clientData)	/* Arbitrary data to pass to proc. */
 {
     TkEventHandler *handlerPtr;
     TkWindow *winPtr = (TkWindow *)token;
@@ -782,7 +773,7 @@ Tk_DeleteEventHandler(
     Tk_Window token,		/* Same as corresponding arguments passed */
     unsigned long mask,		/* previously to Tk_CreateEventHandler. */
     Tk_EventProc *proc,
-    void *clientData)
+    ClientData clientData)
 {
     TkEventHandler *handlerPtr;
     InProgress *ipPtr;
@@ -857,7 +848,7 @@ Tk_DeleteEventHandler(
 void
 Tk_CreateGenericHandler(
     Tk_GenericProc *proc,	/* Function to call on every event. */
-    void *clientData)	/* One-word value to pass to proc. */
+    ClientData clientData)	/* One-word value to pass to proc. */
 {
     GenericHandler *handlerPtr;
     ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
@@ -898,7 +889,7 @@ Tk_CreateGenericHandler(
 void
 Tk_DeleteGenericHandler(
     Tk_GenericProc *proc,
-    void *clientData)
+    ClientData clientData)
 {
     GenericHandler * handler;
     ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
@@ -993,40 +984,6 @@ Tk_DeleteClientMessageHandler(
 /*
  *----------------------------------------------------------------------
  *
- * TkEventInit --
- *
- *	This functions initializes all the event module structures used by the
- *	current thread. It must be called before any other function in this
- *	file is called.
- *
- * Results:
- *	None.
- *
- * Side Effects:
- *	None.
- *
- *----------------------------------------------------------------------
- */
-
-void
-TkEventInit(void)
-{
-    ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
-	    Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData));
-
-    tsdPtr->handlersActive	= 0;
-    tsdPtr->pendingPtr		= NULL;
-    tsdPtr->genericList		= NULL;
-    tsdPtr->lastGenericPtr	= NULL;
-    tsdPtr->cmList		= NULL;
-    tsdPtr->lastCmPtr		= NULL;
-    tsdPtr->restrictProc	= NULL;
-    tsdPtr->restrictArg		= NULL;
-}
-
-/*
- *----------------------------------------------------------------------
- *
  * TkXErrorHandler --
  *
  *	TkXErrorHandler is an error handler, to be installed via
@@ -1043,7 +1000,7 @@ TkEventInit(void)
 
 static int
 TkXErrorHandler(
-    void *clientData,	/* Pointer to flag we set. */
+    ClientData clientData,	/* Pointer to flag we set. */
     TCL_UNUSED(XErrorEvent *))	/* X error info. */
 {
     int *error = (int *)clientData;
@@ -1141,22 +1098,11 @@ Tk_HandleEvent(
     ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
 	    Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData));
 
-
-#if !defined(_WIN32) && !defined(MAC_OSX_TK)
-    if ((eventPtr->type == ButtonRelease) || (eventPtr->type == ButtonPress)) {
-	if ((eventPtr->xbutton.button >= Button4) && (eventPtr->xbutton.button < Button8)) {
-	    if (eventPtr->type == ButtonRelease) {
-		return;
-	    } else { /* eventPtr->type == ButtonPress */
-		int but = eventPtr->xbutton.button;
-		eventPtr->type = MouseWheelEvent;
-		eventPtr->xany.send_event = -1;
-		eventPtr->xkey.keycode = (but & 1) ? -120 : 120;
-		if (but > Button5) {
-		    eventPtr->xkey.state |= ShiftMask;
-		}
-	    }
-	}
+#if !defined(MAC_OSX_TK) && !defined(_WIN32)
+    if (((eventPtr->type == ButtonPress) || (eventPtr->type == ButtonRelease))
+	    && ((eventPtr->xbutton.button - 6) < 2)) {
+	eventPtr->xbutton.button -= 2;
+	eventPtr->xbutton.state ^= ShiftMask;
     }
 #endif
 
@@ -1226,6 +1172,7 @@ Tk_HandleEvent(
      * ever active for X11.
      */
 
+#ifdef TK_USE_INPUT_METHODS
     /*
      * If the XIC has been invalidated, it must be recreated.
      */
@@ -1247,6 +1194,7 @@ Tk_HandleEvent(
 	    XSetICFocus(winPtr->inputContext);
 	}
     }
+#endif /*TK_USE_INPUT_METHODS*/
 
     /*
      * For events where it hasn't already been done, update the current time
@@ -1455,8 +1403,8 @@ TkCurrentTime(
 Tk_RestrictProc *
 Tk_RestrictEvents(
     Tk_RestrictProc *proc,	/* Function to call for each incoming event */
-    void *arg,		/* Arbitrary argument to pass to proc. */
-    void **prevArgPtr)	/* Place to store information about previous
+    ClientData arg,		/* Arbitrary argument to pass to proc. */
+    ClientData *prevArgPtr)	/* Place to store information about previous
 				 * argument. */
 {
     Tk_RestrictProc *prev;
@@ -1814,7 +1762,7 @@ CleanUpTkEvent(
 
 static void
 DelayedMotionProc(
-    void *clientData)	/* Pointer to display containing a delayed
+    ClientData clientData)	/* Pointer to display containing a delayed
 				 * motion event to be serviced. */
 {
     TkDisplay *dispPtr = (TkDisplay *)clientData;
@@ -1845,7 +1793,7 @@ DelayedMotionProc(
 void
 TkCreateExitHandler(
     Tcl_ExitProc *proc,		/* Function to invoke. */
-    void *clientData)	/* Arbitrary value to pass to proc. */
+    ClientData clientData)	/* Arbitrary value to pass to proc. */
 {
     ExitHandler *exitPtr;
 
@@ -1900,7 +1848,7 @@ TkCreateExitHandler(
 void
 TkDeleteExitHandler(
     Tcl_ExitProc *proc,		/* Function that was previously registered. */
-    void *clientData)	/* Arbitrary value to pass to proc. */
+    ClientData clientData)	/* Arbitrary value to pass to proc. */
 {
     ExitHandler *exitPtr, *prevPtr;
 
@@ -1942,7 +1890,7 @@ TkDeleteExitHandler(
 void
 TkCreateThreadExitHandler(
     Tcl_ExitProc *proc,		/* Function to invoke. */
-    void *clientData)	/* Arbitrary value to pass to proc. */
+    ClientData clientData)	/* Arbitrary value to pass to proc. */
 {
     ExitHandler *exitPtr;
     ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
@@ -1983,7 +1931,7 @@ TkCreateThreadExitHandler(
 void
 TkDeleteThreadExitHandler(
     Tcl_ExitProc *proc,		/* Function that was previously registered. */
-    void *clientData)	/* Arbitrary value to pass to proc. */
+    ClientData clientData)	/* Arbitrary value to pass to proc. */
 {
     ExitHandler *exitPtr, *prevPtr;
     ThreadSpecificData *tsdPtr = (ThreadSpecificData *)

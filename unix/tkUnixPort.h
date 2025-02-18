@@ -5,8 +5,8 @@
  *	information that may be configuration-dependent, such as
  *	#includes for system include files and a few other things.
  *
- * Copyright © 1991-1993 The Regents of the University of California.
- * Copyright © 1994-1996 Sun Microsystems, Inc.
+ * Copyright (c) 1991-1993 The Regents of the University of California.
+ * Copyright (c) 1994-1996 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -26,6 +26,11 @@
 #include <math.h>
 #include <string.h>
 #include <limits.h>
+#ifdef NO_STDLIB_H
+#   include "../compat/stdlib.h"
+#else
+#   include <stdlib.h>
+#endif
 #include <sys/types.h>
 #include <sys/file.h>
 #ifdef HAVE_SYS_SELECT_H
@@ -35,12 +40,24 @@
 #ifndef _TCL
 #   include <tcl.h>
 #endif
-#ifdef HAVE_SYS_TIME_H
+#ifdef TIME_WITH_SYS_TIME
+#   include <sys/time.h>
+#   include <time.h>
+#else
+#   ifdef HAVE_SYS_TIME_H
 #	include <sys/time.h>
+#   else
+#	include <time.h>
+#   endif
 #endif
-#include <time.h>
-#include <inttypes.h>
-#include <unistd.h>
+#ifdef HAVE_INTTYPES_H
+#    include <inttypes.h>
+#endif
+#ifndef NO_UNISTD_H
+#   include <unistd.h>
+#else
+#   include "../compat/unistd.h"
+#endif
 #if defined(__GNUC__) && !defined(__cplusplus)
 #   pragma GCC diagnostic ignored "-Wc++-compat"
 #endif
@@ -97,19 +114,32 @@
 #   define NBBY 8
 #endif
 
-#include "tkIntXlibDecls.h"
-#define UINT unsigned int
-#define HWND void *
-#define HDC void *
-#define HINSTANCE void *
-#define COLORREF void *
-#define HMENU void *
-#define TkWinDCState void
-#define HPALETTE void *
-#define WNDPROC void *
-#define WPARAM void *
-#define LPARAM void *
-#define LRESULT void *
+#ifdef __CYGWIN__
+#   include "tkIntXlibDecls.h"
+#   define UINT unsigned int
+#   define HWND void *
+#   define HDC void *
+#   define HINSTANCE void *
+#   define COLORREF void *
+#   define HMENU void *
+#   define TkWinDCState void
+#   define HPALETTE void *
+#   define WNDPROC void *
+#   define WPARAM void *
+#   define LPARAM void *
+#   define LRESULT void *
+
+#else /* !__CYGWIN__ */
+    /*
+     * The TkPutImage macro strips off the color table information, which isn't
+     * needed for X.
+     */
+
+#   define TkPutImage(colors, ncolors, display, pixels, gc, image, srcx, srcy, destx, desty, width, height) \
+		XPutImage(display, pixels, gc, image, srcx, srcy, destx, \
+		desty, width, height);
+
+#endif /* !__CYGWIN__ */
 
 /*
  * Supply macros for seek offsets, if they're not already provided by
@@ -146,13 +176,22 @@
 #endif
 
 /*
+ * These calls implement native bitmaps which are not supported under
+ * UNIX.  The macros eliminate the calls.
+ */
+
+#define TkpDefineNativeBitmaps()
+#define TkpCreateNativeBitmap(display, source) None
+#define TkpGetNativeAppBitmap(display, name, w, h) None
+
+/*
  * This macro stores a representation of the window handle in a string.
  * This should perhaps use the real size of an XID.
  */
 
 #ifndef __CYGWIN__
 #define TkpPrintWindowId(buf,w) \
-	snprintf((buf), TCL_INTEGER_SPACE, "0x%lx", (unsigned long) (w))
+	snprintf((buf), TCL_INTEGER_SPACE, "0x%08lx", (unsigned long) (w))
 #endif
 
 #endif /* _UNIXPORT */

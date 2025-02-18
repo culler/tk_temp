@@ -43,25 +43,66 @@ typedef struct Container {
 static Container *firstContainerPtr = NULL;
 				/* First in list of all containers managed by
 				 * this process. */
+/*
+ * Globals defined in this file:
+ */
+
+TkMacOSXEmbedHandler *tkMacOSXEmbedHandler = NULL;
 
 /*
  * Prototypes for static procedures defined in this file:
  */
 
-static void	ContainerEventProc(void *clientData, XEvent *eventPtr);
-static void	EmbeddedEventProc(void *clientData, XEvent *eventPtr);
-static void	EmbedActivateProc(void *clientData, XEvent *eventPtr);
-static void	EmbedFocusProc(void *clientData, XEvent *eventPtr);
+static void	ContainerEventProc(ClientData clientData, XEvent *eventPtr);
+static void	EmbeddedEventProc(ClientData clientData, XEvent *eventPtr);
+static void	EmbedActivateProc(ClientData clientData, XEvent *eventPtr);
+static void	EmbedFocusProc(ClientData clientData, XEvent *eventPtr);
 static void	EmbedGeometryRequest(Container *containerPtr, int width,
 		    int height);
 static void	EmbedSendConfigure(Container *containerPtr);
-static void	EmbedStructureProc(void *clientData, XEvent *eventPtr);
+static void	EmbedStructureProc(ClientData clientData, XEvent *eventPtr);
 static void	EmbedWindowDeleted(TkWindow *winPtr);
 
 /*
  *----------------------------------------------------------------------
  *
- * Tk_MakeWindow --
+ * Tk_MacOSXSetEmbedHandler --
+ *
+ *	Registers a handler for an in process form of embedding, like Netscape
+ *	plugins, where Tk is loaded into the process, but does not control the
+ *	main window
+ *
+ * Results:
+ *	None
+ *
+ * Side effects:
+ *	The embed handler is set.
+ *
+ *----------------------------------------------------------------------
+ */
+
+void
+Tk_MacOSXSetEmbedHandler(
+    Tk_MacOSXEmbedRegisterWinProc *registerWinProc,
+    Tk_MacOSXEmbedGetGrafPortProc *getPortProc,
+    Tk_MacOSXEmbedMakeContainerExistProc *containerExistProc,
+    Tk_MacOSXEmbedGetClipProc *getClipProc,
+    Tk_MacOSXEmbedGetOffsetInParentProc *getOffsetProc)
+{
+    if (tkMacOSXEmbedHandler == NULL) {
+	tkMacOSXEmbedHandler = ckalloc(sizeof(TkMacOSXEmbedHandler));
+    }
+    tkMacOSXEmbedHandler->registerWinProc = registerWinProc;
+    tkMacOSXEmbedHandler->getPortProc = getPortProc;
+    tkMacOSXEmbedHandler->containerExistProc = containerExistProc;
+    tkMacOSXEmbedHandler->getClipProc = getClipProc;
+    tkMacOSXEmbedHandler->getOffsetProc = getOffsetProc;
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * TkpMakeWindow --
  *
  *	Creates an X Window (Mac subwindow).
  *
@@ -75,16 +116,15 @@ static void	EmbedWindowDeleted(TkWindow *winPtr);
  */
 
 Window
-Tk_MakeWindow(
-    Tk_Window tkwin,
-    TCL_UNUSED(Window))
+TkpMakeWindow(
+    TkWindow *winPtr,
+    Window parent)
 {
     MacDrawable *macWin;
-    TkWindow *winPtr = (TkWindow *)tkwin;
 
     /*
      * If this window is marked as embedded then the window structure should
-     * have already been created in the Tk_UseWindow function.
+     * have already been created in the TkpUseWindow function.
      */
 
     if (Tk_IsEmbedded(winPtr)) {
@@ -94,7 +134,7 @@ Tk_MakeWindow(
 	 * Allocate sub window
 	 */
 
-	macWin = (MacDrawable *)ckalloc(sizeof(MacDrawable));
+	macWin = ckalloc(sizeof(MacDrawable));
 	if (macWin == NULL) {
 	    winPtr->privatePtr = NULL;
 	    return None;
@@ -178,7 +218,7 @@ TkpScanWindowId(
 /*
  *----------------------------------------------------------------------
  *
- * Tk_UseWindow --
+ * TkpUseWindow --
  *
  *	This procedure causes a Tk window to use a given X window as its
  *	parent window, rather than the root window for the screen. It is
@@ -198,7 +238,7 @@ TkpScanWindowId(
  */
 
 int
-Tk_UseWindow(
+TkpUseWindow(
     Tcl_Interp *interp,		/* If not NULL, used for error reporting if
 				 * string is bogus. */
     Tk_Window tkwin,		/* Tk window that does not yet have an
@@ -213,7 +253,7 @@ Tk_UseWindow(
 
     if (winPtr->window != None) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		"can't modify container after widget is created", TCL_INDEX_NONE));
+		"can't modify container after widget is created", -1));
 	Tcl_SetErrorCode(interp, "TK", "EMBED", "POST_CREATE", NULL);
 	return TCL_ERROR;
     }
@@ -266,7 +306,7 @@ Tk_UseWindow(
      * Make the embedded window.
      */
 
-    macWin = (MacDrawable *)ckalloc(sizeof(MacDrawable));
+    macWin = ckalloc(sizeof(MacDrawable));
     if (macWin == NULL) {
 	winPtr->privatePtr = NULL;
 	return TCL_ERROR;
@@ -322,7 +362,7 @@ Tk_UseWindow(
 /*
  *----------------------------------------------------------------------
  *
- * Tk_MakeContainer --
+ * TkpMakeContainer --
  *
  *	This procedure is called to indicate that a particular window will be
  *	a container for an embedded application. This changes certain aspects
@@ -339,7 +379,7 @@ Tk_UseWindow(
  */
 
 void
-Tk_MakeContainer(
+TkpMakeContainer(
     Tk_Window tkwin)		/* Token for a window that is about to become
 				 * a container. */
 {
@@ -352,7 +392,7 @@ Tk_MakeContainer(
      */
 
     Tk_MakeWindowExist(tkwin);
-    containerPtr = (Container *)ckalloc(sizeof(Container));
+    containerPtr = ckalloc(sizeof(Container));
     containerPtr->parent = Tk_WindowId(tkwin);
     containerPtr->parentPtr = winPtr;
     containerPtr->embedded = None;
@@ -444,7 +484,7 @@ TkMacOSXGetHostToplevel(
     if (!Tk_IsEmbedded(topWinPtr)) {
 	return winPtr->privatePtr->toplevel;
     }
-    contWinPtr = (TkWindow *)Tk_GetOtherWindow((Tk_Window)topWinPtr);
+    contWinPtr = TkpGetOtherWindow(topWinPtr);
 
     /*
      * TODO: Here we should handle out of process embedding.
@@ -520,9 +560,9 @@ TkpClaimFocus(
 
 int
 TkpTestembedCmd(
-    TCL_UNUSED(void *),	/* Main window for application. */
+    ClientData clientData,	/* Main window for application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])		/* Argument strings. */
 {
     int all;
@@ -557,8 +597,7 @@ TkpTestembedCmd(
 	if (containerPtr->parent == None) {
 	    Tcl_DStringAppendElement(&dString, "");
 	} else if (all) {
-	    snprintf(buffer, sizeof(buffer), "0x%" TCL_Z_MODIFIER "x",
-		    (size_t) containerPtr->parent);
+	    snprintf(buffer, sizeof(buffer), "0x%lx", containerPtr->parent);
 	    Tcl_DStringAppendElement(&dString, buffer);
 	} else {
 	    Tcl_DStringAppendElement(&dString, "XXX");
@@ -623,9 +662,9 @@ TkpTestembedCmd(
 
 void
 TkpRedirectKeyEvent(
-    TCL_UNUSED(TkWindow *),		/* Window to which the event was originally
+    TkWindow *winPtr,		/* Window to which the event was originally
 				 * reported. */
-    TCL_UNUSED(XEvent *))		/* X event to redirect (should be KeyPress or
+    XEvent *eventPtr)		/* X event to redirect (should be KeyPress or
 				 * KeyRelease). */
 {
     /* TODO: Implement this or decide it definitely needs no implementation */
@@ -634,13 +673,13 @@ TkpRedirectKeyEvent(
 /*
  *----------------------------------------------------------------------
  *
- * Tk_GetOtherWindow --
+ * TkpGetOtherWindow --
  *
  *	If both the container and embedded window are in the same process,
  *	this procedure will return either one, given the other.
  *
  * Results:
- *	If tkwin is a container, the return value is the token for the
+ *	If winPtr is a container, the return value is the token for the
  *	embedded window, and vice versa. If the "other" window isn't in this
  *	process, NULL is returned.
  *
@@ -650,28 +689,28 @@ TkpRedirectKeyEvent(
  *----------------------------------------------------------------------
  */
 
-Tk_Window
-Tk_GetOtherWindow(
-    Tk_Window tkwin)		/* Tk's structure for a container or embedded
+TkWindow *
+TkpGetOtherWindow(
+    TkWindow *winPtr)		/* Tk's structure for a container or embedded
 				 * window. */
 {
     Container *containerPtr;
 
     /*
-     * Tk_GetOtherWindow returns NULL if both windows are not in the same
+     * TkpGetOtherWindow returns NULL if both windows are not in the same
      * process...
      */
 
-    if (!(tkwin && (((TkWindow*)tkwin)->flags & TK_BOTH_HALVES))) {
+    if (!(winPtr && (winPtr->flags & TK_BOTH_HALVES))) {
 	return NULL;
     }
 
     for (containerPtr = firstContainerPtr; containerPtr != NULL;
 	    containerPtr = containerPtr->nextPtr) {
-	if ((Tk_Window)containerPtr->embeddedPtr == tkwin) {
-	    return (Tk_Window)containerPtr->parentPtr;
-	} else if ((Tk_Window)containerPtr->parentPtr == tkwin) {
-	    return (Tk_Window)containerPtr->embeddedPtr;
+	if (containerPtr->embeddedPtr == winPtr) {
+	    return containerPtr->parentPtr;
+	} else if (containerPtr->parentPtr == winPtr) {
+	    return containerPtr->embeddedPtr;
 	}
     }
     return NULL;
@@ -698,7 +737,7 @@ Tk_GetOtherWindow(
 
 static void
 EmbeddedEventProc(
-    void *clientData,	/* Token for container window. */
+    ClientData clientData,	/* Token for container window. */
     XEvent *eventPtr)		/* ResizeRequest event. */
 {
     TkWindow *winPtr = (TkWindow *)clientData;
@@ -733,7 +772,7 @@ EmbeddedEventProc(
 
 static void
 ContainerEventProc(
-    void *clientData,	/* Token for container window. */
+    ClientData clientData,	/* Token for container window. */
     XEvent *eventPtr)		/* ResizeRequest event. */
 {
     TkWindow *winPtr = (TkWindow *)clientData;
@@ -841,7 +880,7 @@ ContainerEventProc(
 
 static void
 EmbedStructureProc(
-    void *clientData,	/* Token for container window. */
+    ClientData clientData,	/* Token for container window. */
     XEvent *eventPtr)		/* ResizeRequest event. */
 {
     Container *containerPtr = (Container *)clientData;
@@ -850,12 +889,12 @@ EmbedStructureProc(
     if (eventPtr->type == ConfigureNotify) {
 
 	/*
-	 * Send a ConfigureNotify  to the embedded application.
-	 */
+         * Send a ConfigureNotify  to the embedded application.
+         */
 
-	if (containerPtr->embeddedPtr != NULL) {
-	    TkDoConfigureNotify(containerPtr->embeddedPtr);
-	}
+        if (containerPtr->embeddedPtr != NULL) {
+            TkDoConfigureNotify(containerPtr->embeddedPtr);
+        }
 	if (containerPtr->embedded != None) {
 	    /*
 	     * Ignore errors, since the embedded application could have
@@ -865,8 +904,8 @@ EmbedStructureProc(
 	    errHandler = Tk_CreateErrorHandler(eventPtr->xfocus.display, -1,
 		    -1, -1, NULL, NULL);
 	    Tk_MoveResizeWindow((Tk_Window)containerPtr->embeddedPtr, 0, 0,
-		    Tk_Width((Tk_Window)containerPtr->parentPtr),
-		    Tk_Height((Tk_Window)containerPtr->parentPtr));
+		    (unsigned) Tk_Width((Tk_Window)containerPtr->parentPtr),
+		    (unsigned) Tk_Height((Tk_Window)containerPtr->parentPtr));
 	    Tk_DeleteErrorHandler(errHandler);
 	}
     } else if (eventPtr->type == DestroyNotify) {
@@ -895,7 +934,7 @@ EmbedStructureProc(
 
 static void
 EmbedActivateProc(
-    void *clientData,	/* Token for container window. */
+    ClientData clientData,	/* Token for container window. */
     XEvent *eventPtr)		/* ResizeRequest event. */
 {
     Container *containerPtr = (Container *)clientData;
@@ -930,7 +969,7 @@ EmbedActivateProc(
 
 static void
 EmbedFocusProc(
-    void *clientData,	/* Token for container window. */
+    ClientData clientData,	/* Token for container window. */
     XEvent *eventPtr)		/* ResizeRequest event. */
 {
     Container *containerPtr = (Container *)clientData;
@@ -1041,7 +1080,7 @@ EmbedGeometryRequest(
 
 static void
 EmbedSendConfigure(
-    TCL_UNUSED(Container *))	/* Information about the embedding. */
+    Container *containerPtr)	/* Information about the embedding. */
 {
 }
 
@@ -1151,30 +1190,30 @@ EmbedWindowDeleted(
 
 void
 TkpShowBusyWindow(
-    TCL_UNUSED(TkBusy))
+    TkBusy busy)
 {
 }
 
 void
 TkpHideBusyWindow(
-    TCL_UNUSED(TkBusy))
+    TkBusy busy)
 {
 }
 
 void
 TkpMakeTransparentWindowExist(
-    TCL_UNUSED(Tk_Window),		/* Token for window. */
-    TCL_UNUSED(Window))		/* Parent window. */
+    Tk_Window tkwin,		/* Token for window. */
+    Window parent)		/* Parent window. */
 {
 }
 
 void
 TkpCreateBusy(
-    TCL_UNUSED(Tk_FakeWin *),
-    TCL_UNUSED(Tk_Window),
-    TCL_UNUSED(Window *),
-    TCL_UNUSED(Tk_Window),
-    TCL_UNUSED(TkBusy))
+    Tk_FakeWin *winPtr,
+    Tk_Window tkRef,
+    Window* parentPtr,
+    Tk_Window tkParent,
+    TkBusy busy)
 {
 }
 

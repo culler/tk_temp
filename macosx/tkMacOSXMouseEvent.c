@@ -13,7 +13,7 @@
 
 #include "tkMacOSXPrivate.h"
 #include "tkMacOSXWm.h"
-#include "tkMacOSXInt.h"
+#include "tkMacOSXEvent.h"
 #include "tkMacOSXDebug.h"
 #include "tkMacOSXConstants.h"
 
@@ -81,7 +81,7 @@ enum {
     NSEventType eventType = [theEvent type];
     TKContentView *contentView = [eventWindow contentView];
     NSPoint location = [theEvent locationInWindow];
-    //NSPoint viewLocation = [contentView convertPoint:location fromView:nil];
+    NSPoint viewLocation = [contentView convertPoint:location fromView:nil];
     TkWindow *winPtr = NULL, *grabWinPtr, *scrollTarget = NULL;
     Tk_Window tkwin = NULL, capture, target;
     NSPoint local, global;
@@ -110,8 +110,7 @@ enum {
      * window attribute set to nil.
      */
 
-    if (![eventWindow isMemberOfClass:[TKWindow class]] &&
-	![eventWindow isMemberOfClass:[TKPanel class]]) {
+    if (![eventWindow isMemberOfClass:[TKWindow class]]) {
 	if ([theEvent timestamp] == 0) {
 	    isTestingEvent = YES;
 	    eventWindow = [NSApp keyWindow];
@@ -124,20 +123,17 @@ enum {
 	if (!isTestingEvent && !isMotionEvent) {
 	    return theEvent;
 	}
-    } else if (!NSPointInRect(location, [contentView bounds])) {
+    } else if (!NSPointInRect(viewLocation, [contentView bounds])) {
 	isOutside = YES;
     }
     button = [theEvent buttonNumber] + Button1;
-    if ((button & -2) == Button2) {
-	button ^= 1; /* Swap buttons 2/3 */
-    }
     switch (eventType) {
     case NSRightMouseUp:
     case NSOtherMouseUp:
-	buttonState &= ~Tk_GetButtonMask(button);
+	buttonState &= ~TkGetButtonMask(button);
 	break;
     case NSLeftMouseDragged:
-	buttonState |= Tk_GetButtonMask(button);
+	buttonState |= TkGetButtonMask(button);
 	if (![NSApp tkDragTarget]) {
 	    if (isOutside) {
 		ignoreDrags = YES;
@@ -157,7 +153,7 @@ enum {
 	isMotionEvent = YES;
     case NSRightMouseDown:
     case NSOtherMouseDown:
-	buttonState |= Tk_GetButtonMask(button);
+	buttonState |= TkGetButtonMask(button);
 	break;
     case NSMouseEntered:
 	if (![eventWindow isKeyWindow] || isOutside) {
@@ -184,7 +180,7 @@ enum {
 	    ignoreDrags = NO;
 	    return theEvent;
 	}
-	buttonState &= ~Tk_GetButtonMask(Button1);
+	buttonState &= ~TkGetButtonMask(Button1);
 	break;
     case NSLeftMouseDown:
 
@@ -199,8 +195,8 @@ enum {
 	 * Tk_UpdatePointer showing the button as up.
 	 */
 
-	if ([NSApp tkButtonState] & Tk_GetButtonMask(Button1)) {
-	    int fakeState = [NSApp tkButtonState] & ~Tk_GetButtonMask(Button1);
+	if ([NSApp tkButtonState] & TkGetButtonMask(Button1)) {
+	    int fakeState = [NSApp tkButtonState] & ~TkGetButtonMask(Button1);
 	    int x = location.x;
 	    int y = floor(TkMacOSXZeroScreenHeight() - location.y);
 	    Tk_UpdatePointer((Tk_Window) [NSApp tkEventTarget], x, y, fakeState);
@@ -240,10 +236,10 @@ enum {
 	    NSRect bounds = [contentView bounds];
 	    NSRect grip = NSMakeRect(bounds.size.width - 10, 0, 10, 10);
 	    bounds = NSInsetRect(bounds, 2.0, 2.0);
-	    if (!NSPointInRect(location, bounds)) {
+	    if (!NSPointInRect(viewLocation, bounds)) {
 		return theEvent;
 	    }
-	    if (NSPointInRect(location, grip)) {
+	    if (NSPointInRect(viewLocation, grip)) {
 		return theEvent;
 	    }
 	    if ([NSApp tkLiveResizeEnded]) {
@@ -276,7 +272,7 @@ enum {
 		target = (Tk_Window) newFocus;
 	    }
 	}
-	buttonState |= Tk_GetButtonMask(Button1);
+	buttonState |= TkGetButtonMask(Button1);
 	break;
     case NSMouseMoved:
 	if (eventWindow && eventWindow != [NSApp keyWindow]) {
@@ -360,7 +356,7 @@ enum {
     local.x = floor(local.x);
     local.y = floor(eventWindow.frame.size.height - local.y);
     if (Tk_IsEmbedded(winPtr)) {
-	TkWindow *contPtr = (TkWindow *)Tk_GetOtherWindow((Tk_Window)winPtr);
+	TkWindow *contPtr = TkpGetOtherWindow(winPtr);
 	if (Tk_IsTopLevel(contPtr)) {
 	    local.x -= contPtr->wmInfoPtr->xInParent;
 	    local.y -= contPtr->wmInfoPtr->yInParent;
@@ -501,12 +497,11 @@ enum {
 	     * expects.
 	     */
 
-	    state |= Tk_GetButtonMask(Button1);
+	    state |= TkGetButtonMask(Button1);
 	}
 	if (eventType == NSMouseEntered) {
-	    Tk_Window new_win = Tk_CoordsToWindow(global.x, global.y,
-		 (Tk_Window) [NSApp tkPointerWindow]);
-	    Tk_UpdatePointer(new_win, global.x, global.y, state);
+	    Tk_UpdatePointer((Tk_Window) [NSApp tkPointerWindow],
+				 global.x, global.y, state);
 	} else if (eventType == NSMouseExited) {
 	    if ([NSApp tkDragTarget]) {
 	    	Tk_UpdatePointer((Tk_Window) [NSApp tkDragTarget],
@@ -544,11 +539,11 @@ enum {
 	    Tk_UpdatePointer(target, global.x, global.y, state);
 	}
     } else {
-	static unsigned long scrollCounter = 0;
-	int delta;
-	CGFloat Delta;
-	Bool deltaIsPrecise = [theEvent hasPreciseScrollingDeltas];
+	CGFloat delta;
+	int coarseDelta;
 	XEvent xEvent = {0};
+
+	xEvent.type = MouseWheelEvent;
 	xEvent.xbutton.x = win_x;
 	xEvent.xbutton.y = win_y;
 	xEvent.xbutton.x_root = global.x;
@@ -556,38 +551,24 @@ enum {
 	xEvent.xany.send_event = false;
 	xEvent.xany.display = Tk_Display(target);
 	xEvent.xany.window = Tk_WindowId(target);
-	if (deltaIsPrecise) {
-	    int deltaX = [theEvent scrollingDeltaX];
-	    int deltaY = [theEvent scrollingDeltaY];
-	    delta = (deltaX << 16) | (deltaY & 0xffff);
-	    if (delta != 0) {
-	     	xEvent.type = TouchpadScroll;
-	     	xEvent.xbutton.state = state;
-	     	xEvent.xkey.keycode = delta;
-	     	xEvent.xany.serial = scrollCounter++;
-	     	Tk_QueueWindowEvent(&xEvent, TCL_QUEUE_TAIL);
-	    }
-	} else {
-	    /*
-	     * A low precision scroll is 120 or -120 wheel units per click.
-	     * Each click generates one event.
-	     */
-	    Delta = [theEvent scrollingDeltaY];
-	    if (Delta != 0.0) {
-		xEvent.type = MouseWheelEvent;
-		xEvent.xbutton.state = state;
-		xEvent.xkey.keycode = Delta > 0.0 ? 120 : -120;
-		xEvent.xany.serial = LastKnownRequestProcessed(Tk_Display(tkwin));
-		Tk_QueueWindowEvent(&xEvent, TCL_QUEUE_TAIL);
-	    }
-	    Delta = [theEvent scrollingDeltaX];
-	    if (Delta != 0.0) {
-		xEvent.type = MouseWheelEvent;
-		xEvent.xbutton.state = state | ShiftMask;
-		xEvent.xkey.keycode = Delta > 0 ? 120 : -120;
-		xEvent.xany.serial = LastKnownRequestProcessed(Tk_Display(tkwin));
-		Tk_QueueWindowEvent(&xEvent, TCL_QUEUE_TAIL);
-	    }
+
+	delta = [theEvent deltaY];
+	if (delta != 0.0) {
+	    coarseDelta = (delta > -1.0 && delta < 1.0) ?
+		    (signbit(delta) ? -1 : 1) : lround(delta);
+	    xEvent.xbutton.state = state;
+	    xEvent.xkey.keycode = coarseDelta;
+	    xEvent.xany.serial = LastKnownRequestProcessed(Tk_Display(tkwin));
+	    Tk_QueueWindowEvent(&xEvent, TCL_QUEUE_TAIL);
+	}
+	delta = [theEvent deltaX];
+	if (delta != 0.0) {
+	    coarseDelta = (delta > -1.0 && delta < 1.0) ?
+		    (signbit(delta) ? -1 : 1) : lround(delta);
+	    xEvent.xbutton.state = state | ShiftMask;
+	    xEvent.xkey.keycode = coarseDelta;
+	    xEvent.xany.serial = LastKnownRequestProcessed(Tk_Display(tkwin));
+	    Tk_QueueWindowEvent(&xEvent, TCL_QUEUE_TAIL);
 	}
     }
 
@@ -598,7 +579,7 @@ enum {
      * the mouse button outside of a posted combobox.  See ticket [eb26d4ec8e].
      */
 
-    capture = TkpGetCapture();
+    capture = TkMacOSXGetCapture();
     if (capture && eventType == NSLeftMouseDown) {
 	Tk_Window w;
 	for (w = target; w != NULL;  w = Tk_Parent(w)) {
@@ -832,7 +813,7 @@ GenerateButtonEvent(
     if ((medPtr->activeNonFloating == NULL)
 	    || ((!(TkpIsWindowFloating(medPtr->whichWin))
 	    && (medPtr->activeNonFloating != medPtr->whichWin))
-	    && TkpGetCapture() == NULL)) {
+	    && TkMacOSXGetCapture() == NULL)) {
 	return false;
     }
 #endif
@@ -884,9 +865,9 @@ TkpWarpPointer(
     CGWarpMouseCursorPosition(pt);
 
     if (dispPtr->warpWindow) {
-	TkGenerateButtonEventForXPointer(Tk_WindowId(dispPtr->warpWindow));
+        TkGenerateButtonEventForXPointer(Tk_WindowId(dispPtr->warpWindow));
     } else {
-	TkGenerateButtonEventForXPointer(None);
+        TkGenerateButtonEventForXPointer(None);
     }
 }
 
@@ -921,7 +902,7 @@ TkpSetCapture(
 /*
  *----------------------------------------------------------------------
  *
- * TkpGetCapture --
+ * TkMacOSXGetCapture --
  *
  * Results:
  *	Returns the current grab window
@@ -933,7 +914,7 @@ TkpSetCapture(
  */
 
 Tk_Window
-TkpGetCapture(void)
+TkMacOSXGetCapture(void)
 {
     return captureWinPtr;
 }

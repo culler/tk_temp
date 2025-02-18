@@ -14,8 +14,34 @@
  */
 
 #include "tkMacOSXPrivate.h"
-#include "tkMacOSXInt.h"
+#include "tkMacOSXEvent.h"
 #include "tkMacOSXConstants.h"
+
+#ifdef USE_TCL_STUBS
+#ifdef __cplusplus
+extern "C" {
+#endif
+/*  Little hack to eliminate the need for "tclInt.h" here:
+    Just copy a small portion of TclIntPlatStubs, just
+    enough to make it work. See [600b72bfbc] */
+typedef struct {
+    int magic;
+    void *hooks;
+    void (*dummy[19]) (void); /* dummy entries 0-18, not used */
+    void (*tclMacOSXNotifierAddRunLoopMode) (const void *runLoopMode); /* 19 */
+} TclIntPlatStubs;
+extern const TclIntPlatStubs *tclIntPlatStubsPtr;
+#ifdef __cplusplus
+}
+#endif
+#define TclMacOSXNotifierAddRunLoopMode \
+	(tclIntPlatStubsPtr->tclMacOSXNotifierAddRunLoopMode) /* 19 */
+#elif TCL_MINOR_VERSION < 7
+    extern void TclMacOSXNotifierAddRunLoopMode(const void *runLoopMode);
+#else
+    extern void Tcl_MacOSXNotifierAddRunLoopMode(const void *runLoopMode);
+#   define TclMacOSXNotifierAddRunLoopMode Tcl_MacOSXNotifierAddRunLoopMode
+#endif
 #import <objc/objc-auto.h>
 
 /* This is not used for anything at the moment. */
@@ -27,9 +53,9 @@ static Tcl_ThreadDataKey dataKey;
 #define TSD_INIT() ThreadSpecificData *tsdPtr = (ThreadSpecificData *) \
 	Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData))
 
-static void TkMacOSXNotifyExitHandler(void *clientData);
-static void TkMacOSXEventsSetupProc(void *clientData, int flags);
-static void TkMacOSXEventsCheckProc(void *clientData, int flags);
+static void TkMacOSXNotifyExitHandler(ClientData clientData);
+static void TkMacOSXEventsSetupProc(ClientData clientData, int flags);
+static void TkMacOSXEventsCheckProc(ClientData clientData, int flags);
 
 #ifdef TK_MAC_DEBUG_EVENTS
 static const char *Tk_EventName[39] = {
@@ -76,7 +102,7 @@ static const char *Tk_EventName[39] = {
 
 static Tk_RestrictAction
 InspectQueueRestrictProc(
-     void *arg,
+     ClientData arg,
      XEvent *eventPtr)
 {
     XVirtualEvent* ve = (XVirtualEvent*) eventPtr;
@@ -100,7 +126,7 @@ InspectQueueRestrictProc(
 
 void DebugPrintQueue(void)
 {
-    void *oldArg;
+    ClientData oldArg;
     Tk_RestrictProc *oldProc;
 
     oldProc = Tk_RestrictEvents(InspectQueueRestrictProc, NULL, &oldArg);
@@ -155,7 +181,7 @@ void DebugPrintQueue(void)
      * this block should be removed.
      */
 
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= 101500
+# if MAC_OS_X_VERSION_MAX_ALLOWED >= 101500
     if ([theEvent type] == NSAppKitDefined) {
 	static Bool aWindowIsMoving = NO;
 	switch([theEvent subtype]) {
@@ -268,8 +294,8 @@ Tk_MacOSXSetupTkNotifier(void)
 	    Tcl_CreateEventSource(TkMacOSXEventsSetupProc,
 		    TkMacOSXEventsCheckProc, NULL);
 	    TkCreateExitHandler(TkMacOSXNotifyExitHandler, NULL);
-	    Tcl_MacOSXNotifierAddRunLoopMode(NSEventTrackingRunLoopMode);
-	    Tcl_MacOSXNotifierAddRunLoopMode(NSModalPanelRunLoopMode);
+	    TclMacOSXNotifierAddRunLoopMode(NSEventTrackingRunLoopMode);
+	    TclMacOSXNotifierAddRunLoopMode(NSModalPanelRunLoopMode);
 	}
     }
 }
@@ -293,7 +319,7 @@ Tk_MacOSXSetupTkNotifier(void)
 
 static void
 TkMacOSXNotifyExitHandler(
-    TCL_UNUSED(void *))	/* Not used. */
+    ClientData clientData)	/* Not used. */
 {
     TSD_INIT();
 
@@ -310,12 +336,12 @@ TkMacOSXNotifyExitHandler(
  *       This static function is meant to be run as an idle task.  It attempts
  *       to redraw all views which have the tkNeedsDisplay property set to YES.
  *       This relies on a feature of [NSApp nextEventMatchingMask: ...] which
- *       is undocumented, namely that it sometimes blocks and calls updateLayer
+ *       is undocumented, namely that it sometimes blocks and calls drawRect
  *       for all views that need display before it returns.  We call it with
  *       deQueue=NO so that it will not change anything on the AppKit event
  *       queue, because we only want the side effect that it runs drawRect. The
  *       only times when any NSViews have the needsDisplay property set to YES
- *       are during execution of this function or in the setFrameSize method
+ *       are during execution of this function or in the addTkDirtyRect method
  *       of TKContentView.
  *
  *       The reason for running this function as an idle task is to try to
@@ -340,9 +366,9 @@ TkMacOSXNotifyExitHandler(
 
 void
 TkMacOSXDrawAllViews(
-    void *clientData)
+    ClientData clientData)
 {
-    int count = 0, *dirtyCount = (int *)clientData;
+       int count = 0, *dirtyCount = (int *)clientData;
 
     for (NSWindow *window in [NSApp windows]) {
 	if ([[window contentView] isMemberOfClass:[TKContentView class]]) {
@@ -352,6 +378,7 @@ TkMacOSXDrawAllViews(
 		if (dirtyCount) {
 		   continue;
 		}
+		[[view layer] setNeedsDisplayInRect:[view tkDirtyRect]];
 		[view setNeedsDisplay:YES];
 	    }
 	} else {
@@ -361,15 +388,26 @@ TkMacOSXDrawAllViews(
     if (dirtyCount) {
     	*dirtyCount = count;
     }
-
-    /*
-     * Trigger calls to updateLayer methods for the views flagged above.
-     */
-
     [NSApp nextEventMatchingMask:NSAnyEventMask
 		       untilDate:[NSDate distantPast]
 			  inMode:GetRunLoopMode(TkMacOSXGetModalSession())
 			 dequeue:NO];
+    for (NSWindow *window in [NSApp windows]) {
+	if ([[window contentView] isMemberOfClass:[TKContentView class]]) {
+	    TKContentView *view = [window contentView];
+
+	    /*
+	     * If we did not run drawRect, we set needsDisplay back to NO.
+	     * Note that if drawRect did run it may have added to Tk's dirty
+	     * rect, due to attempts to draw outside of drawRect's dirty rect.
+	     */
+
+	    if ([view needsDisplay]) {
+		[view setNeedsDisplay: NO];
+	    }
+	}
+    }
+    [NSApp setNeedsToDraw:NO];
 }
 
 /*
@@ -400,7 +438,7 @@ static Tcl_TimerToken ticker = NULL;
 
 static void
 Heartbeat(
-    TCL_UNUSED(void *))
+    ClientData clientData)
 {
 
     if (ticker) {
@@ -412,7 +450,7 @@ static const Tcl_Time zeroBlockTime = { 0, 0 };
 
 static void
 TkMacOSXEventsSetupProc(
-    TCL_UNUSED(void *),
+    ClientData clientData,
     int flags)
 {
     NSString *runloopMode = [[NSRunLoop currentRunLoop] currentMode];
@@ -436,11 +474,11 @@ TkMacOSXEventsSetupProc(
   	 */
 
 	NSEvent *currentEvent =
-		[NSApp nextEventMatchingMask:NSAnyEventMask
+	        [NSApp nextEventMatchingMask:NSAnyEventMask
 			untilDate:[NSDate distantPast]
 			inMode:GetRunLoopMode(TkMacOSXGetModalSession())
 			dequeue:NO];
-	if ((currentEvent)) {
+	if ((currentEvent) || [NSApp needsToDraw] ) {
 	    Tcl_SetMaxBlockTime(&zeroBlockTime);
 	    Tcl_DeleteTimerHandler(ticker);
 	    ticker = NULL;
@@ -478,7 +516,7 @@ TkMacOSXEventsSetupProc(
  */
 static void
 TkMacOSXEventsCheckProc(
-    TCL_UNUSED(void *),
+    ClientData clientData,
     int flags)
 {
     NSString *runloopMode = [[NSRunLoop currentRunLoop] currentMode];

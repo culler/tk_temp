@@ -3,7 +3,7 @@
  *
  *	This file contains image related utility functions.
  *
- * Copyright © 1995 Sun Microsystems, Inc.
+ * Copyright (c) 1995 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -11,9 +11,7 @@
 
 #include "tkInt.h"
 #include "xbytes.h"
-#ifdef _WIN32
-#   include "tkWinInt.h"
-#endif
+
 
 /*
  *----------------------------------------------------------------------
@@ -57,7 +55,7 @@ TkAlignImageData(
 	dataWidth += (alignment - (dataWidth % alignment));
     }
 
-    data = (char *)ckalloc(dataWidth * image->height);
+    data = ckalloc(dataWidth * image->height);
 
     destPtr = data;
     for (i = 0; i < image->height; i++) {

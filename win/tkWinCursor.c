@@ -3,7 +3,7 @@
  *
  *	This file contains Win32 specific cursor related routines.
  *
- * Copyright © 1995 Sun Microsystems, Inc.
+ * Copyright (c) 1995 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -98,9 +98,8 @@ TkGetCursorByName(
 {
     const struct CursorName *namePtr;
     TkWinCursor *cursorPtr;
-    Tcl_Size argc;
+    int argc;
     const char **argv = NULL;
-    (void)tkwin;
 
     /*
      * All cursor names are valid lists of one element (for
@@ -114,7 +113,7 @@ TkGetCursorByName(
 	goto badCursorSpec;
     }
 
-    cursorPtr = (TkWinCursor *)ckalloc(sizeof(TkWinCursor));
+    cursorPtr = ckalloc(sizeof(TkWinCursor));
     cursorPtr->info.cursor = (Tk_Cursor) cursorPtr;
     cursorPtr->winCursor = NULL;
     cursorPtr->system = 0;
@@ -132,7 +131,7 @@ TkGetCursorByName(
 
 	if (Tcl_IsSafe(interp)) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "can't get cursor from a file in a safe interpreter", TCL_INDEX_NONE));
+		    "can't get cursor from a file in a safe interpreter",-1));
 	    Tcl_SetErrorCode(interp, "TK", "SAFE", "CURSOR_FILE", NULL);
 	    ckfree(argv);
 	    ckfree(cursorPtr);
@@ -202,16 +201,6 @@ TkCreateCursorFromData(
     XColor fgColor,		/* Foreground color for cursor. */
     XColor bgColor)		/* Background color for cursor. */
 {
-    (void)tkwin;
-    (void)source;
-    (void)mask;
-    (void)width;
-    (void)height;
-    (void)xHot;
-    (void)yHot;
-    (void)fgColor;
-    (void)bgColor;
-
     return NULL;
 }
 
@@ -236,8 +225,6 @@ void
 TkpFreeCursor(
     TkCursor *cursorPtr)
 {
-    (void)cursorPtr;
-
     /* TkWinCursor *winCursorPtr = (TkWinCursor *) cursorPtr; */
 }
 

@@ -4,8 +4,8 @@
  *	This module provides procedures to draw borders in the
  *	three-dimensional Motif style.
  *
- * Copyright © 1990-1994 The Regents of the University of California.
- * Copyright © 1994-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1990-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -19,7 +19,7 @@
  * by Tk_GetReliefFromObj.
  */
 
-const char *const tkReliefStrings[] = {
+static const char *const reliefStrings[] = {
     "flat", "groove", "raised", "ridge", "solid", "sunken", NULL
 };
 
@@ -46,14 +46,12 @@ static void		ShiftLine(XPoint *p1Ptr, XPoint *p2Ptr,
  * is set.
  */
 
-const TkObjType tkBorderObjType = {
-    {"border",			/* name */
+const Tcl_ObjType tkBorderObjType = {
+    "border",			/* name */
     FreeBorderObjProc,		/* freeIntRepProc */
     DupBorderObjProc,		/* dupIntRepProc */
     NULL,			/* updateStringProc */
-    NULL,			/* setFromAnyProc */
-    TCL_OBJTYPE_V0},
-    0
+    NULL			/* setFromAnyProc */
 };
 
 /*
@@ -89,7 +87,7 @@ Tk_Alloc3DBorderFromObj(
 {
     TkBorder *borderPtr;
 
-    if (objPtr->typePtr != &tkBorderObjType.objType) {
+    if (objPtr->typePtr != &tkBorderObjType) {
 	InitBorderObj(objPtr);
     }
     borderPtr = (TkBorder *)objPtr->internalRep.twoPtrValue.ptr1;
@@ -625,7 +623,7 @@ Tk_GetReliefFromObj(
 				 * from. */
     int *resultPtr)		/* Where to place the answer. */
 {
-    return Tcl_GetIndexFromObjStruct(interp, objPtr, tkReliefStrings,
+    return Tcl_GetIndexFromObjStruct(interp, objPtr, reliefStrings,
 	    sizeof(char *), "relief", 0, resultPtr);
 }
 
@@ -680,7 +678,7 @@ Tk_GetRelief(
 	    Tcl_SetObjResult(interp,
 		    Tcl_ObjPrintf("bad relief \"%.50s\": must be %s",
 		    name, "flat, groove, raised, ridge, solid, or sunken"));
-	    Tcl_SetErrorCode(interp, "TK", "VALUE", "RELIEF", (char *)NULL);
+	    Tcl_SetErrorCode(interp, "TK", "VALUE", "RELIEF", NULL);
 	}
 	return TCL_ERROR;
     }
@@ -757,7 +755,7 @@ Tk_Draw3DPolygon(
     XPoint *pointPtr,		/* Array of points describing polygon. All
 				 * points must be absolute
 				 * (CoordModeOrigin). */
-    Tcl_Size numPoints,		/* Number of points at *pointPtr. */
+    int numPoints,		/* Number of points at *pointPtr. */
     int borderWidth,		/* Width of border, measured in pixels to the
 				 * left of the polygon's trajectory. May be
 				 * negative. */
@@ -770,8 +768,7 @@ Tk_Draw3DPolygon(
     XPoint *p1Ptr, *p2Ptr;
     TkBorder *borderPtr = (TkBorder *) border;
     GC gc;
-    Tcl_Size i;
-    int lightOnLeft, dx, dy, parallel, pointsSeen;
+    int i, lightOnLeft, dx, dy, parallel, pointsSeen;
     Display *display = Tk_Display(tkwin);
 
     if (borderPtr->lightGC == NULL) {
@@ -844,9 +841,9 @@ Tk_Draw3DPolygon(
      */
 
     pointsSeen = 0;
-    for (i = 0, p1Ptr = &pointPtr[numPoints-2], p2Ptr = p1Ptr+1;
-	    i < numPoints + 2; i++, p1Ptr = p2Ptr, p2Ptr++) {
-	if ((i == 1) || (i == numPoints + 1)) {
+    for (i = -2, p1Ptr = &pointPtr[numPoints-2], p2Ptr = p1Ptr+1;
+	    i < numPoints; i++, p1Ptr = p2Ptr, p2Ptr++) {
+	if ((i == -1) || (i == numPoints-1)) {
 	    p2Ptr = pointPtr;
 	}
 	if ((p2Ptr->x == p1Ptr->x) && (p2Ptr->y == p1Ptr->y)) {
@@ -1027,7 +1024,7 @@ Tk_Fill3DPolygon(
     XPoint *pointPtr,		/* Array of points describing polygon. All
 				 * points must be absolute
 				 * (CoordModeOrigin). */
-    Tcl_Size numPoints,		/* Number of points at *pointPtr. */
+    int numPoints,		/* Number of points at *pointPtr. */
     int borderWidth,		/* Width of border, measured in pixels to the
 				 * left of the polygon's trajectory. May be
 				 * negative. */
@@ -1039,7 +1036,7 @@ Tk_Fill3DPolygon(
     TkBorder *borderPtr = (TkBorder *) border;
 
     XFillPolygon(Tk_Display(tkwin), drawable, borderPtr->bgGC,
-	    pointPtr, (int)numPoints, Complex, CoordModeOrigin);
+	    pointPtr, numPoints, Complex, CoordModeOrigin);
     if (leftRelief != TK_RELIEF_FLAT) {
 	Tk_Draw3DPolygon(tkwin, drawable, border, pointPtr, numPoints,
 		borderWidth, leftRelief);
@@ -1252,7 +1249,7 @@ Tk_Get3DBorderFromObj(
     Tcl_HashEntry *hashPtr;
     TkDisplay *dispPtr = ((TkWindow *) tkwin)->dispPtr;
 
-    if (objPtr->typePtr != &tkBorderObjType.objType) {
+    if (objPtr->typePtr != &tkBorderObjType) {
 	InitBorderObj(objPtr);
     }
 
@@ -1344,7 +1341,7 @@ InitBorderObj(
     if ((typePtr != NULL) && (typePtr->freeIntRepProc != NULL)) {
 	typePtr->freeIntRepProc(objPtr);
     }
-    objPtr->typePtr = &tkBorderObjType.objType;
+    objPtr->typePtr = &tkBorderObjType;
     objPtr->internalRep.twoPtrValue.ptr1 = NULL;
 }
 
@@ -1389,47 +1386,13 @@ TkDebugBorder(
 	    Tcl_Obj *objPtr = Tcl_NewObj();
 
 	    Tcl_ListObjAppendElement(NULL, objPtr,
-		    Tcl_NewWideIntObj(borderPtr->resourceRefCount));
+		    Tcl_NewIntObj(borderPtr->resourceRefCount));
 	    Tcl_ListObjAppendElement(NULL, objPtr,
-		    Tcl_NewWideIntObj(borderPtr->objRefCount));
+		    Tcl_NewIntObj(borderPtr->objRefCount));
 	    Tcl_ListObjAppendElement(NULL, resultPtr, objPtr);
 	}
     }
     return resultPtr;
-}
-
-/*
- *--------------------------------------------------------------
- *
- * Tk_Get3BorderColors --
- *
- *	Given a Tk_3DBorder determine its 3 colors.
- *
- * Results:
- *	None.
- *
- * Side effects:
- *	None.
- *
- *--------------------------------------------------------------
- */
-
-void
-Tk_Get3DBorderColors(
-    Tk_3DBorder border,
-    XColor *bgColorPtr,
-    XColor *darkColorPtr,
-    XColor *lightColorPtr)
-{
-    if (bgColorPtr) {
-	*bgColorPtr = *((TkBorder *)border)->bgColorPtr;
-    }
-    if (darkColorPtr) {
-	*darkColorPtr = *((TkBorder *) border)->darkColorPtr;
-    }
-    if (lightColorPtr) {
-	*lightColorPtr = *((TkBorder *) border)->lightColorPtr;
-    }
 }
 
 /*

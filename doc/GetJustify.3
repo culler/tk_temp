@@ -15,14 +15,13 @@ Tk_GetJustifyFromObj, Tk_GetJustify, Tk_NameOfJustify \- translate between strin
 \fB#include <tk.h>\fR
 .sp
 int
-\fBTk_GetJustifyFromObj\fR(\fIinterp, objPtr, justifyPtr\fR)
+\fBTk_GetJustifyFromObj(\fIinterp, objPtr, justifyPtr\fB)\fR
 .sp
 int
-\fBTk_GetJustify\fR(\fIinterp, string, justifyPtr\fR)
+\fBTk_GetJustify(\fIinterp, string, justifyPtr\fB)\fR
 .sp
 const char *
-\fBTk_NameOfJustify\fR(\fIjustify\fR)
-.fi
+\fBTk_NameOfJustify(\fIjustify\fB)\fR
 .SH ARGUMENTS
 .AS "Tk_Justify" *justifyPtr
 .AP Tcl_Interp *interp in
@@ -49,13 +48,16 @@ Justification style (one of the values listed below).
 \fBTk_GetJustifyFromObj\fR places in \fI*justifyPtr\fR the justify value
 corresponding to \fIobjPtr\fR's value.
 This value will be one of the following:
-.IP \fBTK_JUSTIFY_LEFT\fR
+.TP
+\fBTK_JUSTIFY_LEFT\fR
 Means that the text on each line should start at the left edge of
 the line;  as a result, the right edges of lines may be ragged.
-.IP \fBTK_JUSTIFY_RIGHT\fR
+.TP
+\fBTK_JUSTIFY_RIGHT\fR
 Means that the text on each line should end at the right edge of
 the line;  as a result, the left edges of lines may be ragged.
-.IP \fBTK_JUSTIFY_CENTER\fR
+.TP
+\fBTK_JUSTIFY_CENTER\fR
 Means that the text on each line should be centered;  as a result,
 both the left and right edges of lines may be ragged.
 .PP

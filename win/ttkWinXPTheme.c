@@ -2,9 +2,9 @@
  * Tk theme engine which uses the Windows XP "Visual Styles" API
  * Adapted from Georgios Petasis' XP theme patch.
  *
- * Copyright © 2003 Georgios Petasis, petasis@iit.demokritos.gr.
- * Copyright © 2003 Joe English
- * Copyright © 2003 Pat Thoyts
+ * Copyright (c) 2003 Georgios Petasis, petasis@iit.demokritos.gr.
+ * Copyright (c) 2003 Joe English
+ * Copyright (c) 2003 Pat Thoyts
  *
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -15,18 +15,30 @@
  *  	shellcc/platform/commctls/userex/refentry.asp >
  */
 
+#define WINVER 0x0501	/* Requires Windows XP APIs */
+
 #include "tkWinInt.h"
+#ifndef HAVE_UXTHEME_H
+/* Stub for platforms that lack the XP theme API headers: */
+int TtkXPTheme_Init(Tcl_Interp *interp, HWND hwnd) { return TCL_OK; }
+#else
+
 #include <windows.h>
 #include <uxtheme.h>
-#include <vssym32.h>
-#include "ttk/ttkThemeInt.h"
+#if defined(HAVE_VSSYM32_H) || _MSC_VER > 1500
+#   include <vssym32.h>
+#else
+#   include <tmschema.h>
+#endif
+
+#include "ttk/ttkTheme.h"
 
 typedef HTHEME  (STDAPICALLTYPE OpenThemeDataProc)(HWND hwnd,
 		 LPCWSTR pszClassList);
 typedef HRESULT (STDAPICALLTYPE CloseThemeDataProc)(HTHEME hTheme);
 typedef HRESULT (STDAPICALLTYPE DrawThemeBackgroundProc)(HTHEME hTheme,
-		 HDC hdc, int iPartId, int iStateId, const RECT *pRect,
-		 OPTIONAL const RECT *pClipRect);
+                 HDC hdc, int iPartId, int iStateId, const RECT *pRect,
+                 OPTIONAL const RECT *pClipRect);
 typedef HRESULT (STDAPICALLTYPE DrawThemeEdgeProc)(HTHEME hTheme,
 		 HDC hdc, int iPartId, int iStateId, const RECT *pDestRect,
 		 unsigned int uEdge, unsigned int uFlags,
@@ -165,12 +177,12 @@ BoxToRect(Ttk_Box b)
 /*
  * Map Tk state bitmaps to XP style enumerated values.
  */
-static const Ttk_StateTable null_statemap[] = { {0,0,0} };
+static Ttk_StateTable null_statemap[] = { {0,0,0} };
 
 /*
  * Pushbuttons (Tk: "Button")
  */
-static const Ttk_StateTable pushbutton_statemap[] =
+static Ttk_StateTable pushbutton_statemap[] =
 {
     { PBS_DISABLED, 	TTK_STATE_DISABLED, 0 },
     { PBS_PRESSED, 	TTK_STATE_PRESSED, 0 },
@@ -182,7 +194,7 @@ static const Ttk_StateTable pushbutton_statemap[] =
 /*
  * Checkboxes (Tk: "Checkbutton")
  */
-static const Ttk_StateTable checkbox_statemap[] =
+static Ttk_StateTable checkbox_statemap[] =
 {
 {CBS_MIXEDDISABLED, 	TTK_STATE_ALTERNATE|TTK_STATE_DISABLED, 0},
 {CBS_MIXEDPRESSED, 	TTK_STATE_ALTERNATE|TTK_STATE_PRESSED, 0},
@@ -201,7 +213,7 @@ static const Ttk_StateTable checkbox_statemap[] =
 /*
  * Radiobuttons:
  */
-static const Ttk_StateTable radiobutton_statemap[] =
+static Ttk_StateTable radiobutton_statemap[] =
 {
 {RBS_UNCHECKEDDISABLED,	TTK_STATE_ALTERNATE|TTK_STATE_DISABLED, 0},
 {RBS_UNCHECKEDNORMAL,	TTK_STATE_ALTERNATE, 0},
@@ -218,7 +230,7 @@ static const Ttk_StateTable radiobutton_statemap[] =
 /*
  * Groupboxes (tk: "frame")
  */
-static const Ttk_StateTable groupbox_statemap[] =
+static Ttk_StateTable groupbox_statemap[] =
 {
 {GBS_DISABLED,	TTK_STATE_DISABLED, 0},
 {GBS_NORMAL,	0,0 }
@@ -227,7 +239,7 @@ static const Ttk_StateTable groupbox_statemap[] =
 /*
  * Edit fields (tk: "entry")
  */
-static const Ttk_StateTable edittext_statemap[] =
+static Ttk_StateTable edittext_statemap[] =
 {
     { ETS_DISABLED,	TTK_STATE_DISABLED, 0 },
     { ETS_READONLY,	TTK_STATE_READONLY, 0 },
@@ -242,7 +254,7 @@ static const Ttk_StateTable edittext_statemap[] =
  * Same as edittext_statemap, but doesn't use ETS_READONLY
  * (fixes: #1032409)
  */
-static const Ttk_StateTable combotext_statemap[] =
+static Ttk_StateTable combotext_statemap[] =
 {
     { ETS_DISABLED,	TTK_STATE_DISABLED, 0 },
     { ETS_FOCUSED,	TTK_STATE_FOCUS, 0 },
@@ -253,7 +265,7 @@ static const Ttk_StateTable combotext_statemap[] =
 /*
  * Combobox button: (CBP_DROPDOWNBUTTON)
  */
-static const Ttk_StateTable combobox_statemap[] = {
+static Ttk_StateTable combobox_statemap[] = {
     { CBXS_DISABLED,	TTK_STATE_DISABLED, 0 },
     { CBXS_PRESSED, 	TTK_STATE_PRESSED, 0 },
     { CBXS_HOT, 	TTK_STATE_ACTIVE, 0 },
@@ -264,7 +276,7 @@ static const Ttk_StateTable combobox_statemap[] = {
 /*
  * Toolbar buttons (TP_BUTTON):
  */
-static const Ttk_StateTable toolbutton_statemap[] =  {
+static Ttk_StateTable toolbutton_statemap[] =  {
     { TS_DISABLED, 	TTK_STATE_DISABLED, 0 },
     { TS_PRESSED,	TTK_STATE_PRESSED, 0 },
     { TS_HOTCHECKED,	TTK_STATE_SELECTED|TTK_STATE_ACTIVE, 0 },
@@ -276,7 +288,7 @@ static const Ttk_StateTable toolbutton_statemap[] =  {
 /*
  * Scrollbars (Tk: "Scrollbar.thumb")
  */
-static const Ttk_StateTable scrollbar_statemap[] =
+static Ttk_StateTable scrollbar_statemap[] =
 {
     { SCRBS_DISABLED, 	TTK_STATE_DISABLED, 0 },
     { SCRBS_PRESSED, 	TTK_STATE_PRESSED, 0 },
@@ -284,7 +296,7 @@ static const Ttk_StateTable scrollbar_statemap[] =
     { SCRBS_NORMAL, 	0, 0 }
 };
 
-static const Ttk_StateTable uparrow_statemap[] =
+static Ttk_StateTable uparrow_statemap[] =
 {
     { ABS_UPDISABLED,	TTK_STATE_DISABLED, 0 },
     { ABS_UPPRESSED, 	TTK_STATE_PRESSED, 0 },
@@ -292,7 +304,7 @@ static const Ttk_StateTable uparrow_statemap[] =
     { ABS_UPNORMAL, 	0, 0 }
 };
 
-static const Ttk_StateTable downarrow_statemap[] =
+static Ttk_StateTable downarrow_statemap[] =
 {
     { ABS_DOWNDISABLED,	TTK_STATE_DISABLED, 0 },
     { ABS_DOWNPRESSED, 	TTK_STATE_PRESSED, 0 },
@@ -300,7 +312,7 @@ static const Ttk_StateTable downarrow_statemap[] =
     { ABS_DOWNNORMAL, 	0, 0 }
 };
 
-static const Ttk_StateTable leftarrow_statemap[] =
+static Ttk_StateTable leftarrow_statemap[] =
 {
     { ABS_LEFTDISABLED,	TTK_STATE_DISABLED, 0 },
     { ABS_LEFTPRESSED, 	TTK_STATE_PRESSED, 0 },
@@ -308,7 +320,7 @@ static const Ttk_StateTable leftarrow_statemap[] =
     { ABS_LEFTNORMAL, 	0, 0 }
 };
 
-static const Ttk_StateTable rightarrow_statemap[] =
+static Ttk_StateTable rightarrow_statemap[] =
 {
     { ABS_RIGHTDISABLED,TTK_STATE_DISABLED, 0 },
     { ABS_RIGHTPRESSED, TTK_STATE_PRESSED, 0 },
@@ -316,7 +328,7 @@ static const Ttk_StateTable rightarrow_statemap[] =
     { ABS_RIGHTNORMAL, 	0, 0 }
 };
 
-static const Ttk_StateTable spinbutton_statemap[] =
+static Ttk_StateTable spinbutton_statemap[] =
 {
     { DNS_DISABLED,	TTK_STATE_DISABLED, 0 },
     { DNS_PRESSED,	TTK_STATE_PRESSED,  0 },
@@ -327,7 +339,7 @@ static const Ttk_StateTable spinbutton_statemap[] =
 /*
  * Trackbar thumb: (Tk: "scale slider")
  */
-static const Ttk_StateTable scale_statemap[] =
+static Ttk_StateTable scale_statemap[] =
 {
     { TUS_DISABLED, 	TTK_STATE_DISABLED, 0 },
     { TUS_PRESSED, 	TTK_STATE_PRESSED, 0 },
@@ -336,7 +348,7 @@ static const Ttk_StateTable scale_statemap[] =
     { TUS_NORMAL, 	0, 0 }
 };
 
-static const Ttk_StateTable tabitem_statemap[] =
+static Ttk_StateTable tabitem_statemap[] =
 {
     { TIS_DISABLED,     TTK_STATE_DISABLED, 0 },
     { TIS_SELECTED,     TTK_STATE_SELECTED, 0 },
@@ -371,11 +383,11 @@ static const Ttk_StateTable tabitem_statemap[] =
 typedef struct 	/* XP element specifications */
 {
     const char	*elementName;	/* Tk theme engine element name */
-    const Ttk_ElementSpec *elementSpec;
+    Ttk_ElementSpec *elementSpec;
     				/* Element spec (usually GenericElementSpec) */
     LPCWSTR	className;	/* Windows window class name */
     int 	partId;		/* BP_PUSHBUTTON, BP_CHECKBUTTON, etc. */
-    const Ttk_StateTable *statemap;	/* Map Tk states to XP states */
+    Ttk_StateTable *statemap;	/* Map Tk states to XP states */
     Ttk_Padding	padding;	/* See NOTE-GetThemeMargins */
     unsigned  	flags;
 #   define 	IGNORE_THEMESIZE 0x80000000U /* See NOTE-GetThemePartSize */
@@ -426,10 +438,10 @@ static void DestroyElementData(void *clientData)
 {
     ElementData *elementData = (ElementData *)clientData;
     if (elementData->info->flags & HEAP_ELEMENT) {
-	ckfree((void *)elementData->info->statemap);
-	ckfree((void *)elementData->info->className);
-	ckfree((void *)elementData->info->elementName);
-	ckfree((void *)elementData->info);
+	ckfree((char *)elementData->info->statemap);
+	ckfree((char *)elementData->info->className);
+	ckfree((char *)elementData->info->elementName);
+	ckfree((char *)elementData->info);
     }
     ckfree(clientData);
 }
@@ -559,7 +571,7 @@ static void GenericElementDraw(
     FreeElementData(elementData);
 }
 
-static const Ttk_ElementSpec GenericElementSpec =
+static Ttk_ElementSpec GenericElementSpec =
 {
     TK_STYLE_VERSION_2,
     sizeof(NullElement),
@@ -599,7 +611,7 @@ GenericSizedElementSize(
 	*widthPtr /= 2;
 }
 
-static const Ttk_ElementSpec GenericSizedElementSpec = {
+static Ttk_ElementSpec GenericSizedElementSpec = {
     TK_STYLE_VERSION_2,
     sizeof(NullElement),
     TtkNullElementOptions,
@@ -629,7 +641,7 @@ SpinboxArrowElementSize(
     *heightPtr /= 2;
 }
 
-static const Ttk_ElementSpec SpinboxArrowElementSpec = {
+static Ttk_ElementSpec SpinboxArrowElementSpec = {
     TK_STYLE_VERSION_2,
     sizeof(NullElement),
     TtkNullElementOptions,
@@ -670,7 +682,7 @@ static void ThumbElementDraw(
     FreeElementData(elementData);
 }
 
-static const Ttk_ElementSpec ThumbElementSpec =
+static Ttk_ElementSpec ThumbElementSpec =
 {
     TK_STYLE_VERSION_2,
     sizeof(NullElement),
@@ -702,7 +714,7 @@ static void PbarElementSize(
     }
 }
 
-static const Ttk_ElementSpec PbarElementSpec =
+static Ttk_ElementSpec PbarElementSpec =
 {
     TK_STYLE_VERSION_2,
     sizeof(NullElement),
@@ -776,6 +788,7 @@ static void TabElementDraw(
     int partId = elementData->info->partId;
     int isSelected = (state & TTK_STATE_SELECTED);
     int stateId = Ttk_StateTableLookup(elementData->info->statemap, state);
+    RECT rc;
 
     if (mainInfoPtr != NULL) {
 	nbTabsStickBit = (Ttk_PositionSpec) mainInfoPtr->ttkNbTabsStickBit;
@@ -799,13 +812,13 @@ static void TabElementDraw(
 	    break;
     }
 
-    RECT rc = BoxToRect(b);
+    rc = BoxToRect(b);
 
     if (!InitElementData(elementData, tkwin, d))
 	return;
 
     if (nbTabsStickBit == TTK_STICK_S) {
-	if (state & TTK_STATE_FIRST) {
+	if (state & TTK_STATE_USER1) {
 	    partId = TABP_TABITEMLEFTEDGE;
 	}
 
@@ -851,7 +864,7 @@ static void TabElementDraw(
     FreeElementData(elementData);
 }
 
-static const Ttk_ElementSpec TabElementSpec =
+static Ttk_ElementSpec TabElementSpec =
 {
     TK_STYLE_VERSION_2,
     sizeof(NullElement),
@@ -866,14 +879,17 @@ static const Ttk_ElementSpec TabElementSpec =
  *	Generic element, but don't display at all if TTK_STATE_LEAF (=USER2) set
  */
 
-static const Ttk_StateTable header_statemap[] =
+#define TTK_STATE_OPEN TTK_STATE_USER1
+#define TTK_STATE_LEAF TTK_STATE_USER2
+
+static Ttk_StateTable header_statemap[] =
 {
     { HIS_PRESSED, 	TTK_STATE_PRESSED, 0 },
     { HIS_HOT,  	TTK_STATE_ACTIVE, 0 },
     { HIS_NORMAL, 	0,0 },
 };
 
-static const Ttk_StateTable treeview_statemap[] =
+static Ttk_StateTable treeview_statemap[] =
 {
     { TREIS_DISABLED, 	TTK_STATE_DISABLED, 0 },
     { TREIS_SELECTED,	TTK_STATE_SELECTED, 0},
@@ -881,7 +897,7 @@ static const Ttk_StateTable treeview_statemap[] =
     { TREIS_NORMAL, 	0,0 },
 };
 
-static const Ttk_StateTable tvpglyph_statemap[] =
+static Ttk_StateTable tvpglyph_statemap[] =
 {
     { GLPS_OPENED, 	TTK_STATE_OPEN, 0 },
     { GLPS_CLOSED, 	0,0 },
@@ -892,11 +908,11 @@ static void TreeIndicatorElementDraw(
     Drawable d, Ttk_Box b, Ttk_State state)
 {
     if (!(state & TTK_STATE_LEAF)) {
-	GenericElementDraw(clientData,elementRecord,tkwin,d,b,state);
+        GenericElementDraw(clientData,elementRecord,tkwin,d,b,state);
     }
 }
 
-static const Ttk_ElementSpec TreeIndicatorElementSpec =
+static Ttk_ElementSpec TreeIndicatorElementSpec =
 {
     TK_STYLE_VERSION_2,
     sizeof(NullElement),
@@ -927,9 +943,9 @@ typedef struct
 static const Ttk_ElementOptionSpec TextElementOptions[] =
 {
     { "-text", TK_OPTION_STRING,
-	offsetof(TextElement,textObj), "" },
+	Tk_Offset(TextElement,textObj), "" },
     { "-font", TK_OPTION_FONT,
-	offsetof(TextElement,fontObj), DEFAULT_FONT },
+	Tk_Offset(TextElement,fontObj), DEFAULT_FONT },
     { NULL }
 };
 
@@ -942,7 +958,7 @@ static void TextElementSize(
     RECT rc = {0, 0};
     HRESULT hr = S_OK;
     const char *src;
-    Tcl_Size len;
+    int len;
     Tcl_DString ds;
 
     if (!InitElementData(elementData, tkwin, 0))
@@ -981,7 +997,7 @@ static void TextElementDraw(
     RECT rc = BoxToRect(b);
     HRESULT hr = S_OK;
     const char *src;
-    Tcl_Size len;
+    int len;
     Tcl_DString ds;
 
     if (!InitElementData(elementData, tkwin, d))
@@ -1004,7 +1020,7 @@ static void TextElementDraw(
     FreeElementData(elementData);
 }
 
-static const Ttk_ElementSpec TextElementSpec =
+static Ttk_ElementSpec TextElementSpec =
 {
     TK_STYLE_VERSION_2,
     sizeof(TextElement),
@@ -1031,7 +1047,7 @@ TTK_LAYOUT("TMenubutton",
     TTK_NODE("Menubutton.dropdown", TTK_PACK_RIGHT|TTK_FILL_Y)
     TTK_GROUP("Menubutton.button", TTK_FILL_BOTH,
 	    TTK_GROUP("Menubutton.padding", TTK_FILL_X,
-		TTK_NODE("Menubutton.label", 0))))
+	        TTK_NODE("Menubutton.label", 0))))
 
 TTK_LAYOUT("Horizontal.TScrollbar",
     TTK_GROUP("Horizontal.Scrollbar.trough", TTK_FILL_X,
@@ -1070,7 +1086,7 @@ TTK_END_LAYOUT_TABLE
 
 /* name spec className partId statemap padding flags */
 
-static const ElementInfo ElementInfoTable[] = {
+static ElementInfo ElementInfoTable[] = {
     { "Checkbutton.indicator", &GenericElementSpec, L"BUTTON",
     	BP_CHECKBOX, checkbox_statemap, PAD(0, 0, 4, 0), PAD_MARGINS },
     { "Radiobutton.indicator", &GenericElementSpec, L"BUTTON",
@@ -1135,19 +1151,20 @@ static const ElementInfo ElementInfoTable[] = {
     { "NotebookPane.background", &GenericElementSpec, L"TAB",
     	TABP_BODY, null_statemap, NOPAD, 0 },
     { "Toolbutton.border", &GenericElementSpec, L"TOOLBAR",
-    	TP_BUTTON, toolbutton_statemap, NOPAD,0 },
+	TP_BUTTON, toolbutton_statemap, NOPAD, 0 },
     { "Menubutton.button", &GenericElementSpec, L"TOOLBAR",
-    	TP_SPLITBUTTON,toolbutton_statemap, NOPAD,0 },
-    { "Menubutton.dropdown", &GenericElementSpec, L"TOOLBAR",
-    	TP_SPLITBUTTONDROPDOWN,toolbutton_statemap, NOPAD,0 },
+	TP_SPLITBUTTON, toolbutton_statemap, NOPAD, 0 },
+    { "Menubutton.dropdown", &GenericSizedElementSpec, L"TOOLBAR",
+	TP_SPLITBUTTONDROPDOWN, toolbutton_statemap, NOPAD,
+	(SM_CXVSCROLL << 8) | SM_CYVSCROLL },
     { "Treeview.field", &GenericElementSpec, L"TREEVIEW",
 	TVP_TREEITEM, treeview_statemap, PAD(1, 1, 1, 1), IGNORE_THEMESIZE },
     { "Treeitem.indicator", &TreeIndicatorElementSpec, L"TREEVIEW",
     	TVP_GLYPH, tvpglyph_statemap, PAD(1,1,6,0), PAD_MARGINS },
     { "Treeheading.border", &GenericElementSpec, L"HEADER",
-    	HP_HEADERITEM, header_statemap, PAD(4,0,4,0),0 },
+	HP_HEADERITEM, header_statemap, PAD(4,0,4,0), 0 },
     { "sizegrip", &GenericElementSpec, L"STATUS",
-    	SP_GRIPPER, null_statemap, NOPAD,0 },
+	SP_GRIPPER, null_statemap, NOPAD, 0 },
     { "Spinbox.field", &GenericElementSpec, L"EDIT",
 	EP_EDITTEXT, edittext_statemap, PAD(1, 1, 1, 1), 0 },
     { "Spinbox.uparrow", &SpinboxArrowElementSpec, L"SPIN",
@@ -1158,9 +1175,9 @@ static const ElementInfo ElementInfoTable[] = {
 	PAD_MARGINS | ((SM_CXVSCROLL << 8) | SM_CYVSCROLL) },
 #ifdef BROKEN_TEXT_ELEMENT
     { "Labelframe.text", &TextElementSpec, L"BUTTON",
-    	BP_GROUPBOX, groupbox_statemap, NOPAD,0 },
+	BP_GROUPBOX, groupbox_statemap, NOPAD, 0 },
 #endif
-    { 0,0,0,0,0,NOPAD,0 }
+    { 0, 0, 0, 0, 0, NOPAD, 0 }
 };
 #undef PAD
 
@@ -1182,12 +1199,12 @@ GetSysFlagFromObj(Tcl_Interp *interp, Tcl_Obj *objPtr, int *resultPtr)
     };
 
     Tcl_Obj **objv;
-    Tcl_Size i, objc;
+    int i, objc;
 
     if (Tcl_ListObjGetElements(interp, objPtr, &objc, &objv) != TCL_OK)
 	return TCL_ERROR;
     if (objc != 2) {
-	Tcl_SetObjResult(interp, Tcl_NewStringObj("wrong # args", TCL_INDEX_NONE));
+	Tcl_SetObjResult(interp, Tcl_NewStringObj("wrong # args", -1));
 	Tcl_SetErrorCode(interp, "TCL", "WRONGARGS", NULL);
 	return TCL_ERROR;
     }
@@ -1219,7 +1236,7 @@ Ttk_CreateVsapiElement(
     void *clientData,
     Ttk_Theme theme,
     const char *elementName,
-    Tcl_Size objc,
+    int objc,
     Tcl_Obj *const objv[])
 {
     XPThemeData *themeData = (XPThemeData *)clientData;
@@ -1230,21 +1247,21 @@ Ttk_CreateVsapiElement(
     Ttk_StateTable *stateTable;
     Ttk_Padding pad = {0, 0, 0, 0};
     int flags = 0;
-    Tcl_Size length = 0;
+    int length = 0;
     char *name;
     LPWSTR wname;
-    const Ttk_ElementSpec *elementSpec = &GenericElementSpec;
+    Ttk_ElementSpec *elementSpec = &GenericElementSpec;
     Tcl_DString classBuf;
 
     static const char *const optionStrings[] =
-	{ "-halfheight", "-halfwidth", "-height", "-margins", "-padding",
-	  "-syssize", "-width", NULL };
-    enum { O_HALFHEIGHT, O_HALFWIDTH, O_HEIGHT, O_MARGINS, O_PADDING,
-	   O_SYSSIZE, O_WIDTH };
+	{ "-padding","-width","-height","-margins", "-syssize",
+	  "-halfheight", "-halfwidth", NULL };
+    enum { O_PADDING, O_WIDTH, O_HEIGHT, O_MARGINS, O_SYSSIZE,
+	   O_HALFHEIGHT, O_HALFWIDTH };
 
     if (objc < 2) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
-	    "missing required arguments 'class' and/or 'partId'", TCL_INDEX_NONE));
+	    "missing required arguments 'class' and/or 'partId'", -1));
 	Tcl_SetErrorCode(interp, "TTK", "VSAPI", "REQUIRED", NULL);
 	return TCL_ERROR;
     }
@@ -1258,7 +1275,7 @@ Ttk_CreateVsapiElement(
 
     /* flags or padding */
     if (objc > 3) {
-	Tcl_Size i = 3;
+	int i = 3;
 	int option = 0;
 	for (i = 3; i < objc; i += 2) {
 	    int tmp = 0;
@@ -1326,7 +1343,7 @@ Ttk_CreateVsapiElement(
     /* convert a statemap into a state table */
     if (objc > 2) {
 	Tcl_Obj **specs;
-	Tcl_Size n, j, count;
+	int n, j, count;
 	int status = TCL_OK;
 	if (Tcl_ListObjGetElements(interp, objv[2], &count, &specs) != TCL_OK)
 	    goto retErr;
@@ -1375,7 +1392,7 @@ Ttk_CreateVsapiElement(
 	theme, elementName, elementPtr->elementSpec, elementData);
 
     Ttk_RegisterCleanup(interp, elementData, DestroyElementData);
-    Tcl_SetObjResult(interp, Tcl_NewStringObj(elementName, TCL_INDEX_NONE));
+    Tcl_SetObjResult(interp, Tcl_NewStringObj(elementName, -1));
     Tcl_DStringFree(&classBuf);
     return TCL_OK;
 
@@ -1409,7 +1426,7 @@ TtkXPTheme_Init(Tcl_Interp *interp, HWND hwnd)
     themePtr = Ttk_CreateTheme(interp, "xpnative", parentPtr);
 
     if (!themePtr)
-	return TCL_ERROR;
+        return TCL_ERROR;
 
     /*
      * Set theme data and cleanup proc
@@ -1456,3 +1473,5 @@ TtkXPTheme_Init(Tcl_Interp *interp, HWND hwnd)
 
     return TCL_OK;
 }
+
+#endif /* HAVE_UXTHEME_H */

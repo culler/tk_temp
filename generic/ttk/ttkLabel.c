@@ -46,25 +46,25 @@ typedef struct {
 /* Text element options table.
  * NB: Keep in sync with label element option table.
  */
-static const Ttk_ElementOptionSpec TextElementOptions[] = {
+static Ttk_ElementOptionSpec TextElementOptions[] = {
     { "-text", TK_OPTION_STRING,
-	offsetof(TextElement,textObj), "" },
+	Tk_Offset(TextElement,textObj), "" },
     { "-font", TK_OPTION_FONT,
-	offsetof(TextElement,fontObj), DEFAULT_FONT },
+	Tk_Offset(TextElement,fontObj), DEFAULT_FONT },
     { "-foreground", TK_OPTION_COLOR,
-	offsetof(TextElement,foregroundObj), "black" },
-    { "-underline", TK_OPTION_INDEX,
-	offsetof(TextElement,underlineObj), NULL},
+	Tk_Offset(TextElement,foregroundObj), "black" },
+    { "-underline", TK_OPTION_INT,
+	Tk_Offset(TextElement,underlineObj), "-1"},
     { "-width", TK_OPTION_INT,
-	offsetof(TextElement,widthObj), "-1"},
+	Tk_Offset(TextElement,widthObj), "-1"},
     { "-anchor", TK_OPTION_ANCHOR,
-	offsetof(TextElement,anchorObj), "w"},
+	Tk_Offset(TextElement,anchorObj), "w"},
     { "-justify", TK_OPTION_JUSTIFY,
-	offsetof(TextElement,justifyObj), "left" },
+	Tk_Offset(TextElement,justifyObj), "left" },
     { "-wraplength", TK_OPTION_PIXELS,
-	offsetof(TextElement,wrapLengthObj), "0" },
+	Tk_Offset(TextElement,wrapLengthObj), "0" },
     { "-embossed", TK_OPTION_INT,
-	offsetof(TextElement,embossedObj), "0"},
+	Tk_Offset(TextElement,embossedObj), "0"},
     { NULL, TK_OPTION_BOOLEAN, 0, NULL }
 };
 
@@ -126,7 +126,7 @@ static void TextCleanup(TextElement *text)
 static void TextDraw(TextElement *text, Tk_Window tkwin, Drawable d, Ttk_Box b)
 {
     XColor *color = Tk_GetColorFromObj(tkwin, text->foregroundObj);
-    Tcl_Size underline = INT_MIN;
+    int underline = -1;
     XGCValues gcValues;
     GC gc1, gc2;
     Tk_Anchor anchor = TK_ANCHOR_CENTER;
@@ -145,9 +145,9 @@ static void TextDraw(TextElement *text, Tk_Window tkwin, Drawable d, Ttk_Box b)
     b = Ttk_AnchorBox(b, text->width, text->height, anchor);
 
     /*
-     * Clip text if it's too wide:
+     * Clip text if it's too wide or too high:
      */
-    if (b.width < text->width) {
+    if (b.width < text->width || b.height < text->height) {
 	XRectangle rect;
 
 	clipRegion = TkCreateRegion();
@@ -170,21 +170,14 @@ static void TextDraw(TextElement *text, Tk_Window tkwin, Drawable d, Ttk_Box b)
     Tk_DrawTextLayout(Tk_Display(tkwin), d, gc1,
 	    text->textLayout, b.x, b.y, 0/*firstChar*/, -1/*lastChar*/);
 
-    if (text->underlineObj != NULL) {
-	TkGetIntForIndex(text->underlineObj, TCL_INDEX_NONE, 0, &underline);
-	if (underline < INT_MIN) {
-	    underline = INT_MIN;
-	} else if (underline > INT_MAX) {
-	    underline = INT_MAX;
+    Tcl_GetIntFromObj(NULL, text->underlineObj, &underline);
+    if (underline >= 0) {
+	if (text->embossed) {
+	    Tk_UnderlineTextLayout(Tk_Display(tkwin), d, gc2,
+		text->textLayout, b.x+1, b.y+1, underline);
 	}
-	if (underline != INT_MIN) {
-	    if (text->embossed) {
-		Tk_UnderlineTextLayout(Tk_Display(tkwin), d, gc2,
-			text->textLayout, b.x+1, b.y+1, underline);
-	    }
-	    Tk_UnderlineTextLayout(Tk_Display(tkwin), d, gc1,
-		    text->textLayout, b.x, b.y, underline);
-	}
+	Tk_UnderlineTextLayout(Tk_Display(tkwin), d, gc1,
+	    text->textLayout, b.x, b.y, underline);
     }
 
     if (clipRegion != NULL) {
@@ -236,56 +229,11 @@ static void TextElementDraw(
     }
 }
 
-static const Ttk_ElementSpec TextElementSpec = {
+static Ttk_ElementSpec TextElementSpec = {
     TK_STYLE_VERSION_2,
     sizeof(TextElement),
     TextElementOptions,
     TextElementSize,
-    TextElementDraw
-};
-
-/*----------------------------------------------------------------------
- * +++ cText (collapsing text) element.
- *
- * This element is the same as the Text element, except its dimensions
- * are 0,0 when the text to display is "".
- */
-
-static int cTextSetup(TextElement *text, Tk_Window tkwin)
-{
-    if (*Tcl_GetString(text->textObj) == '\0') {
-        return 0;
-    } else {
-        return TextSetup(text, tkwin);
-    }
-}
-
-static void cTextElementSize(
-    TCL_UNUSED(void *), /* clientData */
-    void *elementRecord,
-    Tk_Window tkwin,
-    int *widthPtr,
-    int *heightPtr,
-    TCL_UNUSED(Ttk_Padding *))
-{
-    TextElement *text = (TextElement *)elementRecord;
-
-    if (!cTextSetup(text, tkwin))
-	return;
-
-    *heightPtr = text->height;
-    *widthPtr = TextReqWidth(text);
-
-    TextCleanup(text);
-
-    return;
-}
-
-static const Ttk_ElementSpec cTextElementSpec = {
-    TK_STYLE_VERSION_2,
-    sizeof(TextElement),
-    TextElementOptions,
-    cTextElementSize,
     TextElementDraw
 };
 
@@ -307,13 +255,13 @@ typedef struct {
 
 /* ===> NB: Keep in sync with label element option table.  <===
  */
-static const Ttk_ElementOptionSpec ImageElementOptions[] = {
+static Ttk_ElementOptionSpec ImageElementOptions[] = {
     { "-image", TK_OPTION_STRING,
-	offsetof(ImageElement,imageObj), "" },
+	Tk_Offset(ImageElement,imageObj), "" },
     { "-stipple", TK_OPTION_STRING, 	/* Really: TK_OPTION_BITMAP */
-	offsetof(ImageElement,stippleObj), "gray50" },
+	Tk_Offset(ImageElement,stippleObj), "gray50" },
     { "-background", TK_OPTION_COLOR,
-	offsetof(ImageElement,backgroundObj), DEFAULT_BACKGROUND },
+	Tk_Offset(ImageElement,backgroundObj), DEFAULT_BACKGROUND },
     { NULL, TK_OPTION_BOOLEAN, 0, NULL }
 };
 
@@ -453,7 +401,7 @@ static void ImageElementDraw(
     }
 }
 
-static const Ttk_ElementSpec ImageElementSpec = {
+static Ttk_ElementSpec ImageElementSpec = {
     TK_STYLE_VERSION_2,
     sizeof(ImageElement),
     ImageElementOptions,
@@ -509,43 +457,43 @@ typedef struct {
     int 		totalWidth, totalHeight;
 } LabelElement;
 
-static const Ttk_ElementOptionSpec LabelElementOptions[] = {
+static Ttk_ElementOptionSpec LabelElementOptions[] = {
     { "-compound", TK_OPTION_ANY,
-	offsetof(LabelElement,compoundObj), "none" },
+	Tk_Offset(LabelElement,compoundObj), "none" },
     { "-space", TK_OPTION_PIXELS,
-	offsetof(LabelElement,spaceObj), "4" },
+	Tk_Offset(LabelElement,spaceObj), "4" },
 
     /* Text element part:
      * NB: Keep in sync with TextElementOptions.
      */
     { "-text", TK_OPTION_STRING,
-	offsetof(LabelElement,text.textObj), "" },
+	Tk_Offset(LabelElement,text.textObj), "" },
     { "-font", TK_OPTION_FONT,
-	offsetof(LabelElement,text.fontObj), DEFAULT_FONT },
+	Tk_Offset(LabelElement,text.fontObj), DEFAULT_FONT },
     { "-foreground", TK_OPTION_COLOR,
-	offsetof(LabelElement,text.foregroundObj), "black" },
-    { "-underline", TK_OPTION_INDEX,
-	offsetof(LabelElement,text.underlineObj), "-1"},
+	Tk_Offset(LabelElement,text.foregroundObj), "black" },
+    { "-underline", TK_OPTION_INT,
+	Tk_Offset(LabelElement,text.underlineObj), "-1"},
     { "-width", TK_OPTION_INT,
-	offsetof(LabelElement,text.widthObj), ""},
+	Tk_Offset(LabelElement,text.widthObj), ""},
     { "-anchor", TK_OPTION_ANCHOR,
-	offsetof(LabelElement,text.anchorObj), "w"},
+	Tk_Offset(LabelElement,text.anchorObj), "w"},
     { "-justify", TK_OPTION_JUSTIFY,
-	offsetof(LabelElement,text.justifyObj), "left" },
+	Tk_Offset(LabelElement,text.justifyObj), "left" },
     { "-wraplength", TK_OPTION_PIXELS,
-	offsetof(LabelElement,text.wrapLengthObj), "0" },
+	Tk_Offset(LabelElement,text.wrapLengthObj), "0" },
     { "-embossed", TK_OPTION_INT,
-	offsetof(LabelElement,text.embossedObj), "0"},
+	Tk_Offset(LabelElement,text.embossedObj), "0"},
 
     /* Image element part:
      * NB: Keep in sync with ImageElementOptions.
      */
     { "-image", TK_OPTION_STRING,
-	offsetof(LabelElement,image.imageObj), "" },
+	Tk_Offset(LabelElement,image.imageObj), "" },
     { "-stipple", TK_OPTION_STRING, 	/* Really: TK_OPTION_BITMAP */
-	offsetof(LabelElement,image.stippleObj), "gray50" },
+	Tk_Offset(LabelElement,image.stippleObj), "gray50" },
     { "-background", TK_OPTION_COLOR,
-	offsetof(LabelElement,image.backgroundObj), DEFAULT_BACKGROUND },
+	Tk_Offset(LabelElement,image.backgroundObj), DEFAULT_BACKGROUND },
     { NULL, TK_OPTION_BOOLEAN, 0, NULL }
 };
 
@@ -564,7 +512,7 @@ static void LabelSetup(
     Ttk_Compound *compoundPtr = &c->compound;
 
     Tk_GetPixelsFromObj(NULL, tkwin, c->spaceObj, &c->space);
-    Ttk_GetCompoundFromObj(NULL, c->compoundObj, compoundPtr);
+    Ttk_GetCompoundFromObj(NULL, c->compoundObj, (int *)compoundPtr);
 
     /*
      * Deal with TTK_COMPOUND_NONE.
@@ -680,7 +628,7 @@ static void LabelElementSize(
  */
 static void DrawCompound(
     LabelElement *l, Ttk_Box b, Tk_Window tkwin, Drawable d, Ttk_State state,
-	Ttk_Side imageSide, Ttk_Side textSide)
+    int imageSide, int textSide)
 {
     Ttk_Box imageBox =
 	Ttk_PlaceBox(&b, l->image.width, l->image.height, imageSide, 0);
@@ -750,7 +698,7 @@ static void LabelElementDraw(
     LabelCleanup(l);
 }
 
-static const Ttk_ElementSpec LabelElementSpec = {
+static Ttk_ElementSpec LabelElementSpec = {
     TK_STYLE_VERSION_2,
     sizeof(LabelElement),
     LabelElementOptions,
@@ -768,7 +716,6 @@ TtkLabel_Init(Tcl_Interp *interp)
     Ttk_Theme theme =  Ttk_GetDefaultTheme(interp);
 
     Ttk_RegisterElement(interp, theme, "text", &TextElementSpec, NULL);
-    Ttk_RegisterElement(interp, theme, "ctext", &cTextElementSpec, NULL);
     Ttk_RegisterElement(interp, theme, "image", &ImageElementSpec, NULL);
     Ttk_RegisterElement(interp, theme, "label", &LabelElementSpec, NULL);
 }

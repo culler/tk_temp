@@ -6,9 +6,9 @@
  *	command interfaces to text widgets. The B-tree representation of text
  *	and its actual display are implemented elsewhere.
  *
- * Copyright © 1992-1994 The Regents of the University of California.
- * Copyright © 1994-1996 Sun Microsystems, Inc.
- * Copyright © 1999 Scriptics Corporation.
+ * Copyright (c) 1992-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1996 Sun Microsystems, Inc.
+ * Copyright (c) 1999 Scriptics Corporation.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -23,8 +23,14 @@
 #define DInfo TkDInfo
 #endif
 
-#ifdef _WIN32
-#include "tkWinInt.h"
+/*
+ * For compatibility with Tk 4.0 through 8.4.x, we allow tabs to be
+ * mis-specified with non-increasing values. These are converted into tabs
+ * which are the equivalent of at least a character width apart.
+ */
+
+#if (TK_MAJOR_VERSION < 9)
+#define _TK_ALLOW_DECREASING_TABS
 #endif
 
 #include "tkText.h"
@@ -42,7 +48,7 @@
  * table below.
  */
 
-const char *const tkTextWrapStrings[] = {
+static const char *const wrapStrings[] = {
     "char", "none", "word", NULL
 };
 
@@ -52,7 +58,7 @@ const char *const tkTextWrapStrings[] = {
  * the string table below.
  */
 
-const char *const tkTextTabStyleStrings[] = {
+static const char *const tabStyleStrings[] = {
     "tabular", "wordprocessor", NULL
 };
 
@@ -77,15 +83,15 @@ static const char *const insertUnfocussedStrings[] = {
  * freeing.
  */
 
-static int		SetLineStartEnd(void *clientData,
+static int		SetLineStartEnd(ClientData clientData,
 			    Tcl_Interp *interp, Tk_Window tkwin,
 			    Tcl_Obj **value, char *recordPtr,
-			    Tcl_Size internalOffset, char *oldInternalPtr,
+			    int internalOffset, char *oldInternalPtr,
 			    int flags);
-static Tcl_Obj *	GetLineStartEnd(void *clientData,
+static Tcl_Obj *	GetLineStartEnd(ClientData clientData,
 			    Tk_Window tkwin, char *recordPtr,
-			    Tcl_Size internalOffset);
-static void		RestoreLineStartEnd(void *clientData,
+			    int internalOffset);
+static void		RestoreLineStartEnd(ClientData clientData,
 			    Tk_Window tkwin, char *internalPtr,
 			    char *oldInternalPtr);
 static int		ObjectIsEmpty(Tcl_Obj *objPtr);
@@ -105,139 +111,139 @@ static const Tk_ObjCustomOption lineOption = {
 
 static const Tk_OptionSpec optionSpecs[] = {
     {TK_OPTION_BOOLEAN, "-autoseparators", "autoSeparators",
-	"AutoSeparators", DEF_TEXT_AUTO_SEPARATORS, TCL_INDEX_NONE,
-	offsetof(TkText, autoSeparators),
+	"AutoSeparators", DEF_TEXT_AUTO_SEPARATORS, -1,
+	Tk_Offset(TkText, autoSeparators),
 	TK_OPTION_DONT_SET_DEFAULT, 0, 0},
     {TK_OPTION_BORDER, "-background", "background", "Background",
-	DEF_TEXT_BG_COLOR, TCL_INDEX_NONE, offsetof(TkText, border),
+	DEF_TEXT_BG_COLOR, -1, Tk_Offset(TkText, border),
 	0, DEF_TEXT_BG_MONO, 0},
     {TK_OPTION_SYNONYM, "-bd", NULL, NULL,
-	NULL, 0, TCL_INDEX_NONE, 0, "-borderwidth",
+	NULL, 0, -1, 0, "-borderwidth",
 	TK_TEXT_LINE_GEOMETRY},
     {TK_OPTION_SYNONYM, "-bg", NULL, NULL,
-	NULL, 0, TCL_INDEX_NONE, 0, "-background", 0},
+	NULL, 0, -1, 0, "-background", 0},
     {TK_OPTION_BOOLEAN, "-blockcursor", "blockCursor",
-	"BlockCursor", DEF_TEXT_BLOCK_CURSOR, TCL_INDEX_NONE,
-	offsetof(TkText, insertCursorType), 0, 0, 0},
+	"BlockCursor", DEF_TEXT_BLOCK_CURSOR, -1,
+	Tk_Offset(TkText, insertCursorType), 0, 0, 0},
     {TK_OPTION_PIXELS, "-borderwidth", "borderWidth", "BorderWidth",
-	DEF_TEXT_BORDER_WIDTH, TCL_INDEX_NONE, offsetof(TkText, borderWidth),
+	DEF_TEXT_BORDER_WIDTH, -1, Tk_Offset(TkText, borderWidth),
 	0, 0, TK_TEXT_LINE_GEOMETRY},
     {TK_OPTION_CURSOR, "-cursor", "cursor", "Cursor",
-	DEF_TEXT_CURSOR, TCL_INDEX_NONE, offsetof(TkText, cursor),
+	DEF_TEXT_CURSOR, -1, Tk_Offset(TkText, cursor),
 	TK_OPTION_NULL_OK, 0, 0},
     {TK_OPTION_CUSTOM, "-endline", NULL, NULL,
-	 NULL, TCL_INDEX_NONE, offsetof(TkText, end), TK_OPTION_NULL_OK,
+	 NULL, -1, Tk_Offset(TkText, end), TK_OPTION_NULL_OK,
 	 &lineOption, TK_TEXT_LINE_RANGE},
     {TK_OPTION_BOOLEAN, "-exportselection", "exportSelection",
-	"ExportSelection", DEF_TEXT_EXPORT_SELECTION, TCL_INDEX_NONE,
-	offsetof(TkText, exportSelection), 0, 0, 0},
+	"ExportSelection", DEF_TEXT_EXPORT_SELECTION, -1,
+	Tk_Offset(TkText, exportSelection), 0, 0, 0},
     {TK_OPTION_SYNONYM, "-fg", "foreground", NULL,
-	NULL, 0, TCL_INDEX_NONE, 0, "-foreground", 0},
+	NULL, 0, -1, 0, "-foreground", 0},
     {TK_OPTION_FONT, "-font", "font", "Font",
-	DEF_TEXT_FONT, TCL_INDEX_NONE, offsetof(TkText, tkfont), 0, 0,
+	DEF_TEXT_FONT, -1, Tk_Offset(TkText, tkfont), 0, 0,
 	TK_TEXT_LINE_GEOMETRY},
     {TK_OPTION_COLOR, "-foreground", "foreground", "Foreground",
-	DEF_TEXT_FG, TCL_INDEX_NONE, offsetof(TkText, fgColor), 0,
+	DEF_TEXT_FG, -1, Tk_Offset(TkText, fgColor), 0,
 	0, 0},
     {TK_OPTION_PIXELS, "-height", "height", "Height",
-	DEF_TEXT_HEIGHT, TCL_INDEX_NONE, offsetof(TkText, height), 0, 0, 0},
+	DEF_TEXT_HEIGHT, -1, Tk_Offset(TkText, height), 0, 0, 0},
     {TK_OPTION_COLOR, "-highlightbackground", "highlightBackground",
 	"HighlightBackground", DEF_TEXT_HIGHLIGHT_BG,
-	TCL_INDEX_NONE, offsetof(TkText, highlightBgColorPtr),
+	-1, Tk_Offset(TkText, highlightBgColorPtr),
 	0, 0, 0},
     {TK_OPTION_COLOR, "-highlightcolor", "highlightColor", "HighlightColor",
-	DEF_TEXT_HIGHLIGHT, TCL_INDEX_NONE, offsetof(TkText, highlightColorPtr),
+	DEF_TEXT_HIGHLIGHT, -1, Tk_Offset(TkText, highlightColorPtr),
 	0, 0, 0},
     {TK_OPTION_PIXELS, "-highlightthickness", "highlightThickness",
-	"HighlightThickness", DEF_TEXT_HIGHLIGHT_WIDTH, TCL_INDEX_NONE,
-	offsetof(TkText, highlightWidth), 0, 0, TK_TEXT_LINE_GEOMETRY},
+	"HighlightThickness", DEF_TEXT_HIGHLIGHT_WIDTH, -1,
+	Tk_Offset(TkText, highlightWidth), 0, 0, TK_TEXT_LINE_GEOMETRY},
     {TK_OPTION_BORDER, "-inactiveselectbackground","inactiveSelectBackground",
 	"Foreground",
-	DEF_TEXT_INACTIVE_SELECT_COLOR,
-	TCL_INDEX_NONE, offsetof(TkText, inactiveSelBorder),
+	DEF_TEXT_INACTIVE_SELECT_BG_COLOR,
+	-1, Tk_Offset(TkText, inactiveSelBorder),
 	TK_OPTION_NULL_OK, DEF_TEXT_SELECT_MONO, 0},
     {TK_OPTION_BORDER, "-insertbackground", "insertBackground", "Foreground",
 	DEF_TEXT_INSERT_BG,
-	TCL_INDEX_NONE, offsetof(TkText, insertBorder),
+	-1, Tk_Offset(TkText, insertBorder),
 	0, 0, 0},
     {TK_OPTION_PIXELS, "-insertborderwidth", "insertBorderWidth",
-	"BorderWidth", DEF_TEXT_INSERT_BD_COLOR, TCL_INDEX_NONE,
-	offsetof(TkText, insertBorderWidth), 0,
-	DEF_TEXT_INSERT_BD_MONO, 0},
+	"BorderWidth", DEF_TEXT_INSERT_BD_COLOR, -1,
+	Tk_Offset(TkText, insertBorderWidth), 0,
+	(ClientData) DEF_TEXT_INSERT_BD_MONO, 0},
     {TK_OPTION_INT, "-insertofftime", "insertOffTime", "OffTime",
-	DEF_TEXT_INSERT_OFF_TIME, TCL_INDEX_NONE, offsetof(TkText, insertOffTime),
+	DEF_TEXT_INSERT_OFF_TIME, -1, Tk_Offset(TkText, insertOffTime),
 	0, 0, 0},
     {TK_OPTION_INT, "-insertontime", "insertOnTime", "OnTime",
-	DEF_TEXT_INSERT_ON_TIME, TCL_INDEX_NONE, offsetof(TkText, insertOnTime),
+	DEF_TEXT_INSERT_ON_TIME, -1, Tk_Offset(TkText, insertOnTime),
 	0, 0, 0},
     {TK_OPTION_STRING_TABLE,
 	"-insertunfocussed", "insertUnfocussed", "InsertUnfocussed",
-	DEF_TEXT_INSERT_UNFOCUSSED, TCL_INDEX_NONE, offsetof(TkText, insertUnfocussed),
+	DEF_TEXT_INSERT_UNFOCUSSED, -1, Tk_Offset(TkText, insertUnfocussed),
 	TK_OPTION_ENUM_VAR, insertUnfocussedStrings, 0},
     {TK_OPTION_PIXELS, "-insertwidth", "insertWidth", "InsertWidth",
-	DEF_TEXT_INSERT_WIDTH, TCL_INDEX_NONE, offsetof(TkText, insertWidth),
+	DEF_TEXT_INSERT_WIDTH, -1, Tk_Offset(TkText, insertWidth),
 	0, 0, 0},
     {TK_OPTION_INT, "-maxundo", "maxUndo", "MaxUndo",
-	DEF_TEXT_MAX_UNDO, TCL_INDEX_NONE, offsetof(TkText, maxUndo),
+	DEF_TEXT_MAX_UNDO, -1, Tk_Offset(TkText, maxUndo),
 	TK_OPTION_DONT_SET_DEFAULT, 0, 0},
     {TK_OPTION_PIXELS, "-padx", "padX", "Pad",
-	DEF_TEXT_PADX, TCL_INDEX_NONE, offsetof(TkText, padX), 0, 0,
+	DEF_TEXT_PADX, -1, Tk_Offset(TkText, padX), 0, 0,
 	TK_TEXT_LINE_GEOMETRY},
     {TK_OPTION_PIXELS, "-pady", "padY", "Pad",
-	DEF_TEXT_PADY, TCL_INDEX_NONE, offsetof(TkText, padY), 0, 0, 0},
+	DEF_TEXT_PADY, -1, Tk_Offset(TkText, padY), 0, 0, 0},
     {TK_OPTION_RELIEF, "-relief", "relief", "Relief",
-	DEF_TEXT_RELIEF, TCL_INDEX_NONE, offsetof(TkText, relief), 0, 0, 0},
+	DEF_TEXT_RELIEF, -1, Tk_Offset(TkText, relief), 0, 0, 0},
     {TK_OPTION_BORDER, "-selectbackground", "selectBackground", "Foreground",
-	DEF_TEXT_SELECT_COLOR, TCL_INDEX_NONE, offsetof(TkText, selBorder),
+	DEF_TEXT_SELECT_COLOR, -1, Tk_Offset(TkText, selBorder),
 	0, DEF_TEXT_SELECT_MONO, 0},
     {TK_OPTION_PIXELS, "-selectborderwidth", "selectBorderWidth",
 	"BorderWidth", DEF_TEXT_SELECT_BD_COLOR,
-	offsetof(TkText, selBorderWidthPtr),
-	offsetof(TkText, selBorderWidth),
+	Tk_Offset(TkText, selBorderWidthPtr),
+	Tk_Offset(TkText, selBorderWidth),
 	TK_OPTION_NULL_OK, DEF_TEXT_SELECT_BD_MONO, 0},
     {TK_OPTION_COLOR, "-selectforeground", "selectForeground", "Background",
-	DEF_TEXT_SELECT_FG_COLOR, TCL_INDEX_NONE, offsetof(TkText, selFgColorPtr),
+	DEF_TEXT_SELECT_FG_COLOR, -1, Tk_Offset(TkText, selFgColorPtr),
 	TK_OPTION_NULL_OK, DEF_TEXT_SELECT_FG_MONO, 0},
     {TK_OPTION_BOOLEAN, "-setgrid", "setGrid", "SetGrid",
-	DEF_TEXT_SET_GRID, TCL_INDEX_NONE, offsetof(TkText, setGrid), 0, 0, 0},
+	DEF_TEXT_SET_GRID, -1, Tk_Offset(TkText, setGrid), 0, 0, 0},
     {TK_OPTION_PIXELS, "-spacing1", "spacing1", "Spacing",
-	DEF_TEXT_SPACING1, TCL_INDEX_NONE, offsetof(TkText, spacing1),
+	DEF_TEXT_SPACING1, -1, Tk_Offset(TkText, spacing1),
 	0, 0 , TK_TEXT_LINE_GEOMETRY },
     {TK_OPTION_PIXELS, "-spacing2", "spacing2", "Spacing",
-	DEF_TEXT_SPACING2, TCL_INDEX_NONE, offsetof(TkText, spacing2),
+	DEF_TEXT_SPACING2, -1, Tk_Offset(TkText, spacing2),
 	0, 0 , TK_TEXT_LINE_GEOMETRY },
     {TK_OPTION_PIXELS, "-spacing3", "spacing3", "Spacing",
-	DEF_TEXT_SPACING3, TCL_INDEX_NONE, offsetof(TkText, spacing3),
+	DEF_TEXT_SPACING3, -1, Tk_Offset(TkText, spacing3),
 	0, 0 , TK_TEXT_LINE_GEOMETRY },
     {TK_OPTION_CUSTOM, "-startline", NULL, NULL,
-	 NULL, TCL_INDEX_NONE, offsetof(TkText, start), TK_OPTION_NULL_OK,
+	 NULL, -1, Tk_Offset(TkText, start), TK_OPTION_NULL_OK,
 	 &lineOption, TK_TEXT_LINE_RANGE},
     {TK_OPTION_STRING_TABLE, "-state", "state", "State",
-	DEF_TEXT_STATE, TCL_INDEX_NONE, offsetof(TkText, state),
-	TK_OPTION_ENUM_VAR, &tkStateStrings[1], 0},
+	DEF_TEXT_STATE, -1, Tk_Offset(TkText, state),
+	0, &tkStateStrings[1], 0},
     {TK_OPTION_STRING, "-tabs", "tabs", "Tabs",
-	DEF_TEXT_TABS, offsetof(TkText, tabOptionPtr), TCL_INDEX_NONE,
+	DEF_TEXT_TABS, Tk_Offset(TkText, tabOptionPtr), -1,
 	TK_OPTION_NULL_OK, 0, TK_TEXT_LINE_GEOMETRY},
     {TK_OPTION_STRING_TABLE, "-tabstyle", "tabStyle", "TabStyle",
-	DEF_TEXT_TABSTYLE, TCL_INDEX_NONE, offsetof(TkText, tabStyle),
-	TK_OPTION_ENUM_VAR, tkTextTabStyleStrings, TK_TEXT_LINE_GEOMETRY},
+	DEF_TEXT_TABSTYLE, -1, Tk_Offset(TkText, tabStyle),
+	0, tabStyleStrings, TK_TEXT_LINE_GEOMETRY},
     {TK_OPTION_STRING, "-takefocus", "takeFocus", "TakeFocus",
-	DEF_TEXT_TAKE_FOCUS, offsetof(TkText, takeFocusObj), TCL_INDEX_NONE,
+	DEF_TEXT_TAKE_FOCUS, -1, Tk_Offset(TkText, takeFocus),
 	TK_OPTION_NULL_OK, 0, 0},
     {TK_OPTION_BOOLEAN, "-undo", "undo", "Undo",
-	DEF_TEXT_UNDO, TCL_INDEX_NONE, offsetof(TkText, undo),
+	DEF_TEXT_UNDO, -1, Tk_Offset(TkText, undo),
 	TK_OPTION_DONT_SET_DEFAULT, 0 , 0},
     {TK_OPTION_INT, "-width", "width", "Width",
-	DEF_TEXT_WIDTH, TCL_INDEX_NONE, offsetof(TkText, width), 0, 0,
+	DEF_TEXT_WIDTH, -1, Tk_Offset(TkText, width), 0, 0,
 	TK_TEXT_LINE_GEOMETRY},
     {TK_OPTION_STRING_TABLE, "-wrap", "wrap", "Wrap",
-	DEF_TEXT_WRAP, TCL_INDEX_NONE, offsetof(TkText, wrapMode),
-	TK_OPTION_ENUM_VAR, tkTextWrapStrings, TK_TEXT_LINE_GEOMETRY},
+	DEF_TEXT_WRAP, -1, Tk_Offset(TkText, wrapMode),
+	TK_OPTION_ENUM_VAR, wrapStrings, TK_TEXT_LINE_GEOMETRY},
     {TK_OPTION_STRING, "-xscrollcommand", "xScrollCommand", "ScrollCommand",
-	DEF_TEXT_XSCROLL_COMMAND, offsetof(TkText, xScrollCmdObj), TCL_INDEX_NONE,
+	DEF_TEXT_XSCROLL_COMMAND, -1, Tk_Offset(TkText, xScrollCmd),
 	TK_OPTION_NULL_OK, 0, 0},
     {TK_OPTION_STRING, "-yscrollcommand", "yScrollCommand", "ScrollCommand",
-	DEF_TEXT_YSCROLL_COMMAND, offsetof(TkText, yScrollCmdObj), TCL_INDEX_NONE,
+	DEF_TEXT_YSCROLL_COMMAND, -1, Tk_Offset(TkText, yScrollCmd),
 	TK_OPTION_NULL_OK, 0, 0},
     {TK_OPTION_END, NULL, NULL, NULL, 0, 0, 0, 0, 0, 0}
 };
@@ -256,17 +262,17 @@ static const Tk_OptionSpec optionSpecs[] = {
 
 struct SearchSpec;	/* Forward declaration. */
 
-typedef void *SearchAddLineProc(int lineNum,
+typedef ClientData	SearchAddLineProc(int lineNum,
 			    struct SearchSpec *searchSpecPtr,
 			    Tcl_Obj *theLine, int *lenPtr,
 			    int *extraLinesPtr);
 typedef int		SearchMatchProc(int lineNum,
 			    struct SearchSpec *searchSpecPtr,
-			    void *clientData, Tcl_Obj *theLine,
-			    Tcl_Size matchOffset, Tcl_Size matchLength);
+			    ClientData clientData, Tcl_Obj *theLine,
+			    int matchOffset, int matchLength);
 typedef int		SearchLineIndexProc(Tcl_Interp *interp,
 			    Tcl_Obj *objPtr, struct SearchSpec *searchSpecPtr,
-			    int *linePosPtr, Tcl_Size *offsetPosPtr);
+			    int *linePosPtr, int *offsetPosPtr);
 
 typedef struct SearchSpec {
     int exact;			/* Whether search is exact or regexp. */
@@ -282,10 +288,10 @@ typedef struct SearchSpec {
     int all;			/* Whether all or the first match should be
 				 * reported. */
     int startLine;		/* First line to examine. */
-    Tcl_Size startOffset;		/* Index in first line to start at. */
+    int startOffset;		/* Index in first line to start at. */
     int stopLine;		/* Last line to examine, or -1 when we search
 				 * all available text. */
-    Tcl_Size stopOffset;		/* Index to stop at, provided stopLine is not
+    int stopOffset;		/* Index to stop at, provided stopLine is not
 				 * -1. */
     int numLines;		/* Total lines which are available. */
     int backwards;		/* Searching forwards or backwards. */
@@ -303,7 +309,7 @@ typedef struct SearchSpec {
     SearchLineIndexProc *lineIndexProc;
 				/* Function to call when we have found a
 				 * match. */
-    void *clientData;	/* Information about structure being searched,
+    ClientData clientData;	/* Information about structure being searched,
 				 * in this case a text widget. */
 } SearchSpec;
 
@@ -330,7 +336,7 @@ int tkTextDebug = 0;
  */
 
 static int		ConfigureText(Tcl_Interp *interp,
-			    TkText *textPtr, Tcl_Size objc, Tcl_Obj *const objv[]);
+			    TkText *textPtr, int objc, Tcl_Obj *const objv[]);
 static int		DeleteIndexRange(TkSharedText *sharedPtr,
 			    TkText *textPtr, const TkTextIndex *indexPtr1,
 			    const TkTextIndex *indexPtr2, int viewUpdate);
@@ -342,35 +348,39 @@ static void		DestroyText(TkText *textPtr);
 static int		InsertChars(TkSharedText *sharedTextPtr,
 			    TkText *textPtr, TkTextIndex *indexPtr,
 			    Tcl_Obj *stringPtr, int viewUpdate);
-static void		TextBlinkProc(void *clientData);
-static Tcl_CmdDeleteProc TextCmdDeletedProc;
+static void		TextBlinkProc(ClientData clientData);
+static void		TextCmdDeletedProc(ClientData clientData);
 static int		CreateWidget(TkSharedText *sharedPtr, Tk_Window tkwin,
 			    Tcl_Interp *interp, const TkText *parent,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
-static void		TextEventProc(void *clientData,
+			    int objc, Tcl_Obj *const objv[]);
+static void		TextEventProc(ClientData clientData,
 			    XEvent *eventPtr);
-static Tcl_Size	TextFetchSelection(void *clientData, Tcl_Size offset,
-			    char *buffer, Tcl_Size maxBytes);
+static int		TextFetchSelection(ClientData clientData, int offset,
+			    char *buffer, int maxBytes);
 static int		TextIndexSortProc(const void *first,
 			    const void *second);
 static int		TextInsertCmd(TkSharedText *sharedTextPtr,
 			    TkText *textPtr, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[],
+			    int objc, Tcl_Obj *const objv[],
 			    const TkTextIndex *indexPtr, int viewUpdate);
 static int		TextReplaceCmd(TkText *textPtr, Tcl_Interp *interp,
 			    const TkTextIndex *indexFromPtr,
 			    const TkTextIndex *indexToPtr,
-			    Tcl_Size objc, Tcl_Obj *const objv[], int viewUpdate);
+			    int objc, Tcl_Obj *const objv[], int viewUpdate);
 static int		TextSearchCmd(TkText *textPtr, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int objc, Tcl_Obj *const objv[]);
 static int		TextEditCmd(TkText *textPtr, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
-static Tcl_ObjCmdProc TextWidgetObjCmd;
-static Tcl_ObjCmdProc2 SharedTextObjCmd;
-static void		TextWorldChangedCallback(void *instanceData);
+			    int objc, Tcl_Obj *const objv[]);
+static int		TextWidgetObjCmd(ClientData clientData,
+			    Tcl_Interp *interp,
+			    int objc, Tcl_Obj *const objv[]);
+static int		SharedTextObjCmd(ClientData clientData,
+			    Tcl_Interp *interp,
+			    int objc, Tcl_Obj *const objv[]);
+static void		TextWorldChangedCallback(ClientData instanceData);
 static void		TextWorldChanged(TkText *textPtr, int mask);
 static int		TextDumpCmd(TkText *textPtr, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int objc, Tcl_Obj *const objv[]);
 static int		DumpLine(Tcl_Interp *interp, TkText *textPtr,
 			    int what, TkTextLine *linePtr, int start, int end,
 			    int lineno, Tcl_Obj *command);
@@ -390,10 +400,10 @@ static void		TextPushUndoAction(TkText *textPtr,
 			    Tcl_Obj *undoString, int insert,
 			    const TkTextIndex *index1Ptr,
 			    const TkTextIndex *index2Ptr);
-static Tcl_Size		TextSearchIndexInLine(const SearchSpec *searchSpecPtr,
-			    TkTextLine *linePtr, Tcl_Size byteIndex);
+static int		TextSearchIndexInLine(const SearchSpec *searchSpecPtr,
+			    TkTextLine *linePtr, int byteIndex);
 static int		TextPeerCmd(TkText *textPtr, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int objc, Tcl_Obj *const objv[]);
 static TkUndoProc	TextUndoRedoCallback;
 
 /*
@@ -436,7 +446,7 @@ static const Tk_ClassProcs textClass = {
 
 int
 Tk_TextObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
@@ -479,7 +489,7 @@ CreateWidget(
     Tcl_Interp *interp,		/* Current interpreter. */
     const TkText *parent,	/* If non-NULL then take default start, end
 				 * from this parent. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     TkText *textPtr;
@@ -613,6 +623,9 @@ CreateWidget(
      */
 
     textPtr->selTagPtr = TkTextCreateTag(textPtr, "sel", NULL);
+    textPtr->selTagPtr->reliefString = (char *)
+	    ckalloc(sizeof(DEF_TEXT_SELECT_RELIEF));
+    strcpy(textPtr->selTagPtr->reliefString, DEF_TEXT_SELECT_RELIEF);
     Tk_GetRelief(interp, DEF_TEXT_SELECT_RELIEF, &textPtr->selTagPtr->relief);
     textPtr->currentMarkPtr = TkTextSetMark(textPtr, "current", &startIndex);
     textPtr->insertMarkPtr = TkTextSetMark(textPtr, "insert", &startIndex);
@@ -638,7 +651,7 @@ CreateWidget(
     Tk_CreateSelHandler(textPtr->tkwin, XA_PRIMARY, XA_STRING,
 	    TextFetchSelection, textPtr, XA_STRING);
 
-    if (Tk_InitOptions(interp, textPtr, optionTable, textPtr->tkwin)
+    if (Tk_InitOptions(interp, (char *) textPtr, optionTable, textPtr->tkwin)
 	    != TCL_OK) {
 	Tk_DestroyWindow(textPtr->tkwin);
 	return TCL_ERROR;
@@ -648,7 +661,7 @@ CreateWidget(
 	return TCL_ERROR;
     }
 
-    Tcl_SetObjResult(interp, Tk_NewWindowObj(textPtr->tkwin));
+    Tcl_SetObjResult(interp, TkNewWindowObj(textPtr->tkwin));
     return TCL_OK;
 }
 
@@ -672,7 +685,7 @@ CreateWidget(
 
 static int
 TextWidgetObjCmd(
-    void *clientData,	/* Information about text widget. */
+    ClientData clientData,	/* Information about text widget. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
@@ -726,10 +739,10 @@ TextWidgetObjCmd(
 		NULL) == 0) {
 	    Tcl_Obj *listObj = Tcl_NewListObj(0, NULL);
 
-	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewWideIntObj(x));
-	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewWideIntObj(y));
-	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewWideIntObj(width));
-	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewWideIntObj(height));
+	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewIntObj(x));
+	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewIntObj(y));
+	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewIntObj(width));
+	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewIntObj(height));
 
 	    Tcl_SetObjResult(interp, listObj);
 	}
@@ -741,7 +754,7 @@ TextWidgetObjCmd(
 	    result = TCL_ERROR;
 	    goto done;
 	} else {
-	    Tcl_Obj *objPtr = Tk_GetOptionValue(interp, textPtr,
+	    Tcl_Obj *objPtr = Tk_GetOptionValue(interp, (char *) textPtr,
 		    textPtr->optionTable, objv[2], textPtr->tkwin);
 
 	    if (objPtr == NULL) {
@@ -798,13 +811,13 @@ TextWidgetObjCmd(
 	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		"bad comparison operator \"%s\": must be"
 		" <, <=, ==, >=, >, or !=", Tcl_GetString(objv[3])));
-	Tcl_SetErrorCode(interp, "TK", "VALUE", "COMPARISON", (char *)NULL);
+	Tcl_SetErrorCode(interp, "TK", "VALUE", "COMPARISON", NULL);
 	result = TCL_ERROR;
 	goto done;
     }
     case TEXT_CONFIGURE:
 	if (objc <= 3) {
-	    Tcl_Obj *objPtr = Tk_GetOptionInfo(interp, textPtr,
+	    Tcl_Obj *objPtr = Tk_GetOptionInfo(interp, (char *) textPtr,
 		    textPtr->optionTable, ((objc == 3) ? objv[2] : NULL),
 		    textPtr->tkwin);
 
@@ -819,8 +832,7 @@ TextWidgetObjCmd(
 	break;
     case TEXT_COUNT: {
 	const TkTextIndex *indexFromPtr, *indexToPtr;
-	Tcl_Size i;
-	int found = 0, update = 0;
+	int i, found = 0, update = 0;
 	Tcl_Obj *objPtr = NULL;
 
 	if (objc < 4) {
@@ -843,7 +855,7 @@ TextWidgetObjCmd(
 
 	for (i = 2; i < objc-2; i++) {
 	    int value;
-	    Tcl_Size length;
+	    int length;
 	    const char *option = Tcl_GetStringFromObj(objv[i], &length);
 	    char c;
 
@@ -998,7 +1010,7 @@ TextWidgetObjCmd(
 	countDone:
 	    found++;
 	    if (found == 1) {
-		Tcl_SetObjResult(interp, Tcl_NewWideIntObj(value));
+		Tcl_SetObjResult(interp, Tcl_NewIntObj(value));
 	    } else {
 		if (found == 2) {
 		    /*
@@ -1010,7 +1022,7 @@ TextWidgetObjCmd(
 		    Tcl_ListObjAppendElement(NULL, objPtr,
 			    Tcl_GetObjResult(interp));
 		}
-		Tcl_ListObjAppendElement(NULL, objPtr, Tcl_NewWideIntObj(value));
+		Tcl_ListObjAppendElement(NULL, objPtr, Tcl_NewIntObj(value));
 	    }
 	}
 
@@ -1022,7 +1034,7 @@ TextWidgetObjCmd(
 	    int value = CountIndices(textPtr, indexFromPtr, indexToPtr,
 		    COUNT_INDICES);
 
-	    Tcl_SetObjResult(interp, Tcl_NewWideIntObj(value));
+	    Tcl_SetObjResult(interp, Tcl_NewIntObj(value));
 	} else if (found > 1) {
 	    Tcl_SetObjResult(interp, objPtr);
 	}
@@ -1030,10 +1042,10 @@ TextWidgetObjCmd(
 
     badOption:
 	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		"bad option \"%s\": must be -chars, -displaychars, "
+		"bad option \"%s\" must be -chars, -displaychars, "
 		"-displayindices, -displaylines, -indices, -lines, -update, "
 		"-xpixels, or -ypixels", Tcl_GetString(objv[i])));
-	Tcl_SetErrorCode(interp, "TK", "TEXT", "INDEX_OPTION", (char *)NULL);
+	Tcl_SetErrorCode(interp, "TK", "TEXT", "INDEX_OPTION", NULL);
 	result = TCL_ERROR;
 	goto done;
     }
@@ -1060,7 +1072,7 @@ TextWidgetObjCmd(
 	    result = TCL_ERROR;
 	    goto done;
 	}
-	if (textPtr->state != TK_TEXT_STATE_DISABLED) {
+	if (textPtr->state == TK_TEXT_STATE_NORMAL) {
 	    if (objc < 5) {
 		/*
 		 * Simple case requires no predetermination of indices.
@@ -1100,7 +1112,7 @@ TextWidgetObjCmd(
 
 		TkTextIndex *indices, *ixStart, *ixEnd, *lastStart;
 		char *useIdx;
-		Tcl_Size i;
+		int i;
 
 		objc -= 2;
 		objv += 2;
@@ -1218,11 +1230,11 @@ TextWidgetObjCmd(
 		&base) == 0) {
 	    Tcl_Obj *listObj = Tcl_NewListObj(0, NULL);
 
-	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewWideIntObj(x));
-	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewWideIntObj(y));
-	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewWideIntObj(width));
-	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewWideIntObj(height));
-	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewWideIntObj(base));
+	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewIntObj(x));
+	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewIntObj(y));
+	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewIntObj(width));
+	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewIntObj(height));
+	    Tcl_ListObjAppendElement(interp, listObj, Tcl_NewIntObj(base));
 
 	    Tcl_SetObjResult(interp, listObj);
 	}
@@ -1236,10 +1248,9 @@ TextWidgetObjCmd(
 	break;
     case TEXT_GET: {
 	Tcl_Obj *objPtr = NULL;
-	Tcl_Size i;
-	int found = 0, visible = 0;
+	int i, found = 0, visible = 0;
 	const char *name;
-	Tcl_Size length;
+	int length;
 
 	if (objc < 3) {
 	    Tcl_WrongNumArgs(interp, 2, objv,
@@ -1363,7 +1374,7 @@ TextWidgetObjCmd(
 	    result = TCL_ERROR;
 	    goto done;
 	}
-	if (textPtr->state != TK_TEXT_STATE_DISABLED) {
+	if (textPtr->state == TK_TEXT_STATE_NORMAL) {
 	    result = TextInsertCmd(NULL, textPtr, interp, objc-3, objv+3,
 		    indexPtr, 1);
 	}
@@ -1408,13 +1419,12 @@ TextWidgetObjCmd(
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "index \"%s\" before \"%s\" in the text",
 		    Tcl_GetString(objv[3]), Tcl_GetString(objv[2])));
-	    Tcl_SetErrorCode(interp, "TK", "TEXT", "INDEX_ORDER", (char *)NULL);
+	    Tcl_SetErrorCode(interp, "TK", "TEXT", "INDEX_ORDER", NULL);
 	    result = TCL_ERROR;
 	    goto done;
 	}
-	if (textPtr->state != TK_TEXT_STATE_DISABLED) {
-	    int lineNum;
-	    Tcl_Size byteIndex;
+	if (textPtr->state == TK_TEXT_STATE_NORMAL) {
+	    int lineNum, byteIndex;
 	    TkTextIndex index;
 
 	    /*
@@ -1443,8 +1453,7 @@ TextWidgetObjCmd(
 		 * unnecessarily.
 		 */
 
-		int deleteInsertOffset, insertLength, indexFromLine, indexFromByteOffset;
-		Tcl_Size j;
+		int deleteInsertOffset, insertLength, j, indexFromLine, indexFromByteOffset;
 
 		insertLength = 0;
 		for (j = 4; j < objc; j += 2) {
@@ -1513,7 +1522,7 @@ TextWidgetObjCmd(
 	    Tcl_Obj *cmd = objv[3];
 	    const char *option = Tcl_GetString(objv[2]);
 	    if (strncmp(option, "-command", objv[2]->length)) {
-		Tcl_AppendResult(interp, "wrong option \"", option, "\": should be \"-command\"", (char *)NULL);
+		Tcl_AppendResult(interp, "wrong option \"", option, "\": should be \"-command\"", NULL);
 		result = TCL_ERROR;
 		goto done;
 	    }
@@ -1525,7 +1534,7 @@ TextWidgetObjCmd(
 		textPtr->afterSyncCmd = cmd;
 	    } else {
 		textPtr->afterSyncCmd = cmd;
-		Tcl_DoWhenIdle(TkTextRunAfterSyncCmd, textPtr);
+		Tcl_DoWhenIdle(TkTextRunAfterSyncCmd, (ClientData) textPtr);
 	    }
 	    break;
 	} else if (objc != 2) {
@@ -1584,9 +1593,9 @@ TextWidgetObjCmd(
 
 static int
 SharedTextObjCmd(
-    void *clientData,	/* Information about shared test B-tree. */
+    ClientData clientData,	/* Information about shared test B-tree. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     TkSharedText *sharedPtr = (TkSharedText *)clientData;
@@ -1692,7 +1701,7 @@ static int
 TextPeerCmd(
     TkText *textPtr,		/* Information about text widget. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_Window tkwin = textPtr->tkwin;
@@ -1735,7 +1744,7 @@ TextPeerCmd(
 	while (tPtr != NULL) {
 	    if (tPtr != textPtr) {
 		Tcl_ListObjAppendElement(NULL, peersObj,
-			Tk_NewWindowObj(tPtr->tkwin));
+			TkNewWindowObj(tPtr->tkwin));
 	    }
 	    tPtr = tPtr->next;
 	}
@@ -1775,7 +1784,7 @@ TextReplaceCmd(
 				/* Index from which to replace. */
     const TkTextIndex *indexToPtr,
 				/* Index to which to replace. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[],	/* Argument objects. */
     int viewUpdate)		/* Update vertical view if set. */
 {
@@ -2059,7 +2068,7 @@ ConfigureText(
     Tcl_Interp *interp,		/* Used for error reporting. */
     TkText *textPtr,	/* Information about widget; may or may not
 				 * already have values for some fields. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_SavedOptions savedOptions;
@@ -2112,8 +2121,8 @@ ConfigureText(
 	}
 	if (start > end) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "-startline must be less than or equal to -endline", TCL_INDEX_NONE));
-	    Tcl_SetErrorCode(interp, "TK", "TEXT", "INDEX_ORDER", (char *)NULL);
+		    "-startline must be less than or equal to -endline", -1));
+	    Tcl_SetErrorCode(interp, "TK", "TEXT", "INDEX_ORDER", NULL);
 	    Tk_RestoreSavedOptions(&savedOptions);
 	    return TCL_ERROR;
 	}
@@ -2223,7 +2232,7 @@ ConfigureText(
 	textPtr->tabArrayPtr = NULL;
     }
     if (textPtr->tabOptionPtr != NULL) {
-	textPtr->tabArrayPtr = TkTextGetTabs(interp, textPtr->tkwin,
+	textPtr->tabArrayPtr = TkTextGetTabs(interp, textPtr,
 		textPtr->tabOptionPtr);
 	if (textPtr->tabArrayPtr == NULL) {
 	    Tcl_AddErrorInfo(interp,"\n    (while processing -tabs option)");
@@ -2255,16 +2264,16 @@ ConfigureText(
     }
     textPtr->selTagPtr->affectsDisplay = 0;
     textPtr->selTagPtr->affectsDisplayGeometry = 0;
-    if ((textPtr->selTagPtr->elide >= 0)
+    if ((textPtr->selTagPtr->elideString != NULL)
 	    || (textPtr->selTagPtr->tkfont != NULL)
-	    || (textPtr->selTagPtr->justify != TK_JUSTIFY_NULL)
-	    || (textPtr->selTagPtr->lMargin1 != INT_MIN)
-	    || (textPtr->selTagPtr->lMargin2 != INT_MIN)
-	    || (textPtr->selTagPtr->offset != INT_MIN)
-	    || (textPtr->selTagPtr->rMargin != INT_MIN)
-	    || (textPtr->selTagPtr->spacing1 != INT_MIN)
-	    || (textPtr->selTagPtr->spacing2 != INT_MIN)
-	    || (textPtr->selTagPtr->spacing3 != INT_MIN)
+	    || (textPtr->selTagPtr->justifyString != NULL)
+	    || (textPtr->selTagPtr->lMargin1String != NULL)
+	    || (textPtr->selTagPtr->lMargin2String != NULL)
+	    || (textPtr->selTagPtr->offsetString != NULL)
+	    || (textPtr->selTagPtr->rMarginString != NULL)
+	    || (textPtr->selTagPtr->spacing1String != NULL)
+	    || (textPtr->selTagPtr->spacing2String != NULL)
+	    || (textPtr->selTagPtr->spacing3String != NULL)
 	    || (textPtr->selTagPtr->tabStringPtr != NULL)
 	    || (textPtr->selTagPtr->tabStyle == TK_TEXT_TABSTYLE_TABULAR)
 	    || (textPtr->selTagPtr->tabStyle == TK_TEXT_TABSTYLE_WORDPROCESSOR)
@@ -2276,14 +2285,14 @@ ConfigureText(
     }
     if ((textPtr->selTagPtr->border != NULL)
 	    || (textPtr->selTagPtr->selBorder != NULL)
-	    || (textPtr->selTagPtr->relief != TK_RELIEF_NULL)
+	    || (textPtr->selTagPtr->reliefString != NULL)
 	    || (textPtr->selTagPtr->bgStipple != None)
 	    || (textPtr->selTagPtr->fgColor != NULL)
 	    || (textPtr->selTagPtr->selFgColor != NULL)
 	    || (textPtr->selTagPtr->fgStipple != None)
-	    || (textPtr->selTagPtr->overstrike >= 0)
+	    || (textPtr->selTagPtr->overstrikeString != NULL)
 	    || (textPtr->selTagPtr->overstrikeColor != NULL)
-	    || (textPtr->selTagPtr->underline >= 0)
+	    || (textPtr->selTagPtr->underlineString != NULL)
 	    || (textPtr->selTagPtr->underlineColor != NULL)
 	    || (textPtr->selTagPtr->lMarginColor != NULL)
 	    || (textPtr->selTagPtr->rMarginColor != NULL)) {
@@ -2362,7 +2371,7 @@ ConfigureText(
 
 static void
 TextWorldChangedCallback(
-    void *instanceData)	/* Information about widget. */
+    ClientData instanceData)	/* Information about widget. */
 {
     TkText *textPtr = (TkText *)instanceData;
 
@@ -2452,7 +2461,7 @@ TextWorldChanged(
 
 static void
 TextEventProc(
-    void *clientData,	/* Information about window. */
+    ClientData clientData,	/* Information about window. */
     XEvent *eventPtr)	/* Information about event. */
 {
     TkText *textPtr = (TkText *)clientData;
@@ -2492,7 +2501,7 @@ TextEventProc(
 	    textPtr->setGrid = 0;
 	}
 	if (!(textPtr->flags & OPTIONS_FREED)) {
-	    Tk_FreeConfigOptions(textPtr, textPtr->optionTable,
+	    Tk_FreeConfigOptions((char *) textPtr, textPtr->optionTable,
 		    textPtr->tkwin);
 	    textPtr->flags |= OPTIONS_FREED;
 	}
@@ -2562,7 +2571,7 @@ TextEventProc(
 
 static void
 TextCmdDeletedProc(
-    void *clientData)	/* Pointer to widget record for widget. */
+    ClientData clientData)	/* Pointer to widget record for widget. */
 {
     TkText *textPtr = (TkText *)clientData;
     Tk_Window tkwin = textPtr->tkwin;
@@ -2617,7 +2626,7 @@ InsertChars(
     int viewUpdate)		/* Update the view if set. */
 {
     int lineIndex;
-    Tcl_Size length;
+    int length;
     TkText *tPtr;
     int *lineAndByteIndex;
     int resetViewCount;
@@ -2764,9 +2773,6 @@ TextPushUndoAction(
 {
     TkUndoSubAtom *iAtom, *dAtom;
     int canUndo, canRedo;
-    char lMarkName[16 + TCL_INTEGER_SPACE] = "tk::undoMarkL";
-    char rMarkName[16 + TCL_INTEGER_SPACE] = "tk::undoMarkR";
-    char stringUndoMarkId[TCL_INTEGER_SPACE] = "";
 
     /*
      * Create the helpers.
@@ -2777,10 +2783,6 @@ TextPushUndoAction(
     Tcl_Obj *markSet2InsertObj = NULL;
     Tcl_Obj *insertCmdObj = Tcl_NewObj();
     Tcl_Obj *deleteCmdObj = Tcl_NewObj();
-    Tcl_Obj *markSetLUndoMarkCmdObj = Tcl_NewObj();
-    Tcl_Obj *markSetRUndoMarkCmdObj = NULL;
-    Tcl_Obj *markGravityLUndoMarkCmdObj = Tcl_NewObj();
-    Tcl_Obj *markGravityRUndoMarkCmdObj = NULL;
 
     /*
      * Get the index positions.
@@ -2798,13 +2800,13 @@ TextPushUndoAction(
     Tcl_IncrRefCount(index2Obj);
 
     Tcl_ListObjAppendElement(NULL, seeInsertObj,
-	    Tcl_NewStringObj(Tk_PathName(textPtr->tkwin), TCL_INDEX_NONE));
+	    Tcl_NewStringObj(Tk_PathName(textPtr->tkwin), -1));
     Tcl_ListObjAppendElement(NULL, seeInsertObj, Tcl_NewStringObj("see", 3));
     Tcl_ListObjAppendElement(NULL, seeInsertObj,
 	    Tcl_NewStringObj("insert", 6));
 
     Tcl_ListObjAppendElement(NULL, markSet1InsertObj,
-	    Tcl_NewStringObj(Tk_PathName(textPtr->tkwin), TCL_INDEX_NONE));
+	    Tcl_NewStringObj(Tk_PathName(textPtr->tkwin), -1));
     Tcl_ListObjAppendElement(NULL, markSet1InsertObj,
 	    Tcl_NewStringObj("mark", 4));
     Tcl_ListObjAppendElement(NULL, markSet1InsertObj,
@@ -2830,40 +2832,6 @@ TextPushUndoAction(
     Tcl_ListObjAppendElement(NULL, deleteCmdObj, index1Obj);
     Tcl_ListObjAppendElement(NULL, deleteCmdObj, index2Obj);
 
-    Tcl_ListObjAppendElement(NULL, markSetLUndoMarkCmdObj,
-	    Tcl_NewStringObj(Tk_PathName(textPtr->tkwin), TCL_INDEX_NONE));
-    Tcl_ListObjAppendElement(NULL, markSetLUndoMarkCmdObj,
-	    Tcl_NewStringObj("mark", 4));
-    Tcl_ListObjAppendElement(NULL, markSetLUndoMarkCmdObj,
-	    Tcl_NewStringObj("set", 3));
-    markSetRUndoMarkCmdObj = Tcl_DuplicateObj(markSetLUndoMarkCmdObj);
-    textPtr->sharedTextPtr->undoMarkId++;
-    snprintf(stringUndoMarkId, TCL_INTEGER_SPACE, "%" TCL_SIZE_MODIFIER "d", textPtr->sharedTextPtr->undoMarkId);
-    strcat(lMarkName, stringUndoMarkId);
-    strcat(rMarkName, stringUndoMarkId);
-    Tcl_ListObjAppendElement(NULL, markSetLUndoMarkCmdObj,
-	    Tcl_NewStringObj(lMarkName, TCL_INDEX_NONE));
-    Tcl_ListObjAppendElement(NULL, markSetRUndoMarkCmdObj,
-	    Tcl_NewStringObj(rMarkName, TCL_INDEX_NONE));
-    Tcl_ListObjAppendElement(NULL, markSetLUndoMarkCmdObj, index1Obj);
-    Tcl_ListObjAppendElement(NULL, markSetRUndoMarkCmdObj, index2Obj);
-
-    Tcl_ListObjAppendElement(NULL, markGravityLUndoMarkCmdObj,
-	    Tcl_NewStringObj(Tk_PathName(textPtr->tkwin), TCL_INDEX_NONE));
-    Tcl_ListObjAppendElement(NULL, markGravityLUndoMarkCmdObj,
-	    Tcl_NewStringObj("mark", 4));
-    Tcl_ListObjAppendElement(NULL, markGravityLUndoMarkCmdObj,
-	    Tcl_NewStringObj("gravity", 7));
-    markGravityRUndoMarkCmdObj = Tcl_DuplicateObj(markGravityLUndoMarkCmdObj);
-    Tcl_ListObjAppendElement(NULL, markGravityLUndoMarkCmdObj,
-	    Tcl_NewStringObj(lMarkName, TCL_INDEX_NONE));
-    Tcl_ListObjAppendElement(NULL, markGravityRUndoMarkCmdObj,
-	    Tcl_NewStringObj(rMarkName, TCL_INDEX_NONE));
-    Tcl_ListObjAppendElement(NULL, markGravityLUndoMarkCmdObj,
-            Tcl_NewStringObj("left", 4));
-    Tcl_ListObjAppendElement(NULL, markGravityRUndoMarkCmdObj,
-            Tcl_NewStringObj("right", 5));
-
     /*
      * Note: we don't wish to use textPtr->widgetCmd in these callbacks
      * because if we delete the textPtr, but peers still exist, we will then
@@ -2881,19 +2849,11 @@ TextPushUndoAction(
 	    insertCmdObj, NULL);
     TkUndoMakeCmdSubAtom(NULL, markSet2InsertObj, iAtom);
     TkUndoMakeCmdSubAtom(NULL, seeInsertObj, iAtom);
-    TkUndoMakeCmdSubAtom(NULL, markSetLUndoMarkCmdObj, iAtom);
-    TkUndoMakeCmdSubAtom(NULL, markSetRUndoMarkCmdObj, iAtom);
-    TkUndoMakeCmdSubAtom(NULL, markGravityLUndoMarkCmdObj, iAtom);
-    TkUndoMakeCmdSubAtom(NULL, markGravityRUndoMarkCmdObj, iAtom);
 
     dAtom = TkUndoMakeSubAtom(&TextUndoRedoCallback, textPtr->sharedTextPtr,
 	    deleteCmdObj, NULL);
     TkUndoMakeCmdSubAtom(NULL, markSet1InsertObj, dAtom);
     TkUndoMakeCmdSubAtom(NULL, seeInsertObj, dAtom);
-    TkUndoMakeCmdSubAtom(NULL, markSetLUndoMarkCmdObj, dAtom);
-    TkUndoMakeCmdSubAtom(NULL, markSetRUndoMarkCmdObj, dAtom);
-    TkUndoMakeCmdSubAtom(NULL, markGravityLUndoMarkCmdObj, dAtom);
-    TkUndoMakeCmdSubAtom(NULL, markGravityRUndoMarkCmdObj, dAtom);
 
     Tcl_DecrRefCount(seeInsertObj);
     Tcl_DecrRefCount(index1Obj);
@@ -2942,14 +2902,13 @@ TextPushUndoAction(
 int
 TextUndoRedoCallback(
     Tcl_Interp *interp,		/* Current interpreter. */
-    void *clientData,	/* Passed from undo code, but contains our
+    ClientData clientData,	/* Passed from undo code, but contains our
 				 * shared text data structure. */
     Tcl_Obj *objPtr)		/* Arguments of a command to be handled by the
 				 * shared text data structure. */
 {
     TkSharedText *sharedPtr = (TkSharedText *)clientData;
-    int res;
-    Tcl_Size objc;
+    int res, objc;
     Tcl_Obj **objv;
     TkText *textPtr;
 
@@ -2997,7 +2956,7 @@ TextUndoRedoCallback(
 	     * allow it to take place here.
 	     */
 
-	    cmdNameObj = Tcl_NewStringObj(Tk_PathName(textPtr->tkwin), TCL_INDEX_NONE);
+	    cmdNameObj = Tcl_NewStringObj(Tk_PathName(textPtr->tkwin), -1);
 	    Tcl_ListObjAppendElement(NULL, evalObj, cmdNameObj);
 	    Tcl_ListObjAppendList(NULL, evalObj, objPtr);
 	    res = Tcl_EvalObjEx(interp, evalObj, TCL_EVAL_GLOBAL);
@@ -3114,7 +3073,7 @@ DeleteIndexRange(
     int pixels[2*PIXEL_CLIENTS];
     Tcl_HashSearch search;
     Tcl_HashEntry *hPtr;
-    Tcl_Size i;
+    int i;
 
     if (sharedTextPtr == NULL) {
 	sharedTextPtr = textPtr->sharedTextPtr;
@@ -3160,7 +3119,7 @@ DeleteIndexRange(
     line2 = TkBTreeLinesTo(textPtr, index2.linePtr);
     if (line2 == TkBTreeNumLines(sharedTextPtr->tree, textPtr)) {
 	TkTextTag **arrayPtr;
-	Tcl_Size arraySize;
+	int arraySize;
 	TkTextIndex oldIndex2;
 
 	oldIndex2 = index2;
@@ -3227,7 +3186,7 @@ DeleteIndexRange(
     }
     for (tPtr = sharedTextPtr->peers; tPtr != NULL ; tPtr = tPtr->next) {
 	int line = 0;
-	Tcl_Size byteIndex = 0;
+	int byteIndex = 0;
 	int resetView = 0;
 
 	if (TkTextIndexCmp(&index2, &tPtr->topIndex) >= 0) {
@@ -3312,10 +3271,10 @@ DeleteIndexRange(
 
     resetViewCount = 0;
     for (tPtr = sharedTextPtr->peers; tPtr != NULL ; tPtr = tPtr->next) {
-	Tcl_Size line = lineAndByteIndex[resetViewCount];
+	int line = lineAndByteIndex[resetViewCount];
 
 	if (line != -1) {
-	    Tcl_Size byteIndex = lineAndByteIndex[resetViewCount+1];
+	    int byteIndex = lineAndByteIndex[resetViewCount+1];
 	    TkTextIndex indexTmp;
 
 	    if (tPtr == textPtr) {
@@ -3392,19 +3351,19 @@ DeleteIndexRange(
  *----------------------------------------------------------------------
  */
 
-static Tcl_Size
+static int
 TextFetchSelection(
-    void *clientData,	/* Information about text widget. */
-    Tcl_Size offset,			/* Offset within selection of first character
+    ClientData clientData,	/* Information about text widget. */
+    int offset,			/* Offset within selection of first character
 				 * to be returned. */
     char *buffer,		/* Location in which to place selection. */
-    Tcl_Size maxBytes)		/* Maximum number of bytes to place at buffer,
+    int maxBytes)		/* Maximum number of bytes to place at buffer,
 				 * not including terminating NULL
 				 * character. */
 {
     TkText *textPtr = (TkText *)clientData;
     TkTextIndex eof;
-    Tcl_Size count, offsetInSeg, chunkSize;
+    int count, chunkSize, offsetInSeg;
     TkTextSearch search;
     TkTextSegment *segPtr;
 
@@ -3468,11 +3427,11 @@ TextFetchSelection(
 	    }
 	    segPtr = TkTextIndexToSeg(&textPtr->selIndex, &offsetInSeg);
 	    chunkSize = segPtr->size - offsetInSeg;
-	    if (chunkSize > (int)maxBytes) {
-		chunkSize = (int)maxBytes;
+	    if (chunkSize > maxBytes) {
+		chunkSize = maxBytes;
 	    }
 	    if (textPtr->selIndex.linePtr == search.curIndex.linePtr) {
-		Tcl_Size leftInRange;
+		int leftInRange;
 
 		leftInRange = search.curIndex.byteIndex
 			- textPtr->selIndex.byteIndex;
@@ -3531,11 +3490,11 @@ TextFetchSelection(
 
 void
 TkTextLostSelection(
-    void *clientData)	/* Information about text widget. */
+    ClientData clientData)	/* Information about text widget. */
 {
     TkText *textPtr = (TkText *)clientData;
 
-    if (Tk_AlwaysShowSelection(textPtr->tkwin)) {
+    if (TkpAlwaysShowSelection(textPtr->tkwin)) {
 	TkTextIndex start, end;
 
 	if ((!textPtr->exportSelection) || Tcl_IsSafe(textPtr->interp)) {
@@ -3593,7 +3552,7 @@ TkTextSelectionEvent(
      *     event generate $textWidget <<Selection>>
      */
 
-    Tk_SendVirtualEvent(textPtr->tkwin, "Selection", NULL);
+    TkSendVirtualEvent(textPtr->tkwin, "Selection", NULL);
 }
 
 /*
@@ -3616,7 +3575,7 @@ TkTextSelectionEvent(
 
 static void
 TextBlinkProc(
-    void *clientData)	/* Pointer to record describing text. */
+    ClientData clientData)	/* Pointer to record describing text. */
 {
     TkText *textPtr = (TkText *)clientData;
     TkTextIndex index;
@@ -3694,13 +3653,13 @@ TextInsertCmd(
     TkSharedText *sharedTextPtr,/* Shared portion of peer widgets. */
     TkText *textPtr,		/* Information about text widget. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[],	/* Argument objects. */
     const TkTextIndex *indexPtr,/* Index at which to insert. */
     int viewUpdate)		/* Update the view if set. */
 {
     TkTextIndex index1, index2;
-    Tcl_Size j;
+    int j;
 
     if (sharedTextPtr == NULL) {
 	sharedTextPtr = textPtr->sharedTextPtr;
@@ -3715,18 +3674,18 @@ TextInsertCmd(
 	 * insertions will fail.
 	 */
 
-	Tcl_Size length = InsertChars(sharedTextPtr, textPtr, &index1, objv[j],
+	int length = InsertChars(sharedTextPtr, textPtr, &index1, objv[j],
 		viewUpdate);
 
 	if (objc > (j+1)) {
 	    Tcl_Obj **tagNamePtrs;
 	    TkTextTag **oldTagArrayPtr;
-	    Tcl_Size numTags;
+	    int numTags;
 
 	    TkTextIndexForwBytes(textPtr, &index1, length, &index2);
 	    oldTagArrayPtr = TkBTreeGetTags(&index1, NULL, &numTags);
 	    if (oldTagArrayPtr != NULL) {
-		Tcl_Size i;
+		int i;
 
 		for (i = 0; i < numTags; i++) {
 		    TkBTreeTag(&index1, &index2, oldTagArrayPtr[i], 0);
@@ -3737,7 +3696,7 @@ TextInsertCmd(
 		    &tagNamePtrs) != TCL_OK) {
 		return TCL_ERROR;
 	    } else {
-		Tcl_Size i;
+		int i;
 
 		for (i = 0; i < numTags; i++) {
 		    const char *strTag = Tcl_GetString(tagNamePtrs[i]);
@@ -3773,11 +3732,10 @@ static int
 TextSearchCmd(
     TkText *textPtr,		/* Information about text widget. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
-    Tcl_Size i, argsLeft;
-    int code;
+    int i, argsLeft, code;
     SearchSpec searchSpec;
 
     static const char *const switchStrings[] = {
@@ -3849,10 +3807,10 @@ TextSearchCmd(
 	    searchSpec.backwards = 1;
 	    break;
 	case TK_TEXT_SEARCH_COUNT:
-	    if (i + 1 >= objc) {
+	    if (i >= objc-1) {
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			"no value given for \"-count\" option", TCL_INDEX_NONE));
-		Tcl_SetErrorCode(interp, "TK", "TEXT", "VALUE", (char *)NULL);
+			"no value given for \"-count\" option", -1));
+		Tcl_SetErrorCode(interp, "TK", "TEXT", "VALUE", NULL);
 		return TCL_ERROR;
 	    }
 	    i++;
@@ -3905,16 +3863,16 @@ TextSearchCmd(
     if (searchSpec.noLineStop && searchSpec.exact) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		"the \"-nolinestop\" option requires the \"-regexp\" option"
-		" to be present", TCL_INDEX_NONE));
-	Tcl_SetErrorCode(interp, "TK", "TEXT", "SEARCH_USAGE", (char *)NULL);
+		" to be present", -1));
+	Tcl_SetErrorCode(interp, "TK", "TEXT", "SEARCH_USAGE", NULL);
 	return TCL_ERROR;
     }
 
     if (searchSpec.overlap && !searchSpec.all) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		"the \"-overlap\" option requires the \"-all\" option"
-		" to be present", TCL_INDEX_NONE));
-	Tcl_SetErrorCode(interp, "TK", "TEXT", "SEARCH_USAGE", (char *)NULL);
+		" to be present", -1));
+	Tcl_SetErrorCode(interp, "TK", "TEXT", "SEARCH_USAGE", NULL);
 	return TCL_ERROR;
     }
 
@@ -3994,7 +3952,7 @@ TextSearchGetLineIndex(
     Tcl_Obj *objPtr,		/* Contains a textual index like "1.2" */
     SearchSpec *searchSpecPtr,	/* Contains other search parameters. */
     int *linePosPtr,		/* For returning the line number. */
-    Tcl_Size *offsetPosPtr)		/* For returning the text offset in the
+    int *offsetPosPtr)		/* For returning the text offset in the
 				 * line. */
 {
     const TkTextIndex *indexPtr;
@@ -4054,17 +4012,16 @@ TextSearchGetLineIndex(
  *----------------------------------------------------------------------
  */
 
-static Tcl_Size
+static int
 TextSearchIndexInLine(
     const SearchSpec *searchSpecPtr,
 				/* Search parameters. */
     TkTextLine *linePtr,	/* The line we're looking at. */
-    Tcl_Size byteIndex)		/* Index into the line. */
+    int byteIndex)		/* Index into the line. */
 {
     TkTextSegment *segPtr;
     TkTextIndex curIndex;
-    Tcl_Size index;
-    int leftToScan;
+    int index, leftToScan;
     TkText *textPtr = (TkText *)searchSpecPtr->clientData;
 
     index = 0;
@@ -4121,7 +4078,7 @@ TextSearchIndexInLine(
  *----------------------------------------------------------------------
  */
 
-static void *
+static ClientData
 TextSearchAddNextLine(
     int lineNum,		/* Line we must add. */
     SearchSpec *searchSpecPtr,	/* Search parameters. */
@@ -4240,19 +4197,19 @@ static int
 TextSearchFoundMatch(
     int lineNum,		/* Line on which match was found. */
     SearchSpec *searchSpecPtr,	/* Search parameters. */
-    void *clientData,	/* Token returned by the 'addNextLineProc',
+    ClientData clientData,	/* Token returned by the 'addNextLineProc',
 				 * TextSearchAddNextLine. May be NULL, in
 				 * which we case we must generate it (from
 				 * lineNum). */
     Tcl_Obj *theLine,		/* Text from current line, only accessed for
 				 * exact searches, and is allowed to be NULL
 				 * for regexp searches. */
-    Tcl_Size matchOffset,		/* Offset of found item in utf-8 bytes for
+    int matchOffset,		/* Offset of found item in utf-8 bytes for
 				 * exact search, Unicode chars for regexp. */
-    Tcl_Size matchLength)		/* Length also in bytes/chars as per search
+    int matchLength)		/* Length also in bytes/chars as per search
 				 * type. */
 {
-    Tcl_Size numChars;
+    int numChars;
     int leftToScan;
     TkTextIndex curIndex, foundIndex;
     TkTextSegment *segPtr;
@@ -4343,7 +4300,7 @@ TextSearchFoundMatch(
 		}
 	    } else {
 		if (searchSpecPtr->exact) {
-		    leftToScan -= (int)segPtr->size;
+		    leftToScan -= segPtr->size;
 		} else {
 		    leftToScan -= Tcl_NumUtfChars(segPtr->body.chars, -1);
 		}
@@ -4445,7 +4402,7 @@ TextSearchFoundMatch(
      */
 
     if (searchSpecPtr->varPtr != NULL) {
-	Tcl_Obj *tmpPtr = Tcl_NewWideIntObj(numChars);
+	Tcl_Obj *tmpPtr = Tcl_NewIntObj(numChars);
 	if (searchSpecPtr->all) {
 	    if (searchSpecPtr->countPtr == NULL) {
 		searchSpecPtr->countPtr = Tcl_NewObj();
@@ -4480,11 +4437,11 @@ TextSearchFoundMatch(
 TkTextTabArray *
 TkTextGetTabs(
     Tcl_Interp *interp,		/* Used for error reporting. */
-    Tk_Window tkwin,		/* Information about the window. */
+    TkText *textPtr,		/* Information about the text widget. */
     Tcl_Obj *stringPtr)		/* Description of the tab stops. See the text
 				 * manual entry for details. */
 {
-    Tcl_Size objc, i, count;
+    int objc, i, count;
     Tcl_Obj **objv;
     TkTextTabArray *tabArrayPtr;
     TkTextTab *tabPtr;
@@ -4518,7 +4475,7 @@ TkTextGetTabs(
      * Parse the elements of the list one at a time to fill in the array.
      */
 
-    tabArrayPtr = (TkTextTabArray *)ckalloc(offsetof(TkTextTabArray, tabs)
+    tabArrayPtr = (TkTextTabArray *)ckalloc(Tk_Offset(TkTextTabArray, tabs)
 	    + count * sizeof(TkTextTab));
     tabArrayPtr->numTabs = 0;
     prevStop = 0.0;
@@ -4531,7 +4488,7 @@ TkTextGetTabs(
 	 * downwards, to find the right integer pixel position.
 	 */
 
-	if (Tk_GetPixelsFromObj(interp, tkwin, objv[i],
+	if (Tk_GetPixelsFromObj(interp, textPtr->tkwin, objv[i],
 		&tabPtr->location) != TCL_OK) {
 	    goto error;
 	}
@@ -4540,12 +4497,12 @@ TkTextGetTabs(
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "tab stop \"%s\" is not at a positive distance",
 		    Tcl_GetString(objv[i])));
-	    Tcl_SetErrorCode(interp, "TK", "VALUE", "TAB_STOP", (char *)NULL);
+	    Tcl_SetErrorCode(interp, "TK", "VALUE", "TAB_STOP", NULL);
 	    goto error;
 	}
 
 	prevStop = lastStop;
-	if (Tk_GetDoublePixelsFromObj(interp, tkwin, objv[i],
+	if (Tk_GetDoublePixelsFromObj(interp, textPtr->tkwin, objv[i],
 		&lastStop) != TCL_OK) {
 	    goto error;
 	}
@@ -4556,12 +4513,27 @@ TkTextGetTabs(
 	     * illegal.
 	     */
 
+#ifdef _TK_ALLOW_DECREASING_TABS
+	    /*
+	     * Force the tab to be a typical character width to the right of
+	     * the previous one, and update the 'lastStop' with the changed
+	     * position.
+	     */
+
+	    if (textPtr->charWidth > 0) {
+		tabPtr->location = (tabPtr-1)->location + textPtr->charWidth;
+	    } else {
+		tabPtr->location = (tabPtr-1)->location + 8;
+	    }
+	    lastStop = tabPtr->location;
+#else
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "tabs must be monotonically increasing, but \"%s\" is "
 		    "smaller than or equal to the previous tab",
 		    Tcl_GetString(objv[i])));
-	    Tcl_SetErrorCode(interp, "TK", "VALUE", "TAB_STOP", (char *)NULL);
+	    Tcl_SetErrorCode(interp, "TK", "VALUE", "TAB_STOP", NULL);
 	    goto error;
+#endif /* _TK_ALLOW_DECREASING_TABS */
 	}
 
 	tabArrayPtr->numTabs++;
@@ -4580,7 +4552,7 @@ TkTextGetTabs(
 	 * There may be a more efficient way of getting this.
 	 */
 
-	Tcl_UtfToUniChar(Tcl_GetString(objv[i+1]), &ch);
+	TkUtfToUniChar(Tcl_GetString(objv[i+1]), &ch);
 	if (!Tcl_UniCharIsAlpha(ch)) {
 	    continue;
 	}
@@ -4632,13 +4604,13 @@ static int
 TextDumpCmd(
     TkText *textPtr,	/* Information about text widget. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. Someone else has already
 				 * parsed this command enough to know that
 				 * objv[1] is "dump". */
 {
     TkTextIndex index1, index2;
-    Tcl_Size arg;
+    int arg;
     int lineno;			/* Current line number. */
     int what = 0;		/* bitfield to select segment types. */
     int atEnd;			/* True if dumping up to logical end. */
@@ -4703,7 +4675,7 @@ TextDumpCmd(
 	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		"Usage: %s dump ?-all -image -text -mark -tag -window? "
 		"?-command script? index ?index2?", Tcl_GetString(objv[0])));
-	Tcl_SetErrorCode(interp, "TCL", "WRONGARGS", (char *)NULL);
+	Tcl_SetErrorCode(interp, "TCL", "WRONGARGS", NULL);
 	return TCL_ERROR;
     }
     if (what == 0) {
@@ -4717,7 +4689,7 @@ TextDumpCmd(
     if (objc == arg) {
 	TkTextIndexForwChars(NULL, &index1, 1, &index2, COUNT_INDICES);
     } else {
-	Tcl_Size length;
+	int length;
 	const char *str;
 
 	if (TkTextGetObjIndex(interp, textPtr, objv[arg], &index2) != TCL_OK) {
@@ -5039,15 +5011,15 @@ DumpSegment(
 	Tcl_DecrRefCount(tuple);
 	return 0;
     } else {
-	Tcl_Size oldStateEpoch = TkBTreeEpoch(textPtr->sharedTextPtr->tree);
+	int oldStateEpoch = TkBTreeEpoch(textPtr->sharedTextPtr->tree);
 	Tcl_DString buf;
 	int code;
 
 	Tcl_DStringInit(&buf);
-	Tcl_DStringAppend(&buf, Tcl_GetString(command), TCL_INDEX_NONE);
-	Tcl_DStringAppend(&buf, " ", TCL_INDEX_NONE);
-	Tcl_DStringAppend(&buf, Tcl_GetString(tuple), TCL_INDEX_NONE);
-	code = Tcl_EvalEx(interp, Tcl_DStringValue(&buf), TCL_INDEX_NONE, TCL_EVAL_GLOBAL);
+	Tcl_DStringAppend(&buf, Tcl_GetString(command), -1);
+	Tcl_DStringAppend(&buf, " ", -1);
+	Tcl_DStringAppend(&buf, Tcl_GetString(tuple), -1);
+	code = Tcl_EvalEx(interp, Tcl_DStringValue(&buf), -1, TCL_EVAL_GLOBAL);
 	Tcl_DStringFree(&buf);
 	if (code != TCL_OK) {
 	    Tcl_AddErrorInfo(interp,
@@ -5082,8 +5054,6 @@ TextEditUndo(
     TkText *textPtr)		/* Overall information about text widget. */
 {
     int status;
-    Tcl_Obj *cmdObj;
-    int code;
 
     if (!textPtr->sharedTextPtr->undo) {
 	return TCL_OK;
@@ -5115,22 +5085,6 @@ TextEditUndo(
 	TkUndoInsertUndoSeparator(textPtr->sharedTextPtr->undoStack);
     }
 
-    /*
-     * Convert undo/redo temporary marks set by TkUndoRevert() into
-     * indices left in the interp result.
-     */
-
-    cmdObj = Tcl_ObjPrintf("::tk::TextUndoRedoProcessMarks %s",
-            Tk_PathName(textPtr->tkwin));
-    Tcl_IncrRefCount(cmdObj);
-    code = Tcl_EvalObjEx(textPtr->interp, cmdObj, TCL_EVAL_GLOBAL);
-    if (code != TCL_OK) {
-        Tcl_AddErrorInfo(textPtr->interp,
-                "\n    (on undoing)");
-        Tcl_BackgroundException(textPtr->interp, code);
-    }
-    Tcl_DecrRefCount(cmdObj);
-
     return status;
 }
 
@@ -5156,8 +5110,6 @@ TextEditRedo(
     TkText *textPtr)		/* Overall information about text widget. */
 {
     int status;
-    Tcl_Obj *cmdObj;
-    int code;
 
     if (!textPtr->sharedTextPtr->undo) {
 	return TCL_OK;
@@ -5180,23 +5132,6 @@ TextEditRedo(
 	textPtr->sharedTextPtr->dirtyMode = TK_TEXT_DIRTY_NORMAL;
     }
     textPtr->sharedTextPtr->undo = 1;
-
-    /*
-     * Convert undo/redo temporary marks set by TkUndoApply() into
-     * indices left in the interp result.
-     */
-
-    cmdObj = Tcl_ObjPrintf("::tk::TextUndoRedoProcessMarks %s",
-            Tk_PathName(textPtr->tkwin));
-    Tcl_IncrRefCount(cmdObj);
-    code = Tcl_EvalObjEx(textPtr->interp, cmdObj, TCL_EVAL_GLOBAL);
-    if (code != TCL_OK) {
-        Tcl_AddErrorInfo(textPtr->interp,
-                "\n    (on undoing)");
-        Tcl_BackgroundException(textPtr->interp, code);
-    }
-    Tcl_DecrRefCount(cmdObj);
-
     return status;
 }
 
@@ -5221,7 +5156,7 @@ static int
 TextEditCmd(
     TkText *textPtr,		/* Information about text widget. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     int index, setModified, oldModified;
@@ -5312,7 +5247,7 @@ TextEditCmd(
 	canUndo = TkUndoCanUndo(textPtr->sharedTextPtr->undoStack);
 	if (TextEditRedo(textPtr)) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj("nothing to redo", -1));
-	    Tcl_SetErrorCode(interp, "TK", "TEXT", "NO_REDO", (char *)NULL);
+	    Tcl_SetErrorCode(interp, "TK", "TEXT", "NO_REDO", NULL);
 	    return TCL_ERROR;
 	}
 	canRedo = TkUndoCanRedo(textPtr->sharedTextPtr->undoStack);
@@ -5347,7 +5282,7 @@ TextEditCmd(
 	canRedo = TkUndoCanRedo(textPtr->sharedTextPtr->undoStack);
 	if (TextEditUndo(textPtr)) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj("nothing to undo", -1));
-	    Tcl_SetErrorCode(interp, "TK", "TEXT", "NO_UNDO", (char *)NULL);
+	    Tcl_SetErrorCode(interp, "TK", "TEXT", "NO_UNDO", NULL);
 	    return TCL_ERROR;
 	}
 	canUndo = TkUndoCanUndo(textPtr->sharedTextPtr->undoStack);
@@ -5406,7 +5341,7 @@ TextGetText(
 
     if (TkTextIndexCmp(indexPtr1, indexPtr2) < 0) {
 	while (1) {
-	    Tcl_Size offset;
+	    int offset;
 	    TkTextSegment *segPtr = TkTextIndexToSeg(&tmpIndex, &offset);
 	    int last = segPtr->size, last2;
 
@@ -5461,7 +5396,7 @@ GenerateModifiedEvent(
     for (textPtr = textPtr->sharedTextPtr->peers; textPtr != NULL;
 	    textPtr = textPtr->next) {
 	Tk_MakeWindowExist(textPtr->tkwin);
-	Tk_SendVirtualEvent(textPtr->tkwin, "Modified", NULL);
+	TkSendVirtualEvent(textPtr->tkwin, "Modified", NULL);
     }
 }
 
@@ -5491,7 +5426,7 @@ GenerateUndoStackEvent(
     for (textPtr = textPtr->sharedTextPtr->peers; textPtr != NULL;
 	    textPtr = textPtr->next) {
 	Tk_MakeWindowExist(textPtr->tkwin);
-	Tk_SendVirtualEvent(textPtr->tkwin, "UndoStack", NULL);
+	TkSendVirtualEvent(textPtr->tkwin, "UndoStack", NULL);
     }
 }
 
@@ -5569,7 +5504,7 @@ UpdateDirtyFlag(
 
 void
 TkTextRunAfterSyncCmd(
-    void *clientData)		/* Information about text widget. */
+    ClientData clientData)		/* Information about text widget. */
 {
     TkText *textPtr = (TkText *)clientData;
     int code;
@@ -5580,18 +5515,18 @@ TkTextRunAfterSyncCmd(
 	*/
 
 	if (textPtr->refCount-- <= 1) {
-	    ckfree(textPtr);
+	    ckfree((char *) textPtr);
 	}
 	return;
     }
 
-    Tcl_Preserve(textPtr->interp);
+    Tcl_Preserve((ClientData) textPtr->interp);
     code = Tcl_EvalObjEx(textPtr->interp, textPtr->afterSyncCmd, TCL_EVAL_GLOBAL);
     if (code == TCL_ERROR) {
 	Tcl_AddErrorInfo(textPtr->interp, "\n    (text sync)");
-	Tcl_BackgroundException(textPtr->interp, TCL_ERROR);
+	Tcl_BackgroundError(textPtr->interp);
     }
-    Tcl_Release(textPtr->interp);
+    Tcl_Release((ClientData) textPtr->interp);
     Tcl_DecrRefCount(textPtr->afterSyncCmd);
     textPtr->afterSyncCmd = NULL;
 }
@@ -5727,7 +5662,7 @@ SearchCore(
      */
 
     int firstOffset, lastOffset;
-    Tcl_Size matchOffset,  matchLength;
+    int matchOffset, matchLength;
     int passes;
     int lineNum = searchSpecPtr->startLine;
     int code = TCL_OK;
@@ -5748,9 +5683,9 @@ SearchCore(
 
 #define LOTS_OF_MATCHES 20
     int matchNum = LOTS_OF_MATCHES;
-    Tcl_Size smArray[2 * LOTS_OF_MATCHES];
-    Tcl_Size *storeMatch = smArray;
-    Tcl_Size *storeLength = smArray + LOTS_OF_MATCHES;
+    int smArray[2 * LOTS_OF_MATCHES];
+    int *storeMatch = smArray;
+    int *storeLength = smArray + LOTS_OF_MATCHES;
     int lastBackwardsLineMatch = -1;
     int lastBackwardsMatchOffset = -1;
 
@@ -5832,7 +5767,7 @@ SearchCore(
     Tcl_IncrRefCount(theLine);
 
     for (passes = 0; passes < 2; ) {
-	void *lineInfo;
+	ClientData lineInfo;
 	int linesSearched = 1;
 	int extraLinesSearched = 0;
 
@@ -5925,7 +5860,7 @@ SearchCore(
 	 * begin.
 	 */
 
-	matchOffset = TCL_INDEX_NONE;
+	matchOffset = -1;
 
 	if (searchSpecPtr->exact) {
 	    int maxExtraLines = 0;
@@ -5935,7 +5870,7 @@ SearchCore(
 	    do {
 		int ch;
 		const char *p;
-		Tcl_Size lastFullLine = lastOffset;
+		int lastFullLine = lastOffset;
 
 		if (firstNewLine == -1) {
 		    if (searchSpecPtr->strictLimits
@@ -6057,7 +5992,7 @@ SearchCore(
 			     * exact searches.
 			     */
 
-			    if ((Tcl_Size)lastTotal - skipFirst >= matchLength) {
+			    if ((lastTotal - skipFirst) >= matchLength) {
 				/*
 				 * We now have enough text to match, so we
 				 * make a final test and break whatever the
@@ -6139,7 +6074,7 @@ SearchCore(
 			}
 		    } else {
                         firstOffset = matchLength ? p - startOfLine + matchLength
-                                                  : p - startOfLine + (Tcl_Size)1;
+                                                  : p - startOfLine + 1;
 			if (firstOffset >= lastOffset) {
 			    /*
 			     * Now, we have to be careful not to find
@@ -6167,7 +6102,7 @@ SearchCore(
 			}
 		    } else {
 			firstOffset = p - startOfLine +
-				Tcl_UtfToUniChar(startOfLine+matchOffset,&ch);
+				TkUtfToUniChar(startOfLine+matchOffset,&ch);
 		    }
 		}
 	    } while (searchSpecPtr->all);
@@ -6179,7 +6114,7 @@ SearchCore(
 	    do {
 		Tcl_RegExpInfo info;
 		int match;
-		Tcl_Size lastFullLine = lastOffset;
+		int lastFullLine = lastOffset;
 
 		match = Tcl_RegExpExecObj(interp, regexp, theLine,
 			firstOffset, 1, (firstOffset>0 ? TCL_REG_NOTBOL : 0));
@@ -6197,9 +6132,9 @@ SearchCore(
 
 		if (!match ||
 			((info.extendStart == info.matches[0].start)
-			&& (info.matches[0].end == (Tcl_Size) (lastOffset - firstOffset)))) {
+			&& (info.matches[0].end == lastOffset-firstOffset))) {
 		    int extraLines = 0;
-		    Tcl_Size prevFullLine;
+		    int prevFullLine;
 
 		    /*
 		     * If we find a match that overlaps more than one line, we
@@ -6312,7 +6247,7 @@ SearchCore(
 			 */
 
 			if ((match &&
-				firstOffset + info.matches[0].end != (Tcl_Size) lastTotal &&
+				firstOffset + info.matches[0].end != lastTotal &&
 				firstOffset + info.matches[0].end < prevFullLine)
 				|| info.extendStart < 0) {
 			    break;
@@ -6382,8 +6317,8 @@ SearchCore(
 				 * Possible overlap or enclosure.
 				 */
 
-				if ((Tcl_Size)thisOffset - lastNonOverlap >=
-					lastBackwardsMatchOffset + matchLength + 1){
+				if (thisOffset - lastNonOverlap >=
+					lastBackwardsMatchOffset + matchLength){
 				    /*
 				     * Totally encloses previous match, so
 				     * forget the previous match.
@@ -6469,7 +6404,7 @@ SearchCore(
 			&& ((firstOffset < matchOffset)
 			|| ((firstOffset + info.matches[0].end
 				- info.matches[0].start)
-				> matchOffset + matchLength)))) {
+				> (matchOffset + matchLength))))) {
 
 		    matchOffset = firstOffset;
 		    matchLength = info.matches[0].end - info.matches[0].start;
@@ -6487,11 +6422,11 @@ SearchCore(
 			     * matches on the heap.
 			     */
 
-			    Tcl_Size *newArray = (Tcl_Size *)
-				    ckalloc(4 * matchNum * sizeof(Tcl_Size));
-			    memcpy(newArray, storeMatch, matchNum*sizeof(Tcl_Size));
+			    int *newArray = (int *)
+				    ckalloc(4 * matchNum * sizeof(int));
+			    memcpy(newArray, storeMatch, matchNum*sizeof(int));
 			    memcpy(newArray + 2*matchNum, storeLength,
-				    matchNum * sizeof(Tcl_Size));
+				    matchNum * sizeof(int));
 			    if (storeMatch != smArray) {
 				ckfree(storeMatch);
 			    }
@@ -6632,7 +6567,7 @@ SearchCore(
 	 * we are done.
 	 */
 
-	if ((lastBackwardsLineMatch == -1) && (matchOffset != TCL_INDEX_NONE)
+	if ((lastBackwardsLineMatch == -1) && (matchOffset >= 0)
 		&& !searchSpecPtr->all) {
 	    searchSpecPtr->foundMatchProc(lineNum, searchSpecPtr, lineInfo,
 		    theLine, matchOffset, matchLength);
@@ -6751,7 +6686,7 @@ GetLineStartEnd(
     TCL_UNUSED(void *),
     TCL_UNUSED(Tk_Window),
     char *recordPtr,		/* Pointer to widget record. */
-    Tcl_Size internalOffset)		/* Offset within *recordPtr containing the
+    int internalOffset)		/* Offset within *recordPtr containing the
 				 * line value. */
 {
     TkTextLine *linePtr = *(TkTextLine **)(recordPtr + internalOffset);
@@ -6759,7 +6694,7 @@ GetLineStartEnd(
     if (linePtr == NULL) {
 	return Tcl_NewObj();
     }
-    return Tcl_NewWideIntObj(1 + TkBTreeLinesTo(NULL, linePtr));
+    return Tcl_NewIntObj(1 + TkBTreeLinesTo(NULL, linePtr));
 }
 
 /*
@@ -6790,7 +6725,7 @@ SetLineStartEnd(
 				 * We use a pointer to the pointer because we
 				 * may need to return a value (NULL). */
     char *recordPtr,		/* Pointer to storage for the widget record. */
-    Tcl_Size internalOffset,		/* Offset within *recordPtr at which the
+    int internalOffset,		/* Offset within *recordPtr at which the
 				 * internal value is to be stored. */
     char *oldInternalPtr,	/* Pointer to storage for the old value. */
     int flags)			/* Flags for the option, set Tk_SetOptions. */
@@ -6799,8 +6734,8 @@ SetLineStartEnd(
     char *internalPtr;
     TkText *textPtr = (TkText *) recordPtr;
 
-    if (internalOffset != TCL_INDEX_NONE) {
-	internalPtr = (char *)recordPtr + internalOffset;
+    if (internalOffset >= 0) {
+	internalPtr = recordPtr + internalOffset;
     } else {
 	internalPtr = NULL;
     }
@@ -6903,13 +6838,12 @@ int
 TkpTesttextCmd(
     TCL_UNUSED(void *),	/* Main window for application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])		/* Argument strings. */
 {
     TkText *textPtr;
-    Tcl_Size len;
-    Tcl_WideInt lineIndex, byteIndex;
-    Tcl_WideInt byteOffset;
+    size_t len;
+    int lineIndex, byteIndex, byteOffset;
     TkTextIndex index;
     char buf[TK_POS_CHARS];
     Tcl_CmdInfo info;
@@ -6927,13 +6861,8 @@ TkpTesttextCmd(
 	if (objc != 5) {
 	    return TCL_ERROR;
 	}
-	if (Tcl_GetWideIntFromObj(interp, objv[3], &lineIndex)) {
-	    return TCL_ERROR;
-	}
-	lineIndex--;
-	if (Tcl_GetWideIntFromObj(interp, objv[4], &byteIndex)) {
-	    return TCL_ERROR;
-	}
+	lineIndex = atoi(Tcl_GetString(objv[3])) - 1;
+	byteIndex = atoi(Tcl_GetString(objv[4]));
 
 	TkTextMakeByteIndex(textPtr->sharedTextPtr->tree, textPtr, lineIndex,
 		byteIndex, &index);
@@ -6944,9 +6873,7 @@ TkpTesttextCmd(
 	if (TkTextGetIndex(interp, textPtr, Tcl_GetString(objv[3]), &index) != TCL_OK) {
 	    return TCL_ERROR;
 	}
-	if (Tcl_GetWideIntFromObj(interp, objv[4], &byteOffset)) {
-	    return TCL_ERROR;
-	}
+	byteOffset = atoi(Tcl_GetString(objv[4]));
 	TkTextIndexForwBytes(textPtr, &index, byteOffset, &index);
     } else if (strncmp(Tcl_GetString(objv[2]), "backbytes", len) == 0) {
 	if (objc != 5) {
@@ -6955,9 +6882,7 @@ TkpTesttextCmd(
 	if (TkTextGetIndex(interp, textPtr, Tcl_GetString(objv[3]), &index) != TCL_OK) {
 	    return TCL_ERROR;
 	}
-	if (Tcl_GetWideIntFromObj(interp, objv[4], &byteOffset)) {
-	    return TCL_ERROR;
-	}
+	byteOffset = atoi(Tcl_GetString(objv[4]));
 	TkTextIndexBackBytes(textPtr, &index, byteOffset, &index);
     } else {
 	return TCL_ERROR;
@@ -6965,7 +6890,7 @@ TkpTesttextCmd(
 
     TkTextSetMark(textPtr, "insert", &index);
     TkTextPrintIndex(textPtr, &index, buf);
-    Tcl_SetObjResult(interp, Tcl_ObjPrintf("%s %" TCL_SIZE_MODIFIER "d", buf, index.byteIndex));
+    Tcl_SetObjResult(interp, Tcl_ObjPrintf("%s %d", buf, index.byteIndex));
     return TCL_OK;
 }
 

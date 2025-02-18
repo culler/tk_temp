@@ -1,9 +1,9 @@
 # This file is a Tcl script to test the code in the file tkTextDisp.c.
 # This file is organized in the standard fashion for Tcl tests.
 #
-# Copyright © 1994 The Regents of the University of California.
-# Copyright © 1994-1997 Sun Microsystems, Inc.
-# Copyright © 1998-1999 Scriptics Corporation.
+# Copyright (c) 1994 The Regents of the University of California.
+# Copyright (c) 1994-1997 Sun Microsystems, Inc.
+# Copyright (c) 1998-1999 Scriptics Corporation.
 # All rights reserved.
 
 package require tcltest 2.2
@@ -1107,28 +1107,22 @@ test textDisp-6.9 {DisplayText, horizontal scrollbar updates} {
     set scrollInfo
 } [list 0.0 [expr {4.0/11}]]
 test textDisp-6.10 {DisplayText, redisplay embedded windows after scroll} {aqua} {
-    # For this test to pass line 8 must be out of the text widget.
-    # With macOS 14 this requires making the buttons a little larger.
-    # So we set the pady option.  This may depend on the OS version.
     .t configure -wrap char
-    update
     .t delete 1.0 end
-    update
     .t insert 1.0 "Line 1"
     foreach i {2 3 4} {
 	.t insert end "\nLine $i"
     }
     .t insert end "\n"
     .t window create end -create {
-	button %W.button_one -text "Button 1" -pady 5}
+	button %W.button_one -text "Button 1"}
     .t insert end "\nLine 6\n"
     .t window create end -create {
-	button %W.button_two -text "Button 2" -pady 5}
+	button %W.button_two -text "Button 2"}
     .t insert end "\nLine 8\n"
     .t window create end -create {
-	button %W.button_three -text "Button 3" -pady 5}
+	button %W.button_three -text "Button 3"}
     update
-    set tk_textEmbWinDisplay {}
     .t delete 2.0 3.0
     update
     list $tk_textEmbWinDisplay
@@ -2084,13 +2078,13 @@ test textDisp-14.9 {TkTextXviewCmd procedure} {
 } [list [expr {(56.0-20)/56}] 1.0]
 test textDisp-14.10 {TkTextXviewCmd procedure} {
     list [catch {.t xview scroll a} msg] $msg
-} {1 {wrong # args: should be ".t xview scroll number pages|pixels|units"}}
+} {1 {wrong # args: should be ".t xview scroll number units|pages|pixels"}}
 test textDisp-14.11 {TkTextXviewCmd procedure} {
     list [catch {.t xview scroll a b c} msg] $msg
-} {1 {wrong # args: should be ".t xview scroll number pages|pixels|units"}}
+} {1 {wrong # args: should be ".t xview scroll number units|pages|pixels"}}
 test textDisp-14.12 {TkTextXviewCmd procedure} {
     list [catch {.t xview scroll gorp units} msg] $msg
-} {1 {expected floating-point number but got "gorp"}}
+} {1 {expected integer but got "gorp"}}
 test textDisp-14.13 {TkTextXviewCmd procedure} {
     .t delete 1.0 end
     .t insert end xxxxxxxxx\n
@@ -2121,7 +2115,7 @@ test textDisp-14.14 {TkTextXviewCmd procedure} {
 } {2.21 2.20 2.99 2.84}
 test textDisp-14.15 {TkTextXviewCmd procedure} {
     list [catch {.t xview scroll 14 globs} msg] $msg
-} {1 {bad argument "globs": must be pages, pixels, or units}}
+} {1 {bad argument "globs": must be units, pages, or pixels}}
 test textDisp-14.16 {TkTextXviewCmd procedure} {
     list [catch {.t xview flounder} msg] $msg
 } {1 {bad option "flounder": must be moveto or scroll}}
@@ -2222,7 +2216,7 @@ update
 set totpix [.t count -update -ypixels 1.0 end]
 # check that the wrapping lines wrap exactly 6 times in total (4 times for line 151, and twice for line 153),
 # this is an assumption of the upcoming tests
-if {[expr {double(($totpix-5*$heightDiff)/$fixedHeight)}] != 206.0} {
+if {double(($totpix-5*$heightDiff)/$fixedHeight) != 206.0} {
     puts "---> Warning: the font actually used by the tests, which is \"[font actual [.t cget -font]]\",\
 is too different from the requested \"[.t cget -font]\". Some of the upcoming tests will probably fail."
 }
@@ -2341,16 +2335,16 @@ test textDisp-16.18 {TkTextYviewCmd procedure, "moveto" roundoff} {
 } [list [expr {1.0/3}] [expr {5.0/6}]]
 test textDisp-16.19 {TkTextYviewCmd procedure, "scroll" option} {
     list [catch {.t yview scroll a} msg] $msg
-} {1 {wrong # args: should be ".t yview scroll number pages|pixels|units"}}
+} {1 {wrong # args: should be ".t yview scroll number units|pages|pixels"}}
 test textDisp-16.20 {TkTextYviewCmd procedure, "scroll" option} {
     list [catch {.t yview scroll a b c} msg] $msg
-} {1 {wrong # args: should be ".t yview scroll number pages|pixels|units"}}
+} {1 {wrong # args: should be ".t yview scroll number units|pages|pixels"}}
 test textDisp-16.21 {TkTextYviewCmd procedure, "scroll" option} {
-    list [catch {.t yview scroll bogus bogus} msg] $msg
-} {1 {bad argument "bogus": must be pages, pixels, or units}}
+    list [catch {.t yview scroll badInt bogus} msg] $msg
+} {1 {bad argument "bogus": must be units, pages, or pixels}}
 test textDisp-16.21.2 {TkTextYviewCmd procedure, "scroll" option} {
-    list [catch {.t yview scroll bogus units} msg] $msg
-} {1 {expected floating-point number but got "bogus"}}
+    list [catch {.t yview scroll badInt units} msg] $msg
+} {1 {expected integer but got "badInt"}}
 test textDisp-16.22 {TkTextYviewCmd procedure, "scroll" option, back pages} {
     .t yview 50.0
     update
@@ -2359,7 +2353,7 @@ test textDisp-16.22 {TkTextYviewCmd procedure, "scroll" option, back pages} {
 } {42.0}
 test textDisp-16.22.1 {TkTextYviewCmd procedure, "scroll" option, back pages} {
     list [catch {.t yview scroll -3 p} res] $res
-} {1 {ambiguous argument "p": must be pages, pixels, or units}}
+} {1 {ambiguous argument "p": must be units, pages, or pixels}}
 test textDisp-16.23 {TkTextYviewCmd procedure, "scroll" option, back pages} {
     .t yview 50.0
     update
@@ -2438,7 +2432,7 @@ test textDisp-16.31 {TkTextYviewCmd procedure, "scroll units" option} {
 } {151.40}
 test textDisp-16.32 {TkTextYviewCmd procedure} {
     list [catch {.t yview scroll 12 bogoids} msg] $msg
-} {1 {bad argument "bogoids": must be pages, pixels, or units}}
+} {1 {bad argument "bogoids": must be units, pages, or pixels}}
 test textDisp-16.33 {TkTextYviewCmd procedure} {
     list [catch {.t yview bad_arg 1 2} msg] $msg
 } {1 {bad option "bad_arg": must be moveto or scroll}}
@@ -2489,7 +2483,7 @@ test textDisp-16.37 {TkTextYviewCmd procedure} {
 } {0 {}}
 test textDisp-16.38 {TkTextYviewCmd procedure} {
     list [catch {.t yview scroll 1.3blah pixels} msg] $msg
-} {1 {expected screen distance but got "1.3blah"}}
+} {1 {bad screen distance "1.3blah"}}
 test textDisp-16.39 {TkTextYviewCmd procedure} {
     list [catch {.t yview scroll 1.3i pixels} msg] $msg
 } {0 {}}
@@ -2588,7 +2582,7 @@ test textDisp-17.4 {TkTextScanCmd procedure} {
 } {1 {expected integer but got "bogus"}}
 test textDisp-17.5 {TkTextScanCmd procedure} {
     list [catch {.t scan stupid 123 456} msg] $msg
-} {1 {bad scan option "stupid": must be dragto or mark}}
+} {1 {bad scan option "stupid": must be mark or dragto}}
 test textDisp-17.6 {TkTextScanCmd procedure} {
     .t yview 1.0
     .t xview moveto 0

@@ -5,8 +5,8 @@
  *	allows various strings to be associated with windows either by name or
  *	by class or both.
  *
- * Copyright © 1990-1994 The Regents of the University of California.
- * Copyright © 1994-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1990-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -219,7 +219,7 @@ static void		ExtendStacks(ElArray *arrayPtr, int leaf);
 static int		GetDefaultOptions(Tcl_Interp *interp,
 			    TkWindow *winPtr);
 static ElArray *	NewArray(int numEls);
-static void		OptionThreadExitProc(void *clientData);
+static void		OptionThreadExitProc(ClientData clientData);
 static void		OptionInit(TkMainInfo *mainPtr);
 static int		ParsePriority(Tcl_Interp *interp, const char *string);
 static int		ReadOptionFile(Tcl_Interp *interp, Tk_Window tkwin,
@@ -521,7 +521,7 @@ Tk_GetOption(
     if (masqName != NULL) {
 	char *masqClass;
 	Tk_Uid nodeId, winClassId, winNameId;
-	Tcl_Size classNameLength;
+	size_t classNameLength;
 	Element *nodePtr, *leafPtr;
 	static const int searchOrder[] = {
 	    EXACT_NODE_NAME, WILDCARD_NODE_NAME, EXACT_NODE_CLASS,
@@ -534,7 +534,7 @@ Tk_GetOption(
 	 * Extract the masquerade class name from the name field.
 	 */
 
-	classNameLength	= masqName - name;
+	classNameLength	= (size_t) (masqName - name);
 	masqClass = (char *)ckalloc(classNameLength + 1);
 	strncpy(masqClass, name, classNameLength);
 	masqClass[classNameLength] = '\0';
@@ -610,7 +610,7 @@ Tk_GetOption(
 
 int
 Tk_OptionObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of Tcl_Obj arguments. */
     Tcl_Obj *const objv[])	/* Tcl_Obj arguments. */
@@ -690,7 +690,7 @@ Tk_OptionObjCmd(
 	value = Tk_GetOption(window, Tcl_GetString(objv[3]),
 		Tcl_GetString(objv[4]));
 	if (value != NULL) {
-	    Tcl_SetObjResult(interp, Tcl_NewStringObj(value, TCL_INDEX_NONE));
+	    Tcl_SetObjResult(interp, Tcl_NewStringObj(value, -1));
 	}
 	break;
     }
@@ -751,11 +751,11 @@ TkOptionDeadWindow(
      * XXX: tsd. Tk shutdown needs to be verified to handle this correctly.
      */
 
-    if (tsdPtr->initialized && (winPtr->optionLevel != TCL_INDEX_NONE)) {
+    if (tsdPtr->initialized && (winPtr->optionLevel != -1)) {
 	int i;
 
 	for (i = 1; i <= tsdPtr->curLevel; i++) {
-	    tsdPtr->levels[i].winPtr->optionLevel = TCL_INDEX_NONE;
+	    tsdPtr->levels[i].winPtr->optionLevel = -1;
 	}
 	tsdPtr->curLevel = -1;
 	tsdPtr->cachedWindow = NULL;
@@ -799,7 +799,7 @@ TkOptionClassChanged(
     ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
 	    Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData));
 
-    if (winPtr->optionLevel < 0) {
+    if (winPtr->optionLevel == -1) {
 	return;
     }
 
@@ -811,7 +811,7 @@ TkOptionClassChanged(
     for (i = 1; i <= tsdPtr->curLevel; i++) {
 	if (tsdPtr->levels[i].winPtr == winPtr) {
 	    for (j = i; j <= tsdPtr->curLevel; j++) {
-		tsdPtr->levels[j].winPtr->optionLevel = TCL_INDEX_NONE;
+		tsdPtr->levels[j].winPtr->optionLevel = -1;
 	    }
 	    tsdPtr->curLevel = i-1;
 	    basePtr = tsdPtr->levels[i].bases;
@@ -881,7 +881,7 @@ ParsePriority(
 		    "bad priority level \"%s\": must be "
 		    "widgetDefault, startupFile, userDefault, "
 		    "interactive, or a number between 0 and 100", string));
-	    Tcl_SetErrorCode(interp, "TK", "VALUE", "PRIORITY", (char *)NULL);
+	    Tcl_SetErrorCode(interp, "TK", "VALUE", "PRIORITY", NULL);
 	    return -1;
 	}
     }
@@ -965,7 +965,7 @@ AddFromString(
 	    if ((*src == '\0') || (*src == '\n')) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"missing colon on line %d", lineNum));
-		Tcl_SetErrorCode(interp, "TK", "OPTIONDB", "COLON", (char *)NULL);
+		Tcl_SetErrorCode(interp, "TK", "OPTIONDB", "COLON", NULL);
 		return TCL_ERROR;
 	    }
 	    if ((src[0] == '\\') && (src[1] == '\n')) {
@@ -1002,7 +1002,7 @@ AddFromString(
 	if (*src == '\0') {
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "missing value on line %d", lineNum));
-	    Tcl_SetErrorCode(interp, "TK", "OPTIONDB", "VALUE", (char *)NULL);
+	    Tcl_SetErrorCode(interp, "TK", "OPTIONDB", "VALUE", NULL);
 	    return TCL_ERROR;
 	}
 
@@ -1016,7 +1016,7 @@ AddFromString(
 	    if (*src == '\0') {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"missing newline on line %d", lineNum));
-		Tcl_SetErrorCode(interp, "TK", "OPTIONDB", "NEWLINE", (char *)NULL);
+		Tcl_SetErrorCode(interp, "TK", "OPTIONDB", "NEWLINE", NULL);
 		return TCL_ERROR;
 	    }
 	    if (*src == '\\'){
@@ -1084,8 +1084,7 @@ ReadOptionFile(
 {
     const char *realName;
     Tcl_Obj *buffer;
-    int result;
-    Tcl_Size bufferSize;
+    int result, bufferSize;
     Tcl_Channel chan;
     Tcl_DString newName;
 
@@ -1095,8 +1094,8 @@ ReadOptionFile(
 
     if (Tcl_IsSafe(interp)) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		"can't read options from a file in a safe interpreter", TCL_INDEX_NONE));
-	Tcl_SetErrorCode(interp, "TK", "SAFE", "OPTION_FILE", (char *)NULL);
+		"can't read options from a file in a safe interpreter", -1));
+	Tcl_SetErrorCode(interp, "TK", "SAFE", "OPTION_FILE", NULL);
 	return TCL_ERROR;
     }
 
@@ -1115,8 +1114,8 @@ ReadOptionFile(
     buffer = Tcl_NewObj();
     Tcl_IncrRefCount(buffer);
     Tcl_SetChannelOption(NULL, chan, "-encoding", "utf-8");
-    bufferSize = Tcl_ReadChars(chan, buffer, TCL_INDEX_NONE, 0);
-    if (bufferSize == TCL_IO_FAILURE) {
+    bufferSize = Tcl_ReadChars(chan, buffer, -1, 0);
+    if (bufferSize == -1) {
 	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		"error reading file \"%s\": %s",
 		fileName, Tcl_PosixError(interp)));
@@ -1269,7 +1268,7 @@ SetupStacks(
 
     if (tsdPtr->curLevel >= level) {
 	while (tsdPtr->curLevel >= level) {
-	    tsdPtr->levels[tsdPtr->curLevel].winPtr->optionLevel = TCL_INDEX_NONE;
+	    tsdPtr->levels[tsdPtr->curLevel].winPtr->optionLevel = -1;
 	    tsdPtr->curLevel--;
 	}
 	levelPtr = &tsdPtr->levels[level];

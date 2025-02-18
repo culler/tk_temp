@@ -20,12 +20,12 @@
 #include "tkMacOSXColor.h"
 
 static Tcl_HashTable systemColors;
-static size_t numSystemColors;
-static size_t rgbColorIndex;
-static size_t controlAccentIndex;
-static size_t controlAlternatingRowIndex;
-static size_t selectedTabTextIndex;
-static size_t pressedButtonTextIndex;
+static int numSystemColors;
+static int rgbColorIndex;
+static int controlAccentIndex;
+static int controlAlternatingRowIndex;
+static int selectedTabTextIndex;
+static int pressedButtonTextIndex;
 static Bool useFakeAccentColor = NO;
 static SystemColorDatum **systemColorIndex;
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
@@ -45,14 +45,14 @@ static void initColorTable()
     Tcl_HashSearch search;
     Tcl_HashEntry *hPtr;
     int newPtr;
-    size_t index = 0;
+    int index = 0;
     NSColorList *systemColorList = [NSColorList colorListNamed:@"System"];
     NSString *key;
 
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
     if (@available(macOS 10.14, *)) {
 	darkAqua = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-	lightAqua = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+        lightAqua = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
     }
 #endif
 
@@ -103,7 +103,7 @@ static void initColorTable()
 	name = (char *)ckalloc(length + 1);
 	strcpy(name, key.UTF8String);
 	name[0] = (char)toupper(UCHAR(name[0]));
-	if (!strcmp(name, "WindowBackgroundColor")) {
+        if (!strcmp(name, "WindowBackgroundColor")) {
 
 	    /*
 	     * Avoid black windows on old systems.
@@ -192,8 +192,8 @@ TkMacOSXRGBPixel(
     MacPixel p = {0};
     p.pixel.colortype = rgbColor;
     p.pixel.value = (unsigned int)(((red & 0xff) << 16)  |
-		    ((green & 0xff) << 8) |
-		    (blue & 0xff));
+	            ((green & 0xff) << 8) |
+	            (blue & 0xff));
     return p.ulong;
 }
 
@@ -249,7 +249,7 @@ GetEntryFromPixel(
     unsigned long pixel)
 {
     MacPixel p = {0};
-    size_t index = rgbColorIndex;
+    int index = rgbColorIndex;
 
     p.ulong = pixel;
     if (p.pixel.colortype != rgbColor) {
@@ -363,6 +363,28 @@ GetRGBA(
 	}
 	[color getComponents: rgba];
 	break;
+    case HIText:
+#ifdef __LP64__
+	color = [[NSColor textColor] colorUsingColorSpace:sRGB];
+	[color getComponents: rgba];
+#else
+	{
+	    OSStatus err = noErr;
+	    RGBColor rgb;
+	    err = GetThemeTextColor(kThemeTextColorPushButtonActive, 32,
+                    true, &rgb);
+	    if (err == noErr) {
+		rgba[0] = (CGFloat) rgb.red / 65535;
+		rgba[1] = (CGFloat) rgb.green / 65535;
+		rgba[2] = (CGFloat) rgb.blue / 65535;
+	    }
+	}
+#endif
+	break;
+    case HIBackground:
+	color = [[NSColor windowBackgroundColor] colorUsingColorSpace:sRGB];
+	[color getComponents: rgba];
+	break;
     default:
 	break;
     }
@@ -378,6 +400,12 @@ GetRGBA(
  *      the color is of type rgbColor.  In that case the normalized XColor RGB
  *      values are copied into the CGColorRef.  Otherwise the components are
  *      computed from the SystemColorDatum.
+ *
+ *      In 64 bit macOS systems there are no HITheme functions which convert
+ *      HIText or HIBackground colors to CGColors.  (GetThemeTextColor was
+ *      removed, and it was never possible with backgrounds.)  On 64-bit systems
+ *      we replace all HIText colors by systemTextColor and all HIBackground
+ *      colors by systemWindowBackgroundColor.
  *
  * Results:
  *	True if the function succeeds, false otherwise.
@@ -436,7 +464,7 @@ TkMacOSXInDarkMode(Tk_Window tkwin)
 
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
     if (@available(macOS 10.14, *)) {
-	TkWindow *winPtr = (TkWindow*) tkwin;
+        TkWindow *winPtr = (TkWindow*) tkwin;
 	NSAppearanceName name;
 	NSView *view = nil;
 	if (winPtr && winPtr->privatePtr) {
@@ -551,6 +579,8 @@ TkMacOSXSetColorInContext(
     OSStatus err = noErr;
     CGColorRef cgColor = NULL;
     SystemColorDatum *entry = GetEntryFromPixel(pixel);
+    CGRect rect;
+    HIThemeBackgroundDrawInfo info = {0, kThemeStateActive, 0};
 
     if (entry) {
 	switch (entry->type) {
@@ -561,6 +591,16 @@ TkMacOSXSetColorInContext(
 		err = ChkErr(HIThemeSetStroke, entry->value, NULL, context,
 			kHIThemeOrientationNormal);
 	    }
+	    break;
+	case HIText:
+	    err = ChkErr(HIThemeSetTextFill, entry->value, NULL, context,
+		    kHIThemeOrientationNormal);
+	    break;
+	case HIBackground:
+	    info.kind = entry->value;
+	    rect = CGContextGetClipBoundingBox(context);
+	    err = ChkErr(HIThemeApplyBackground, &rect, &info,
+		    context, kHIThemeOrientationNormal);
 	    break;
 	default:
 	    SetCGColorComponents(entry, pixel, &cgColor);
@@ -611,7 +651,6 @@ TkpGetColor(
     XColor color;
     Colormap colormap = tkwin ? Tk_Colormap(tkwin) : noColormap;
     NSView *view = nil;
-    Bool haveValidXColor = False;
     static Bool initialized = NO;
 
     if (!initialized) {
@@ -639,22 +678,16 @@ TkpGetColor(
 	    p.pixel.colortype = entry->type;
 	    p.pixel.value = (unsigned int)entry->index;
 	    color.pixel = p.ulong;
-
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
-	    NSAppearance *windowAppearance;
-	    if (@available(macOS 10.14, *)) {
-		if (view) {
-		    windowAppearance = [view effectiveAppearance];
-		} else {
-		    windowAppearance = [NSApp effectiveAppearance];
-		}
-	    }
-#endif
-
 	    if (entry->type == semantic) {
 		CGFloat rgba[4];
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
 		if (@available(macOS 10.14, *)) {
+		    NSAppearance *windowAppearance;
+		    if (view) {
+			windowAppearance = [view effectiveAppearance];
+		    } else {
+			windowAppearance = [NSApp effectiveAppearance];
+		    }
 		    if ([windowAppearance name] == NSAppearanceNameDarkAqua) {
 			colormap = darkColormap;
 		    } else {
@@ -678,13 +711,13 @@ TkpGetColor(
 		} else {
 		    GetRGBA(entry, p.ulong, rgba);
 		}
-#else //MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
+#else
 		GetRGBA(entry, p.ulong, rgba);
+#endif
 		color.red   = (unsigned short)(rgba[0] * 65535.0);
 		color.green = (unsigned short)(rgba[1] * 65535.0);
 		color.blue  = (unsigned short)(rgba[2] * 65535.0);
-#endif //MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
-		haveValidXColor = True;
+		goto validXColor;
 	    } else if (SetCGColorComponents(entry, 0, &c)) {
 		const size_t n = CGColorGetNumberOfComponents(c);
 		const CGFloat *rgba = CGColorGetComponents(c);
@@ -702,26 +735,15 @@ TkpGetColor(
 		    Tcl_Panic("CGColor with %d components", (int) n);
 		}
 		CGColorRelease(c);
-		haveValidXColor = True;
+		goto validXColor;
 	    }
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
-	    if (@available(macOS 10.14, *)) {
-		// Not sure whether colormap should also be set for non-semantic color
-		if (haveValidXColor && entry->type == semantic) {
-		    if ([windowAppearance name] == NSAppearanceNameDarkAqua) {
-			colormap = darkColormap;
-		    } else {
-			colormap = lightColormap;
-		    }
-		}
-	    }
-#endif
 	}
     }
-    if (!haveValidXColor && TkParseColor(display, colormap, name, &color) == 0) {
+    if (TkParseColor(display, colormap, name, &color) == 0) {
 	return NULL;
     }
 
+validXColor:
     tkColPtr = (TkColor *)ckalloc(sizeof(TkColor));
     tkColPtr->colormap = colormap;
     tkColPtr->color = color;

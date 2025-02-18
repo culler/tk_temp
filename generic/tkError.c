@@ -6,8 +6,8 @@
  *	useful, for example, when communicating with a window that may not
  *	exist.
  *
- * Copyright © 1990-1994 The Regents of the University of California.
- * Copyright © 1994-1995 Sun Microsystems, Inc.
+ * Copyright (c) 1990-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1995 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -151,6 +151,11 @@ Tk_DeleteErrorHandler(
     TkDisplay *dispPtr = errorPtr->dispPtr;
 
     errorPtr->lastRequest = NextRequest(dispPtr->display) - 1;
+
+    /*
+     * Ensure that no user callback for this handler is invoked any further.
+     */
+    errorPtr->errorProc = NULL;
 
     /*
      * Every once-in-a-while, cleanup handlers that are no longer active. We

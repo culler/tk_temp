@@ -7,7 +7,7 @@ if {![info exists widgetDemo]} {
     error "This script should be run from the \"widget\" demo."
 }
 
-package require tk
+package require Tk
 
 set w .icon
 catch {destroy $w}
@@ -30,7 +30,7 @@ image create bitmap flagup \
 image create bitmap flagdown \
 	-file [file join $tk_demoDirectory images flagdown.xbm] \
 	-maskfile [file join $tk_demoDirectory images flagdown.xbm]
-frame $w.frame -borderwidth 7.5p
+frame $w.frame -borderwidth 10
 pack $w.frame -side top
 
 checkbutton $w.frame.b1 -image flagdown -selectimage flagup \

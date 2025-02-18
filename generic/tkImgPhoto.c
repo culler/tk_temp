@@ -5,10 +5,10 @@
  *	full color (32 bits per pixel including alpha channel) and displayed
  *	using dithering if necessary.
  *
- * Copyright © 1994 The Australian National University.
- * Copyright © 1994-1997 Sun Microsystems, Inc.
- * Copyright © 2002-2003 Donal K. Fellows
- * Copyright © 2003 ActiveState Corporation.
+ * Copyright (c) 1994 The Australian National University.
+ * Copyright (c) 1994-1997 Sun Microsystems, Inc.
+ * Copyright (c) 2002-2003 Donal K. Fellows
+ * Copyright (c) 2003 ActiveState Corporation.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -39,7 +39,6 @@ struct SubcommandOptions {
     XColor *background;		/* Value specified for -background option. */
     int compositingRule;	/* Value specified for -compositingrule
 				 * option. */
-    Tcl_Obj *metadata;		/* Value specified for -metadata option. */
 };
 
 /*
@@ -49,32 +48,26 @@ struct SubcommandOptions {
  * set in the options field of the SubcommandOptions structure if that option
  * was specified.
  *
- * OPT_ALPHA:			Set if -alpha option allowed/specified.
  * OPT_BACKGROUND:		Set if -format option allowed/specified.
  * OPT_COMPOSITE:		Set if -compositingrule option allowed/spec'd.
  * OPT_FORMAT:			Set if -format option allowed/specified.
  * OPT_FROM:			Set if -from option allowed/specified.
  * OPT_GRAYSCALE:		Set if -grayscale option allowed/specified.
- * OPT_METADATA:		Set if -metadata option allowed/specified.
  * OPT_SHRINK:			Set if -shrink option allowed/specified.
  * OPT_SUBSAMPLE:		Set if -subsample option allowed/spec'd.
  * OPT_TO:			Set if -to option allowed/specified.
- * OPT_WITHALPHA:		Set if -withalpha option allowed/specified.
  * OPT_ZOOM:			Set if -zoom option allowed/specified.
  */
 
-#define OPT_ALPHA	1
-#define OPT_BACKGROUND	2
-#define OPT_COMPOSITE	4
-#define OPT_FORMAT	8
-#define OPT_FROM	0x10
-#define OPT_GRAYSCALE	0x20
-#define OPT_METADATA	0x40
-#define OPT_SHRINK	0x80
-#define OPT_SUBSAMPLE	0x100
-#define OPT_TO		0x200
-#define OPT_WITHALPHA	0x400
-#define OPT_ZOOM	0x800
+#define OPT_BACKGROUND	1
+#define OPT_COMPOSITE	2
+#define OPT_FORMAT	4
+#define OPT_FROM	8
+#define OPT_GRAYSCALE	0x10
+#define OPT_SHRINK	0x20
+#define OPT_SUBSAMPLE	0x40
+#define OPT_TO		0x80
+#define OPT_ZOOM	0x100
 
 /*
  * List of option names. The order here must match the order of declarations
@@ -82,17 +75,14 @@ struct SubcommandOptions {
  */
 
 static const char *const optionNames[] = {
-    "-alpha",
     "-background",
     "-compositingrule",
     "-format",
     "-from",
     "-grayscale",
-    "-metadata",
     "-shrink",
     "-subsample",
     "-to",
-    "-withalpha",
     "-zoom",
     NULL
 };
@@ -110,7 +100,7 @@ static const char *const optionNames[] = {
  */
 
 static int		ImgPhotoCreate(Tcl_Interp *interp, const char *name,
-			    Tcl_Size objc, Tcl_Obj *const objv[],
+			    int objc, Tcl_Obj *const objv[],
 			    const Tk_ImageType *typePtr, Tk_ImageModel model,
 			    void **clientDataPtr);
 static void		ImgPhotoDelete(void *clientData);
@@ -139,9 +129,9 @@ typedef struct {
     Tk_PhotoImageFormat *formatList;
 				/* Pointer to the first in the list of known
 				 * photo image formats.*/
-    Tk_PhotoImageFormatVersion3 *formatListVersion3;
+    Tk_PhotoImageFormat *oldFormatList;
 				/* Pointer to the first in the list of known
-				 * photo image formats in Version3 format.*/
+				 * photo image formats.*/
     int initialized;		/* Set to 1 if we've initialized the
 				 * structure. */
 } ThreadSpecificData;
@@ -162,21 +152,19 @@ static Tcl_ThreadDataKey dataKey;
 
 static const Tk_ConfigSpec configSpecs[] = {
     {TK_CONFIG_STRING, "-data", NULL, NULL,
-	 NULL, TCL_INDEX_NONE, TK_CONFIG_NULL_OK, NULL},
+	 NULL, -1, TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_STRING, "-file", NULL, NULL,
-	 NULL, offsetof(PhotoModel, fileString), TK_CONFIG_NULL_OK, NULL},
+	 NULL, Tk_Offset(PhotoModel, fileString), TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_STRING, "-format", NULL, NULL,
-	 NULL, TCL_INDEX_NONE, TK_CONFIG_NULL_OK, NULL},
+	 NULL, -1, TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_DOUBLE, "-gamma", NULL, NULL,
-	 DEF_PHOTO_GAMMA, offsetof(PhotoModel, gamma), 0, NULL},
+	 DEF_PHOTO_GAMMA, Tk_Offset(PhotoModel, gamma), 0, NULL},
     {TK_CONFIG_INT, "-height", NULL, NULL,
-	 DEF_PHOTO_HEIGHT, offsetof(PhotoModel, userHeight), 0, NULL},
-    {TK_CONFIG_STRING, "-metadata", NULL, NULL,
-	 NULL, TCL_INDEX_NONE, TK_CONFIG_NULL_OK, NULL},
+	 DEF_PHOTO_HEIGHT, Tk_Offset(PhotoModel, userHeight), 0, NULL},
     {TK_CONFIG_UID, "-palette", NULL, NULL,
-	 DEF_PHOTO_PALETTE, offsetof(PhotoModel, palette), 0, NULL},
+	 DEF_PHOTO_PALETTE, Tk_Offset(PhotoModel, palette), 0, NULL},
     {TK_CONFIG_INT, "-width", NULL, NULL,
-	 DEF_PHOTO_WIDTH, offsetof(PhotoModel, userWidth), 0, NULL},
+	 DEF_PHOTO_WIDTH, Tk_Offset(PhotoModel, userWidth), 0, NULL},
     {TK_CONFIG_END, NULL, NULL, NULL, NULL, 0, 0, NULL}
 };
 
@@ -190,30 +178,27 @@ static int		ImgPhotoCmd(void *clientData, Tcl_Interp *interp,
 static int		ParseSubcommandOptions(
 			    struct SubcommandOptions *optPtr,
 			    Tcl_Interp *interp, int allowedOptions,
-			    Tcl_Size *indexPtr, Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int *indexPtr, int objc, Tcl_Obj *const objv[]);
 static void		ImgPhotoCmdDeletedProc(void *clientData);
 static int		ImgPhotoConfigureModel(Tcl_Interp *interp,
-			    PhotoModel *modelPtr, Tcl_Size objc,
+			    PhotoModel *modelPtr, int objc,
 			    Tcl_Obj *const objv[], int flags);
 static int		ToggleComplexAlphaIfNeeded(PhotoModel *mPtr);
 static int		ImgPhotoSetSize(PhotoModel *modelPtr, int width,
 			    int height);
+static int		ImgStringWrite(Tcl_Interp *interp,
+			    Tcl_Obj *formatString,
+			    Tk_PhotoImageBlock *blockPtr);
 static char *		ImgGetPhoto(PhotoModel *modelPtr,
 			    Tk_PhotoImageBlock *blockPtr,
 			    struct SubcommandOptions *optPtr);
 static int		MatchFileFormat(Tcl_Interp *interp, Tcl_Channel chan,
 			    const char *fileName, Tcl_Obj *formatString,
-			    Tcl_Obj *metadataInObj,
-			    Tcl_Obj *metadataOutObj,
 			    Tk_PhotoImageFormat **imageFormatPtr,
-			    Tk_PhotoImageFormatVersion3 **imageFormatVersion3Ptr,
 			    int *widthPtr, int *heightPtr, int *oldformat);
 static int		MatchStringFormat(Tcl_Interp *interp, Tcl_Obj *data,
 			    Tcl_Obj *formatString,
-			    Tcl_Obj *metadataInObj,
-			    Tcl_Obj *metadataOutObj,
 			    Tk_PhotoImageFormat **imageFormatPtr,
-			    Tk_PhotoImageFormatVersion3 **imageFormatVersion3Ptr,
 			    int *widthPtr, int *heightPtr, int *oldformat);
 static const char *	GetExtension(const char *path);
 
@@ -238,29 +223,26 @@ PhotoFormatThreadExitProc(
     TCL_UNUSED(void *))	/* not used */
 {
     Tk_PhotoImageFormat *freePtr;
-    Tk_PhotoImageFormatVersion3 *freePtrVersion3;
     ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
 	    Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData));
 
+    while (tsdPtr->oldFormatList != NULL) {
+	freePtr = tsdPtr->oldFormatList;
+	tsdPtr->oldFormatList = tsdPtr->oldFormatList->nextPtr;
+	ckfree(freePtr);
+    }
     while (tsdPtr->formatList != NULL) {
 	freePtr = tsdPtr->formatList;
 	tsdPtr->formatList = tsdPtr->formatList->nextPtr;
-	ckfree((void *)freePtr->name);
+	ckfree((char *)freePtr->name);
 	ckfree(freePtr);
-    }
-    while (tsdPtr->formatListVersion3 != NULL) {
-	freePtrVersion3 = tsdPtr->formatListVersion3;
-	tsdPtr->formatListVersion3 = tsdPtr->formatListVersion3->nextPtr;
-	ckfree((void *)freePtrVersion3->name);
-	ckfree(freePtrVersion3);
     }
 }
 
 /*
  *----------------------------------------------------------------------
  *
- * Tk_CreatePhotoImageFormat,
- * Tk_CreatePhotoImageFormatVersion3 --
+ * Tk_CreateOldPhotoImageFormat, Tk_CreatePhotoImageFormat --
  *
  *	This function is invoked by an image file handler to register a new
  *	photo image format and the functions that handle the new format. The
@@ -275,6 +257,27 @@ PhotoFormatThreadExitProc(
  *
  *----------------------------------------------------------------------
  */
+
+void
+Tk_CreateOldPhotoImageFormat(
+    const Tk_PhotoImageFormat *formatPtr)
+				/* Structure describing the format. All of the
+				 * fields except "nextPtr" must be filled in
+				 * by caller. */
+{
+    Tk_PhotoImageFormat *copyPtr;
+    ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
+	    Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData));
+
+    if (!tsdPtr->initialized) {
+	tsdPtr->initialized = 1;
+	Tcl_CreateThreadExitHandler(PhotoFormatThreadExitProc, NULL);
+    }
+    copyPtr = (Tk_PhotoImageFormat *)ckalloc(sizeof(Tk_PhotoImageFormat));
+    *copyPtr = *formatPtr;
+    copyPtr->nextPtr = tsdPtr->oldFormatList;
+    tsdPtr->oldFormatList = copyPtr;
+}
 
 void
 Tk_CreatePhotoImageFormat(
@@ -293,7 +296,10 @@ Tk_CreatePhotoImageFormat(
     }
     copyPtr = (Tk_PhotoImageFormat *)ckalloc(sizeof(Tk_PhotoImageFormat));
     *copyPtr = *formatPtr;
-    {
+    if (isupper((unsigned char) *formatPtr->name)) {
+	copyPtr->nextPtr = tsdPtr->oldFormatList;
+	tsdPtr->oldFormatList = copyPtr;
+    } else {
 	/* for compatibility with aMSN: make a copy of formatPtr->name */
 	char *name = (char *)ckalloc(strlen(formatPtr->name) + 1);
 	strcpy(name, formatPtr->name);
@@ -301,32 +307,6 @@ Tk_CreatePhotoImageFormat(
 	copyPtr->nextPtr = tsdPtr->formatList;
 	tsdPtr->formatList = copyPtr;
     }
-}
-void
-Tk_CreatePhotoImageFormatVersion3(
-    const Tk_PhotoImageFormatVersion3 *formatPtr)
-				/* Structure describing the format. All of the
-				 * fields except "nextPtr" must be filled in
-				 * by caller. */
-{
-    Tk_PhotoImageFormatVersion3 *copyPtr;
-    char *name;
-    ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
-	    Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData));
-
-    if (!tsdPtr->initialized) {
-	tsdPtr->initialized = 1;
-	Tcl_CreateThreadExitHandler(PhotoFormatThreadExitProc, NULL);
-    }
-    copyPtr = (Tk_PhotoImageFormatVersion3 *)
-	    ckalloc(sizeof(Tk_PhotoImageFormatVersion3));
-    *copyPtr = *formatPtr;
-    /* for compatibility with aMSN: make a copy of formatPtr->name */
-    name = (char *)ckalloc(strlen(formatPtr->name) + 1);
-    strcpy(name, formatPtr->name);
-    copyPtr->name = name;
-    copyPtr->nextPtr = tsdPtr->formatListVersion3;
-    tsdPtr->formatListVersion3 = copyPtr;
 }
 
 /*
@@ -351,7 +331,7 @@ ImgPhotoCreate(
     Tcl_Interp *interp,		/* Interpreter for application containing
 				 * image. */
     const char *name,		/* Name to use for image. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[],	/* Argument objects for options (doesn't
 				 * include image name or type). */
     TCL_UNUSED(const Tk_ImageType *),/* Pointer to our type record (not used). */
@@ -368,7 +348,7 @@ ImgPhotoCreate(
 
     modelPtr = (PhotoModel *)ckalloc(sizeof(PhotoModel));
     memset(modelPtr, 0, sizeof(PhotoModel));
-    modelPtr->tkModel = model;
+    modelPtr->tkMaster = model;
     modelPtr->interp = interp;
     modelPtr->imageCmd = Tcl_CreateObjCommand(interp, name, ImgPhotoCmd,
 	    modelPtr, ImgPhotoCmdDeletedProc);
@@ -426,14 +406,15 @@ ImgPhotoCmd(
     };
 
     PhotoModel *modelPtr = (PhotoModel *)clientData;
-    int result, x, y, width, height;
-    Tcl_Size index;
+    int result, x, y, width, height, dataWidth, dataHeight, listObjc;
+    int index;
     struct SubcommandOptions options;
+    Tcl_Obj **listObjv, **srcObjv;
     unsigned char *pixelPtr;
     Tk_PhotoImageBlock block;
+    Tk_Window tkwin;
     Tk_PhotoImageFormat *imageFormat;
-    Tk_PhotoImageFormatVersion3 *imageFormatVersion3;
-    Tcl_Size length;
+    int length;
     int imageWidth, imageHeight, matched, oldformat = 0;
     Tcl_Channel chan;
     Tk_PhotoHandle srcHandle;
@@ -471,7 +452,8 @@ ImgPhotoCmd(
 	    Tcl_WrongNumArgs(interp, 2, objv, "option");
 	    return TCL_ERROR;
 	}
-	arg = Tcl_GetStringFromObj(objv[2], &length);
+	arg = Tcl_GetString(objv[2]);
+	length = objv[2]->length;
 	if (strncmp(arg,"-data", length) == 0) {
 	    if (modelPtr->dataString) {
 		Tcl_SetObjResult(interp, modelPtr->dataString);
@@ -480,13 +462,9 @@ ImgPhotoCmd(
 	    if (modelPtr->format) {
 		Tcl_SetObjResult(interp, modelPtr->format);
 	    }
-	} else if (strncmp(arg, "-metadata", length) == 0) {
-	    if (modelPtr->metadata) {
-		Tcl_SetObjResult(interp, modelPtr->metadata);
-	    }
 	} else {
 	    Tk_ConfigureValue(interp, Tk_MainWindow(interp), configSpecs,
-		    modelPtr, Tcl_GetString(objv[2]), 0);
+		    (char *)modelPtr, Tcl_GetString(objv[2]), 0);
 	}
 	return TCL_OK;
     }
@@ -500,7 +478,7 @@ ImgPhotoCmd(
 	    Tcl_Obj *obj, *subobj;
 
 	    result = Tk_ConfigureInfo(interp, Tk_MainWindow(interp),
-		    configSpecs, modelPtr, NULL, 0);
+		    configSpecs, (char *)modelPtr, NULL, 0);
 	    if (result != TCL_OK) {
 		return result;
 	    }
@@ -519,20 +497,14 @@ ImgPhotoCmd(
 		Tcl_AppendStringsToObj(subobj, " {}", (char *)NULL);
 	    }
 	    Tcl_ListObjAppendElement(interp, obj, subobj);
-	    subobj = Tcl_NewStringObj("-metadata {} {} {}", 18);
-	    if (modelPtr->metadata) {
-		Tcl_ListObjAppendElement(NULL, subobj, modelPtr->metadata);
-	    } else {
-		Tcl_AppendStringsToObj(subobj, " {}", (char *)NULL);
-	    }
-	    Tcl_ListObjAppendElement(interp, obj, subobj);
 	    Tcl_ListObjAppendList(interp, obj, Tcl_GetObjResult(interp));
 	    Tcl_SetObjResult(interp, obj);
 	    return TCL_OK;
 
 	} else if (objc == 3) {
-	    const char *arg = Tcl_GetStringFromObj(objv[2], &length);
+	    const char *arg = Tcl_GetString(objv[2]);
 
+	    length = objv[2]->length;
 	    if (length > 1 && !strncmp(arg, "-data", length)) {
 		Tcl_AppendResult(interp, "-data {} {} {}", (char *)NULL);
 		if (modelPtr->dataString) {
@@ -560,23 +532,9 @@ ImgPhotoCmd(
 		    Tcl_AppendResult(interp, " {}", (char *)NULL);
 		}
 		return TCL_OK;
-	    } else if (length > 1 &&
-		!strncmp(arg, "-metadata", length)) {
-		Tcl_AppendResult(interp, "-metadata {} {} {}", (char *)NULL);
-		if (modelPtr->metadata) {
-		    /*
-		     * TODO: Modifying result is bad!
-		     */
-
-		    Tcl_ListObjAppendElement(NULL, Tcl_GetObjResult(interp),
-			modelPtr->metadata);
-		} else {
-		    Tcl_AppendResult(interp, " {}", (char *)NULL);
-		}
-		return TCL_OK;
 	    } else {
 		return Tk_ConfigureInfo(interp, Tk_MainWindow(interp),
-			configSpecs, modelPtr, arg, 0);
+			configSpecs, (char *) modelPtr, arg, 0);
 	    }
 	} else {
 	    return ImgPhotoConfigureModel(interp, modelPtr, objc-2, objv+2,
@@ -700,43 +658,38 @@ ImgPhotoCmd(
 	    if (ImgPhotoSetSize(modelPtr, options.toX2,
 		    options.toY2) != TCL_OK) {
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+			TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 		Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 		return TCL_ERROR;
 	    }
 	}
 	if (block.pixelPtr || (options.options & OPT_SHRINK)) {
-	    Tk_ImageChanged(modelPtr->tkModel, 0, 0, 0, 0,
+	    Tk_ImageChanged(modelPtr->tkMaster, 0, 0, 0, 0,
 		    modelPtr->width, modelPtr->height);
 	}
 	return result;
 
     case PHOTO_DATA: {
-	char *data = NULL;
-	Tcl_Obj *freeObj = NULL;
-	Tcl_Obj *metadataIn;
+	char *data;
 
 	/*
 	 * photo data command - first parse and check any options given.
 	 */
 
 	Tk_ImageStringWriteProc *stringWriteProc = NULL;
-	Tk_ImageStringWriteProcVersion3 *stringWriteProcVersion3 = NULL;
 
-	index = 1;
+	index = 2;
 	memset(&options, 0, sizeof(options));
 	options.name = NULL;
 	options.format = NULL;
-	options.metadata = NULL;
 	options.fromX = 0;
 	options.fromY = 0;
 	if (ParseSubcommandOptions(&options, interp,
-		OPT_FORMAT | OPT_FROM | OPT_GRAYSCALE | OPT_BACKGROUND
-		| OPT_METADATA,
+		OPT_FORMAT | OPT_FROM | OPT_GRAYSCALE | OPT_BACKGROUND,
 		&index, objc, objv) != TCL_OK) {
 	    return TCL_ERROR;
 	}
-	if ((options.name == NULL) || (index < objc)) {
+	if ((options.name != NULL) || (index < objc)) {
 	    Tcl_WrongNumArgs(interp, 2, objv, "?-option value ...?");
 	    if (options.background) {
 		Tk_FreeColor(options.background);
@@ -748,7 +701,7 @@ ImgPhotoCmd(
 		|| (options.fromX2 > modelPtr->width)
 		|| (options.fromY2 > modelPtr->height)) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "coordinates for -from option extend outside image", TCL_INDEX_NONE));
+		    "coordinates for -from option extend outside image", -1));
 	    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO", "BAD_FROM", (char *)NULL);
 	    if (options.background) {
 		Tk_FreeColor(options.background);
@@ -764,62 +717,53 @@ ImgPhotoCmd(
 	    options.fromX2 = modelPtr->width;
 	    options.fromY2 = modelPtr->height;
 	}
-	if (!(options.options & OPT_FORMAT)) {
-	    options.format = Tcl_NewStringObj("default", TCL_INDEX_NONE);
-	    freeObj = options.format;
-	}
-
-	/*
-	 * Use argument metadata if specified, otherwise the master metadata
-	 */
-
-	if (NULL != options.metadata) {
-	    metadataIn = options.metadata;
-	} else {
-	    metadataIn = modelPtr->metadata;
-	}
 
 	/*
 	 * Search for an appropriate image string format handler.
 	 */
 
-	matched = 0;
-	for (imageFormat = tsdPtr->formatList; imageFormat != NULL;
+	if (options.options & OPT_FORMAT) {
+	    matched = 0;
+	    for (imageFormat = tsdPtr->formatList; imageFormat != NULL;
 		imageFormat = imageFormat->nextPtr) {
-	    if ((strncasecmp(Tcl_GetString(options.format),
-		    imageFormat->name, strlen(imageFormat->name)) == 0)) {
-		matched = 1;
-		if (imageFormat->stringWriteProc != NULL) {
-		    stringWriteProc = imageFormat->stringWriteProc;
-		    break;
-		}
-	    }
-	}
-	if (stringWriteProc == NULL) {
-	    oldformat = 0;
-	    for (imageFormatVersion3 = tsdPtr->formatListVersion3;
-		    imageFormatVersion3 != NULL;
-		    imageFormatVersion3 = imageFormatVersion3->nextPtr) {
 		if ((strncasecmp(Tcl_GetString(options.format),
-			imageFormatVersion3->name,
-			strlen(imageFormatVersion3->name)) == 0)) {
+			imageFormat->name, strlen(imageFormat->name)) == 0)) {
 		    matched = 1;
-		    if (imageFormatVersion3->stringWriteProc != NULL) {
-			stringWriteProcVersion3 =
-				imageFormatVersion3->stringWriteProc;
+		    if (imageFormat->stringWriteProc != NULL) {
+			stringWriteProc = imageFormat->stringWriteProc;
 			break;
 		    }
 		}
 	    }
-	}
-	if (stringWriteProc == NULL && stringWriteProcVersion3 == NULL) {
-	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		    "image string format \"%s\" is %s",
-		    Tcl_GetString(options.format),
-		    (matched ? "not supported" : "unknown")));
-	    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "PHOTO_FORMAT",
-		    Tcl_GetString(options.format), (char *)NULL);
-	    goto dataErrorExit;
+	    if (stringWriteProc == NULL) {
+		oldformat = 1;
+		for (imageFormat = tsdPtr->oldFormatList; imageFormat != NULL;
+			imageFormat = imageFormat->nextPtr) {
+		    if ((strncasecmp(Tcl_GetString(options.format),
+			    imageFormat->name,
+			    strlen(imageFormat->name)) == 0)) {
+			matched = 1;
+			if (imageFormat->stringWriteProc != NULL) {
+			    stringWriteProc = imageFormat->stringWriteProc;
+			    break;
+			}
+		    }
+		}
+	    }
+	    if (stringWriteProc == NULL) {
+		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
+			"image string format \"%s\" is %s",
+			Tcl_GetString(options.format),
+			(matched ? "not supported" : "unknown")));
+		Tcl_SetErrorCode(interp, "TK", "LOOKUP", "PHOTO_FORMAT",
+			Tcl_GetString(options.format), NULL);
+		if (options.background) {
+		    Tk_FreeColor(options.background);
+		}
+		return TCL_ERROR;
+	    }
+	} else {
+	    stringWriteProc = ImgStringWrite;
 	}
 
 	/*
@@ -828,10 +772,7 @@ ImgPhotoCmd(
 
 	data = ImgGetPhoto(modelPtr, &block, &options);
 
-	if (stringWriteProc == NULL) {
-	    result = (stringWriteProcVersion3)(interp,
-		    options.format, metadataIn, &block);
-	} else if (oldformat) {
+	if (oldformat) {
 	    Tcl_DString buffer;
 	    typedef int (*OldStringWriteProc)(Tcl_Interp *interp,
 		    Tcl_DString *dataPtr, const char *formatString,
@@ -858,22 +799,7 @@ ImgPhotoCmd(
 	if (data) {
 	    ckfree(data);
 	}
-	if (freeObj != NULL) {
-	    Tcl_DecrRefCount(freeObj);
-	}
 	return result;
-
-      dataErrorExit:
-	if (options.background) {
-	    Tk_FreeColor(options.background);
-	}
-	if (data) {
-	    ckfree(data);
-	}
-	if (freeObj != NULL) {
-	    Tcl_DecrRefCount(freeObj);
-	}
-	return TCL_ERROR;
     }
 
     case PHOTO_GET: {
@@ -881,24 +807,12 @@ ImgPhotoCmd(
 	 * photo get command - first parse and check parameters.
 	 */
 
-	Tcl_Obj *channels[4];
-	int i, channelCount = 3;
+	Tcl_Obj *channels[3];
 
-	index = 3;
-	memset(&options, 0, sizeof(options));
-	options.name = NULL;
-	if (ParseSubcommandOptions(&options, interp, OPT_WITHALPHA,
-		&index, objc, objv) != TCL_OK) {
+	if (objc != 4) {
+	    Tcl_WrongNumArgs(interp, 2, objv, "x y");
 	    return TCL_ERROR;
 	}
-	if (options.name == NULL || index < objc) {
-	    Tcl_WrongNumArgs(interp, 2, objv, "x y ?-withalpha?");
-	    return TCL_ERROR;
-	}
-	if (options.options & OPT_WITHALPHA) {
-	    channelCount = 4;
-	}
-
 	if ((Tcl_GetIntFromObj(interp, objv[2], &x) != TCL_OK)
 		|| (Tcl_GetIntFromObj(interp, objv[3], &y) != TCL_OK)) {
 	    return TCL_ERROR;
@@ -918,27 +832,22 @@ ImgPhotoCmd(
 	 */
 
 	pixelPtr = modelPtr->pix32 + (y * modelPtr->width + x) * 4;
-	for (i = 0; i < channelCount; i++) {
-	    channels[i] = Tcl_NewWideIntObj(pixelPtr[i]);
-	}
-	Tcl_SetObjResult(interp, Tcl_NewListObj(channelCount, channels));
+	channels[0] = Tcl_NewIntObj(pixelPtr[0]);
+	channels[1] = Tcl_NewIntObj(pixelPtr[1]);
+	channels[2] = Tcl_NewIntObj(pixelPtr[2]);
+	Tcl_SetObjResult(interp, Tcl_NewListObj(3, channels));
 	return TCL_OK;
     }
 
-    case PHOTO_PUT: {
-	Tcl_Obj *format, *data;
-
+    case PHOTO_PUT:
 	/*
-	 * photo put command - first parse the options.
+	 * photo put command - first parse the options and colors specified.
 	 */
 
 	index = 2;
 	memset(&options, 0, sizeof(options));
 	options.name = NULL;
-	options.format = NULL;
-	options.metadata = NULL;
-	if (ParseSubcommandOptions(&options, interp,
-		OPT_TO|OPT_FORMAT|OPT_METADATA,
+	if (ParseSubcommandOptions(&options, interp, OPT_TO|OPT_FORMAT,
 		&index, objc, objv) != TCL_OK) {
 	    return TCL_ERROR;
 	}
@@ -947,65 +856,174 @@ ImgPhotoCmd(
 	    return TCL_ERROR;
 	}
 
-	/*
-	 * See if there's a format that can read the data
-	 */
+	if (MatchStringFormat(interp, options.name ? objv[2]:NULL,
+		options.format, &imageFormat, &imageWidth,
+		&imageHeight, &oldformat) == TCL_OK) {
+	    Tcl_Obj *format, *data;
 
-	if (MatchStringFormat(interp, objv[2], options.format,
-		options.metadata, NULL, &imageFormat,
-		&imageFormatVersion3, &imageWidth, &imageHeight, &oldformat)
-		!= TCL_OK) {
-	    return TCL_ERROR;
-	}
-
-	if (!(options.options & OPT_TO) || (options.toX2 < 0)) {
-	    options.toX2 = options.toX + imageWidth;
-	    options.toY2 = options.toY + imageHeight;
-	}
-	if (imageWidth > options.toX2 - options.toX) {
-	    imageWidth = options.toX2 - options.toX;
-	}
-	if (imageHeight > options.toY2 - options.toY) {
-	    imageHeight = options.toY2 - options.toY;
-	}
-	format = options.format;
-	data = objv[2];
-	if (oldformat) {
-	    if (format) {
-		format = (Tcl_Obj *) Tcl_GetString(format);
+	    if (!(options.options & OPT_TO) || (options.toX2 < 0)) {
+		options.toX2 = options.toX + imageWidth;
+		options.toY2 = options.toY + imageHeight;
 	    }
-	    data = (Tcl_Obj *) Tcl_GetString(data);
-	}
-
-	if (imageFormat != NULL) {
+	    if (imageWidth > options.toX2 - options.toX) {
+		imageWidth = options.toX2 - options.toX;
+	    }
+	    if (imageHeight > options.toY2 - options.toY) {
+		imageHeight = options.toY2 - options.toY;
+	    }
+	    format = options.format;
+	    data = objv[2];
+	    if (oldformat) {
+		if (format) {
+		    format = (Tcl_Obj *) Tcl_GetString(format);
+		}
+		data = (Tcl_Obj *) Tcl_GetString(data);
+	    }
 	    if (imageFormat->stringReadProc(interp, data, format,
 		    (Tk_PhotoHandle) modelPtr, options.toX, options.toY,
-		    options.toX2 - options.toX,
-		    options.toY2 - options.toY, 0, 0) != TCL_OK) {
+		    imageWidth, imageHeight, 0, 0) != TCL_OK) {
 		return TCL_ERROR;
 	    }
-	} else {
-	    if (imageFormatVersion3->stringReadProc(interp, data, format,
-		    options.metadata,
-		    (Tk_PhotoHandle) modelPtr, options.toX, options.toY,
-		    options.toX2 - options.toX,
-		    options.toY2 - options.toY, 0, 0,
-		    NULL)
-		    != TCL_OK) {
+	    modelPtr->flags |= IMAGE_CHANGED;
+	    return TCL_OK;
+	}
+	if (options.options & OPT_FORMAT) {
+	    return TCL_ERROR;
+	}
+	Tcl_ResetResult(interp);
+	if (Tcl_ListObjGetElements(interp, options.name,
+		&dataHeight, &srcObjv) != TCL_OK) {
+	    return TCL_ERROR;
+	}
+	tkwin = Tk_MainWindow(interp);
+	block.pixelPtr = NULL;
+	dataWidth = 0;
+	pixelPtr = NULL;
+	for (y = 0; y < dataHeight; ++y) {
+	    if (Tcl_ListObjGetElements(interp, srcObjv[y],
+		    &listObjc, &listObjv) != TCL_OK) {
+		break;
+	    }
+
+	    if (y == 0) {
+		if (listObjc == 0) {
+		    /*
+		     * Lines must be non-empty...
+		     */
+
+		    break;
+		}
+		dataWidth = listObjc;
+		/*
+		 * Memory allocation overflow protection.
+		 * May not be able to trigger/ demo / test this.
+		 */
+
+		if (dataWidth > (int)((UINT_MAX/3) / dataHeight)) {
+		    Tcl_SetObjResult(interp, Tcl_NewStringObj(
+			"photo image dimensions exceed Tcl memory limits", -1));
+		    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
+			"OVERFLOW", NULL);
+		    break;
+		}
+
+		pixelPtr = ckalloc(dataWidth * dataHeight * 3);
+		block.pixelPtr = pixelPtr;
+	    } else if (listObjc != dataWidth) {
+		Tcl_SetObjResult(interp, Tcl_NewStringObj(
+			"all elements of color list must have the same"
+			" number of elements", -1));
+		Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
+			"NON_RECTANGULAR", NULL);
+		break;
+	    }
+
+	    for (x = 0; x < dataWidth; ++x) {
+		const char *colorString = Tcl_GetString(listObjv[x]);
+		XColor color;
+		int tmpr, tmpg, tmpb;
+
+		/*
+		 * We do not use Tk_GetColorFromObj() because we absolutely do
+		 * not want to invoke the fallback code.
+		 */
+
+		if (colorString[0] == '#') {
+		    if (isxdigit(UCHAR(colorString[1])) &&
+			    isxdigit(UCHAR(colorString[2])) &&
+			    isxdigit(UCHAR(colorString[3]))) {
+			if (colorString[4] == '\0') {
+			    /* Got #rgb */
+			    sscanf(colorString+1, "%1x%1x%1x",
+				    &tmpr, &tmpg, &tmpb);
+			    *pixelPtr++ = tmpr * 0x11;
+			    *pixelPtr++ = tmpg * 0x11;
+			    *pixelPtr++ = tmpb * 0x11;
+			    continue;
+			} else if (isxdigit(UCHAR(colorString[4])) &&
+				isxdigit(UCHAR(colorString[5])) &&
+				isxdigit(UCHAR(colorString[6])) &&
+				colorString[7] == '\0') {
+			    /* Got #rrggbb */
+			    sscanf(colorString+1, "%2x%2x%2x",
+				    &tmpr, &tmpg, &tmpb);
+			    *pixelPtr++ = tmpr;
+			    *pixelPtr++ = tmpg;
+			    *pixelPtr++ = tmpb;
+			    continue;
+			}
+		    }
+		}
+
+		if (!TkParseColor(Tk_Display(tkwin), Tk_Colormap(tkwin),
+			colorString, &color)) {
+		    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
+			    "can't parse color \"%s\"", colorString));
+		    Tcl_SetErrorCode(interp, "TK", "VALUE", "COLOR", NULL);
+		    break;
+		}
+		*pixelPtr++ = color.red >> 8;
+		*pixelPtr++ = color.green >> 8;
+		*pixelPtr++ = color.blue >> 8;
+	    }
+	    if (x < dataWidth) {
+		break;
+	    }
+	}
+	if (y < dataHeight || dataHeight == 0 || dataWidth == 0) {
+	    if (block.pixelPtr != NULL) {
+		ckfree(block.pixelPtr);
+	    }
+	    if (y < dataHeight) {
 		return TCL_ERROR;
 	    }
+	    return TCL_OK;
 	}
 
 	/*
-	 * SB: is the next line really needed? The stringReadProc
-	 * writes image data with Tk_PhotoPutBlock(), which in turn
-	 * takes care to notify the changed image and to set/unset the
-	 * IMAGE_CHANGED bit.
+	 * Fill in default values for the -to option, then copy the block in
+	 * using Tk_PhotoPutBlock.
 	 */
-	modelPtr->flags |= IMAGE_CHANGED;
 
-	return TCL_OK;
-    }
+	if (!(options.options & OPT_TO) || (options.toX2 < 0)) {
+	    options.toX2 = options.toX + dataWidth;
+	    options.toY2 = options.toY + dataHeight;
+	}
+	block.width = dataWidth;
+	block.height = dataHeight;
+	block.pitch = dataWidth * 3;
+	block.pixelSize = 3;
+	block.offset[0] = 0;
+	block.offset[1] = 1;
+	block.offset[2] = 2;
+	block.offset[3] = 0;
+	result = Tk_PhotoPutBlock(interp, modelPtr, &block,
+		options.toX, options.toY, options.toX2 - options.toX,
+		options.toY2 - options.toY,
+		TK_PHOTO_COMPOSITE_SET);
+	ckfree(block.pixelPtr);
+	return result;
+
     case PHOTO_READ: {
 	Tcl_Obj *format;
 
@@ -1017,9 +1035,8 @@ ImgPhotoCmd(
 	memset(&options, 0, sizeof(options));
 	options.name = NULL;
 	options.format = NULL;
-	options.metadata = NULL;
 	if (ParseSubcommandOptions(&options, interp,
-		OPT_FORMAT | OPT_FROM | OPT_TO | OPT_SHRINK | OPT_METADATA,
+		OPT_FORMAT | OPT_FROM | OPT_TO | OPT_SHRINK,
 		&index, objc, objv) != TCL_OK) {
 	    return TCL_ERROR;
 	}
@@ -1034,7 +1051,7 @@ ImgPhotoCmd(
 
 	if (Tcl_IsSafe(interp)) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "can't get image from a file in a safe interpreter", TCL_INDEX_NONE));
+		    "can't get image from a file in a safe interpreter", -1));
 	    Tcl_SetErrorCode(interp, "TK", "SAFE", "PHOTO_FILE", (char *)NULL);
 	    return TCL_ERROR;
 	}
@@ -1055,12 +1072,10 @@ ImgPhotoCmd(
 	}
 
 	if (MatchFileFormat(interp, chan,
-		Tcl_GetString(options.name), options.format,
-		options.metadata, NULL, &imageFormat,
-		&imageFormatVersion3, &imageWidth, &imageHeight, &oldformat)
-		!= TCL_OK) {
-	    result = TCL_ERROR;
-	    goto readCleanup;
+		Tcl_GetString(options.name), options.format, &imageFormat,
+		&imageWidth, &imageHeight, &oldformat) != TCL_OK) {
+	    Tcl_Close(NULL, chan);
+	    return TCL_ERROR;
 	}
 
 	/*
@@ -1074,8 +1089,8 @@ ImgPhotoCmd(
 		    "coordinates for -from option extend outside source image",
 		    -1));
 	    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO", "BAD_FROM", (char *)NULL);
-	    result = TCL_ERROR;
-	    goto readCleanup;
+	    Tcl_Close(NULL, chan);
+	    return TCL_ERROR;
 	}
 	if (!(options.options & OPT_FROM) || (options.fromX2 < 0)) {
 	    width = imageWidth - options.fromX;
@@ -1094,10 +1109,10 @@ ImgPhotoCmd(
 		    options.toY + height) != TCL_OK) {
 		Tcl_ResetResult(interp);
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+			TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 		Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
-		result = TCL_ERROR;
-		goto readCleanup;
+		Tcl_Close(NULL, chan);
+		return TCL_ERROR;
 	    }
 	}
 
@@ -1110,19 +1125,10 @@ ImgPhotoCmd(
 	if (oldformat && format) {
 	    format = (Tcl_Obj *) Tcl_GetString(format);
 	}
-	if (imageFormat != NULL) {
-	    result = imageFormat->fileReadProc(interp, chan,
-		    Tcl_GetString(options.name),
-		    format, (Tk_PhotoHandle) modelPtr, options.toX,
-		    options.toY, width, height, options.fromX, options.fromY);
-	} else {
-	    result = imageFormatVersion3->fileReadProc(interp, chan,
-		    Tcl_GetString(options.name),
-		    format, options.metadata, (Tk_PhotoHandle) modelPtr,
-		    options.toX, options.toY, width, height, options.fromX,
-		    options.fromY, NULL);
-	}
-readCleanup:
+	result = imageFormat->fileReadProc(interp, chan,
+		Tcl_GetString(options.name),
+		format, (Tk_PhotoHandle) modelPtr, options.toX,
+		options.toY, width, height, options.fromX, options.fromY);
 	if (chan != NULL) {
 	    Tcl_Close(NULL, chan);
 	}
@@ -1158,7 +1164,7 @@ readCleanup:
 	     * Tell the core image code that part of the image has changed.
 	     */
 
-	    Tk_ImageChanged(modelPtr->tkModel, x, y,
+	    Tk_ImageChanged(modelPtr->tkMaster, x, y,
 		    (modelPtr->width - x), (modelPtr->height - y),
 		    modelPtr->width, modelPtr->height);
 	}
@@ -1183,40 +1189,14 @@ readCleanup:
 
 	switch ((enum transOptions) index) {
 	case PHOTO_TRANS_GET: {
-	    int boolMode;
-
-	    /*
-	     * parse fixed args and option
-	     */
-
-	    if (objc > 6 || objc < 5) {
-		Tcl_WrongNumArgs(interp, 3, objv, "x y ?-option?");
+	    if (objc != 5) {
+		Tcl_WrongNumArgs(interp, 3, objv, "x y");
 		return TCL_ERROR;
 	    }
 	    if ((Tcl_GetIntFromObj(interp, objv[3], &x) != TCL_OK)
 		    || (Tcl_GetIntFromObj(interp, objv[4], &y) != TCL_OK)) {
 		return TCL_ERROR;
 	    }
-
-	    index = 4;
-	    memset(&options, 0, sizeof(options));
-	    if (ParseSubcommandOptions(&options, interp,
-		    OPT_ALPHA, &index, objc, objv) != TCL_OK) {
-		return TCL_ERROR;
-	    }
-	    if (index < objc) {
-		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-			"unknown option \"%s\": must be -alpha",
-			Tcl_GetString(objv[index])));
-		Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO", "BAD_OPTION",
-			(char *)NULL);
-		return TCL_ERROR;
-	    }
-	    boolMode = 1;
-	    if (options.options & OPT_ALPHA) {
-		boolMode = 0;
-	    }
-
 	    if ((x < 0) || (x >= modelPtr->width)
 		    || (y < 0) || (y >= modelPtr->height)) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
@@ -1227,55 +1207,26 @@ readCleanup:
 		return TCL_ERROR;
 	    }
 
-	    /*
-	     * Extract and return the desired value
-	     */
 	    pixelPtr = modelPtr->pix32 + (y * modelPtr->width + x) * 4;
-	    if (boolMode) {
-		Tcl_SetObjResult(interp, Tcl_NewBooleanObj(pixelPtr[3] == 0));
-	    } else {
-		Tcl_SetObjResult(interp, Tcl_NewWideIntObj(pixelPtr[3]));
-	    }
+
+	    Tcl_SetObjResult(interp, Tcl_NewBooleanObj(pixelPtr[3] == 0));
 	    return TCL_OK;
 	}
 
 	case PHOTO_TRANS_SET: {
-	    int newVal, boolMode;
+	    int transFlag;
 	    XRectangle setBox;
-	    TkRegion modRegion;
 
-	    /*
-	     * Parse args and option, check for valid values
-	     */
-
-	    if (objc < 6 || objc > 7) {
-		Tcl_WrongNumArgs(interp, 3, objv, "x y newVal ?-option?");
+	    if (objc != 6) {
+		Tcl_WrongNumArgs(interp, 3, objv, "x y boolean");
 		return TCL_ERROR;
 	    }
 	    if ((Tcl_GetIntFromObj(interp, objv[3], &x) != TCL_OK)
-		    || (Tcl_GetIntFromObj(interp, objv[4], &y) != TCL_OK)) {
+		    || (Tcl_GetIntFromObj(interp, objv[4], &y) != TCL_OK)
+		    || (Tcl_GetBooleanFromObj(interp, objv[5],
+		    &transFlag) != TCL_OK)) {
 		return TCL_ERROR;
 	    }
-
-	    index = 5;
-	    memset(&options, 0, sizeof(options));
-	    if (ParseSubcommandOptions(&options, interp,
-		    OPT_ALPHA, &index, objc, objv) != TCL_OK) {
-		return TCL_ERROR;
-	    }
-	    if (index < objc) {
-		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-			"unknown option \"%s\": must be -alpha",
-			Tcl_GetString(objv[index])));
-		Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO", "BAD_OPTION",
-			(char *)NULL);
-		return TCL_ERROR;
-	    }
-	    boolMode = 1;
-	    if (options.options & OPT_ALPHA) {
-		boolMode = 0;
-	    }
-
 	    if ((x < 0) || (x >= modelPtr->width)
 		|| (y < 0) || (y >= modelPtr->height)) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
@@ -1286,60 +1237,45 @@ readCleanup:
 		return TCL_ERROR;
 	    }
 
-	    if (boolMode) {
-		if (Tcl_GetBooleanFromObj(interp, objv[5], &newVal) != TCL_OK) {
-		    return TCL_ERROR;
-		}
-	    } else {
-		if (Tcl_GetIntFromObj(interp, objv[5], &newVal) != TCL_OK) {
-		    return TCL_ERROR;
-		}
-		if (newVal < 0 || newVal > 255) {
-		    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-			    "invalid alpha value \"%d\": "
-			    "must be integer between 0 and 255", newVal));
-		    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
-			    "BAD_VALUE", (char *)NULL);
-		    return TCL_ERROR;
-		}
-	    }
-
-	    /*
-	     * Set new alpha value for the pixel
-	     */
-
-	    pixelPtr = modelPtr->pix32 + (y * modelPtr->width + x) * 4;
-	    if (boolMode) {
-		pixelPtr[3] = newVal ? 0 : 255;
-	    } else {
-		pixelPtr[3] = newVal;
-	    }
-
-	    /*
-	     * Update the validRegion of the image
-	     */
-
 	    setBox.x = x;
 	    setBox.y = y;
 	    setBox.width = 1;
 	    setBox.height = 1;
-	    modRegion = TkCreateRegion();
-	    TkUnionRectWithRegion(&setBox, modRegion, modRegion);
-	    if (pixelPtr[3]) {
+	    pixelPtr = modelPtr->pix32 + (y * modelPtr->width + x) * 4;
+
+	    if (transFlag) {
+		/*
+		 * Make pixel transparent.
+		 */
+
+		TkRegion clearRegion = TkCreateRegion();
+
+		TkUnionRectWithRegion(&setBox, clearRegion, clearRegion);
+		TkSubtractRegion(modelPtr->validRegion, clearRegion,
+			modelPtr->validRegion);
+		TkDestroyRegion(clearRegion);
+
+		/*
+		 * Set the alpha value correctly.
+		 */
+
+		pixelPtr[3] = 0;
+	    } else {
+		/*
+		 * Make pixel opaque.
+		 */
+
 		TkUnionRectWithRegion(&setBox, modelPtr->validRegion,
 			modelPtr->validRegion);
-	    } else {
-		TkSubtractRegion(modelPtr->validRegion, modRegion,
-			modelPtr->validRegion);
+		pixelPtr[3] = 255;
 	    }
-	    TkDestroyRegion(modRegion);
 
 	    /*
 	     * Inform the generic image code that the image
 	     * has (potentially) changed.
 	     */
 
-	    Tk_ImageChanged(modelPtr->tkModel, x, y, 1, 1,
+	    Tk_ImageChanged(modelPtr->tkMaster, x, y, 1, 1,
 		    modelPtr->width, modelPtr->height);
 	    modelPtr->flags &= ~IMAGE_CHANGED;
 	    return TCL_OK;
@@ -1352,7 +1288,7 @@ readCleanup:
     case PHOTO_WRITE: {
 	char *data;
 	const char *fmtString;
-	Tcl_Obj *format, *metadataIn;
+	Tcl_Obj *format;
 	int usedExt;
 
 	/*
@@ -1361,7 +1297,7 @@ readCleanup:
 
 	if (Tcl_IsSafe(interp)) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "can't write image to a file in a safe interpreter", TCL_INDEX_NONE));
+		    "can't write image to a file in a safe interpreter", -1));
 	    Tcl_SetErrorCode(interp, "TK", "SAFE", "PHOTO_FILE", (char *)NULL);
 	    return TCL_ERROR;
 	}
@@ -1374,10 +1310,8 @@ readCleanup:
 	memset(&options, 0, sizeof(options));
 	options.name = NULL;
 	options.format = NULL;
-	options.metadata = NULL;
 	if (ParseSubcommandOptions(&options, interp,
-		OPT_FORMAT | OPT_FROM | OPT_GRAYSCALE | OPT_BACKGROUND
-		| OPT_METADATA,
+		OPT_FORMAT | OPT_FROM | OPT_GRAYSCALE | OPT_BACKGROUND,
 		&index, objc, objv) != TCL_OK) {
 	    return TCL_ERROR;
 	}
@@ -1393,7 +1327,7 @@ readCleanup:
 		|| (options.fromX2 > modelPtr->width)
 		|| (options.fromY2 > modelPtr->height)) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "coordinates for -from option extend outside image", TCL_INDEX_NONE));
+		    "coordinates for -from option extend outside image", -1));
 	    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO", "BAD_FROM", (char *)NULL);
 	    if (options.background) {
 		Tk_FreeColor(options.background);
@@ -1419,17 +1353,6 @@ readCleanup:
 	    usedExt = 0;
 	}
 
-
-	/*
-	 * Use argument metadata if specified, otherwise the master metadata
-	 */
-
-	if (NULL != options.metadata) {
-	    metadataIn = options.metadata;
-	} else {
-	    metadataIn = modelPtr->metadata;
-	}
-
 	/*
 	 * Search for an appropriate image file format handler, and give an
 	 * error if none is found.
@@ -1437,7 +1360,6 @@ readCleanup:
 
 	matched = 0;
     redoFormatLookup:
-	imageFormatVersion3 = NULL;
 	for (imageFormat = tsdPtr->formatList; imageFormat != NULL;
 		imageFormat = imageFormat->nextPtr) {
 	    if ((fmtString == NULL)
@@ -1450,15 +1372,14 @@ readCleanup:
 	    }
 	}
 	if (imageFormat == NULL) {
-	    oldformat = 0;
-	    for (imageFormatVersion3 = tsdPtr->formatListVersion3;
-		    imageFormatVersion3 != NULL;
-		    imageFormatVersion3 = imageFormatVersion3->nextPtr) {
+	    oldformat = 1;
+	    for (imageFormat = tsdPtr->oldFormatList; imageFormat != NULL;
+		    imageFormat = imageFormat->nextPtr) {
 		if ((fmtString == NULL)
-			|| (strncasecmp(fmtString, imageFormatVersion3->name,
-				strlen(imageFormatVersion3->name)) == 0)) {
+			|| (strncasecmp(fmtString, imageFormat->name,
+				strlen(imageFormat->name)) == 0)) {
 		    matched = 1;
-		    if (imageFormatVersion3->fileWriteProc != NULL) {
+		    if (imageFormat->fileWriteProc != NULL) {
 			break;
 		    }
 		}
@@ -1475,11 +1396,11 @@ readCleanup:
 	    fmtString = NULL;
 	    goto redoFormatLookup;
 	}
-	if (imageFormat == NULL && imageFormatVersion3 == NULL) {
+	if (imageFormat == NULL) {
 	    if (fmtString == NULL) {
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
 			"no available image file format has file writing"
-			" capability", TCL_INDEX_NONE));
+			" capability", -1));
 	    } else if (!matched) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"image file format \"%s\" is unknown", fmtString));
@@ -1505,14 +1426,8 @@ readCleanup:
 	if (oldformat && format) {
 	    format = (Tcl_Obj *) Tcl_GetString(options.format);
 	}
-	if (imageFormat != NULL) {
-	    result = imageFormat->fileWriteProc(interp,
-		    Tcl_GetString(options.name), format, &block);
-	} else {
-	    result = imageFormatVersion3->fileWriteProc(interp,
-		    Tcl_GetString(options.name), format, metadataIn,
-		    &block);
-	}
+	result = imageFormat->fileWriteProc(interp,
+		Tcl_GetString(options.name), format, &block);
 	if (options.background) {
 	    Tk_FreeColor(options.background);
 	}
@@ -1564,18 +1479,13 @@ GetExtension(
  *
  *	This function is invoked to process one of the options which may be
  *	specified for the photo image subcommands, namely, -from, -to, -zoom,
- *	-subsample, -format, -shrink, -compositingrule, -alpha, -boolean,
- *	-withalpha and -metadata.
- *	Parsing starts at the index in *optIndexPtr and stops at the end of
- *	objv[] or at the first value that does not belong to an option.
+ *	-subsample, -format, -shrink, and -compositingrule.
  *
  * Results:
  *	A standard Tcl result.
  *
  * Side effects:
- *	Fields in *optPtr get filled in. The value of optIndexPtr is updated
- *	to contain the index of the first element in argv[] that was not
- *	parsed, or argc if the end of objv[] was reached.
+ *	Fields in *optPtr get filled in.
  *
  *----------------------------------------------------------------------
  */
@@ -1588,10 +1498,10 @@ ParseSubcommandOptions(
     Tcl_Interp *interp,		/* Interpreter to use for reporting errors. */
     int allowedOptions,		/* Indicates which options are valid for the
 				 * current command. */
-    Tcl_Size *optIndexPtr,		/* Points to a variable containing the current
+    int *optIndexPtr,		/* Points to a variable containing the current
 				 * index in objv; this variable is updated by
 				 * this function. */
-    Tcl_Size objc,			/* Number of arguments in objv[]. */
+    int objc,			/* Number of arguments in objv[]. */
     Tcl_Obj *const objv[])	/* Arguments to be parsed. */
 {
     static const char *const compositingRules[] = {
@@ -1599,7 +1509,7 @@ ParseSubcommandOptions(
 				 * TK_PHOTO_COMPOSITE_* constants. */
 	NULL
     };
-    Tcl_Size index, length, argIndex;
+    int index, length, argIndex;
     int c, bit, currentBit;
     int values[4], numValues, maxValues;
     const char *option, *expandedOption, *needed;
@@ -1667,8 +1577,8 @@ ParseSubcommandOptions(
 		goto oneValueRequired;
 	    }
 	    *optIndexPtr = ++index;
-	    optPtr->background = Tk_GetColor(interp, Tk_MainWindow(interp),
-		    Tk_GetUid(Tcl_GetString(objv[index])));
+	    optPtr->background = Tk_AllocColorFromObj(interp, Tk_MainWindow(interp),
+		    objv[index]);
 	    if (!optPtr->background) {
 		return TCL_ERROR;
 	    }
@@ -1683,17 +1593,6 @@ ParseSubcommandOptions(
 	    }
 	    *optIndexPtr = ++index;
 	    optPtr->format = objv[index];
-	} else if (bit == OPT_METADATA) {
-	    /*
-	    * The -metadata option takes a single dict value. Note that
-	    * parsing this is outside the scope of this function.
-	    */
-
-	    if (index + 1 >= objc) {
-		goto oneValueRequired;
-	    }
-	    *optIndexPtr = ++index;
-	    optPtr->metadata = objv[index];
 	} else if (bit == OPT_COMPOSITE) {
 	    /*
 	     * The -compositingrule option takes a single value from a
@@ -1710,8 +1609,7 @@ ParseSubcommandOptions(
 		return TCL_ERROR;
 	    }
 	    *optIndexPtr = index;
-	} else if (bit == OPT_TO || bit == OPT_FROM
-		|| bit == OPT_SUBSAMPLE || bit == OPT_ZOOM) {
+	} else if ((bit != OPT_SHRINK) && (bit != OPT_GRAYSCALE)) {
 	    const char *val;
 
 	    maxValues = ((bit == OPT_FROM) || (bit == OPT_TO)) ? 4 : 2;
@@ -1844,12 +1742,12 @@ ParseSubcommandOptions(
 	if (allowedOptions & bit) {
 	    if (allowedOptions & (bit - 1)) {
 		if (allowedOptions & ~((bit << 1) - 1)) {
-		    Tcl_AppendToObj(msgObj, ", ", TCL_INDEX_NONE);
+		    Tcl_AppendToObj(msgObj, ", ", -1);
 		} else {
-		    Tcl_AppendToObj(msgObj, ", or ", TCL_INDEX_NONE);
+		    Tcl_AppendToObj(msgObj, ", or ", -1);
 		}
 	    }
-	    Tcl_AppendToObj(msgObj, *listPtr, TCL_INDEX_NONE);
+	    Tcl_AppendToObj(msgObj, *listPtr, -1);
 	}
 	bit <<= 1;
     }
@@ -1883,22 +1781,20 @@ ImgPhotoConfigureModel(
     Tcl_Interp *interp,		/* Interpreter to use for reporting errors. */
     PhotoModel *modelPtr,	/* Pointer to data structure describing
 				 * overall photo image to (re)configure. */
-    Tcl_Size objc,			/* Number of entries in objv. */
+    int objc,			/* Number of entries in objv. */
     Tcl_Obj *const objv[],	/* Pairs of configuration options for image. */
     int flags)			/* Flags to pass to Tk_ConfigureWidget, such
 				 * as TK_CONFIG_ARGV_ONLY. */
 {
     PhotoInstance *instancePtr;
     const char *oldFileString, *oldPaletteString;
-    Tcl_Obj *oldData, *data = NULL, *oldFormat, *format = NULL,
-	    *metadataInObj = NULL, *metadataOutObj = NULL;
+    Tcl_Obj *oldData, *data = NULL, *oldFormat, *format = NULL;
     Tcl_Obj *tempdata, *tempformat;
-    Tcl_Size i, length;
+    int i, length;
     int result, imageWidth, imageHeight, oldformat;
     double oldGamma;
     Tcl_Channel chan;
     Tk_PhotoImageFormat *imageFormat;
-    Tk_PhotoImageFormatVersion3 *imageFormatVersion3;
 
     for (i = 0; i < objc; i++) {
 	const char *arg = Tcl_GetStringFromObj(objv[i], &length);
@@ -1909,7 +1805,7 @@ ImgPhotoConfigureModel(
 		    data = objv[i];
 		} else {
 		    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			    "value for \"-data\" missing", TCL_INDEX_NONE));
+			    "value for \"-data\" missing", -1));
 		    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
 			    "MISSING_VALUE", (char *)NULL);
 		    return TCL_ERROR;
@@ -1920,20 +1816,9 @@ ImgPhotoConfigureModel(
 		    format = objv[i];
 		} else {
 		    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			    "value for \"-format\" missing", TCL_INDEX_NONE));
+			    "value for \"-format\" missing", -1));
 		    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
 			    "MISSING_VALUE", (char *)NULL);
-		    return TCL_ERROR;
-		}
-	    } else if ((arg[1] == 'm') &&
-		!strncmp(arg, "-metadata", length)) {
-		if (++i < objc) {
-		    metadataInObj = objv[i];
-		} else {
-		    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			"value for \"-metadata\" missing", TCL_INDEX_NONE));
-		    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
-			"MISSING_VALUE", (char *)NULL);
 		    return TCL_ERROR;
 		}
 	    }
@@ -1968,12 +1853,12 @@ ImgPhotoConfigureModel(
      */
 
     if (Tk_ConfigureWidget(interp, Tk_MainWindow(interp), configSpecs,
-	    objc, objv, modelPtr, flags) != TCL_OK) {
+	    objc, (const char **)objv, (char *) modelPtr, flags|TK_CONFIG_OBJS) != TCL_OK) {
 	goto errorExit;
     }
 
     /*
-     * Regard the empty string for -file, -data, -format or -metadata as the null value.
+     * Regard the empty string for -file, -data or -format as the null value.
      */
 
     if ((modelPtr->fileString != NULL) && (modelPtr->fileString[0] == 0)) {
@@ -1985,7 +1870,7 @@ ImgPhotoConfigureModel(
 	 * Force into ByteArray format, which most (all) image handlers will
 	 * use anyway. Empty length means ignore the -data option.
 	 */
-	Tcl_Size bytesize;
+	int bytesize;
 
 	(void) Tcl_GetByteArrayFromObj(data, &bytesize);
 	if (bytesize) {
@@ -2015,32 +1900,6 @@ ImgPhotoConfigureModel(
 	}
 	modelPtr->format = format;
     }
-    if (metadataInObj) {
-	/*
-	 * Make -metadata a dict.
-	 * Take also empty metadatas as this may be a sign to replace
-	 * existing metadata.
-	 */
-	Tcl_Size dictSize;
-
-	if (TCL_OK != Tcl_DictObjSize(interp,metadataInObj, &dictSize)) {
-	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "value for \"-metadata\" not a dict", TCL_INDEX_NONE));
-	    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
-		    "UNRECOGNIZED_DATA", (char *)NULL);
-	    return TCL_ERROR;
-	}
-
-	if (dictSize > 0) {
-	    Tcl_IncrRefCount(metadataInObj);
-	} else {
-	    metadataInObj = NULL;
-	}
-	if (modelPtr->metadata) {
-	    Tcl_DecrRefCount(modelPtr->metadata);
-	}
-	modelPtr->metadata = metadataInObj;
-    }
     /*
      * Set the image to the user-requested size, if any, and make sure storage
      * is correctly allocated for this image.
@@ -2049,7 +1908,7 @@ ImgPhotoConfigureModel(
     if (ImgPhotoSetSize(modelPtr, modelPtr->width,
 	    modelPtr->height) != TCL_OK) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+		TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 	Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 	goto errorExit;
     }
@@ -2080,19 +1939,11 @@ ImgPhotoConfigureModel(
 	    goto errorExit;
 	}
 
-	/*
-	 * Flag that we want the metadata result dict
-	 */
-
-	metadataOutObj = Tcl_NewDictObj();
-	Tcl_IncrRefCount(metadataOutObj);
-
 	if ((Tcl_SetChannelOption(interp, chan, "-translation", "binary")
 		!= TCL_OK) ||
 		(MatchFileFormat(interp, chan, modelPtr->fileString,
-			modelPtr->format, modelPtr->metadata, metadataOutObj,
-			&imageFormat, &imageFormatVersion3,
-			&imageWidth, &imageHeight, &oldformat) != TCL_OK)) {
+			modelPtr->format, &imageFormat, &imageWidth,
+			&imageHeight, &oldformat) != TCL_OK)) {
 	    Tcl_Close(NULL, chan);
 	    goto errorExit;
 	}
@@ -2100,7 +1951,7 @@ ImgPhotoConfigureModel(
 	if (result != TCL_OK) {
 	    Tcl_Close(NULL, chan);
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+		    TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 	    Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 	    goto errorExit;
 	}
@@ -2108,19 +1959,9 @@ ImgPhotoConfigureModel(
 	if (oldformat && tempformat) {
 	    tempformat = (Tcl_Obj *) Tcl_GetString(tempformat);
 	}
-	if (imageFormat != NULL) {
-	    result = imageFormat->fileReadProc(interp, chan,
-		    modelPtr->fileString, tempformat,
-		    (Tk_PhotoHandle) modelPtr,
-		    0, 0, imageWidth, imageHeight, 0, 0);
-	} else {
-	    result = imageFormatVersion3->fileReadProc(interp, chan,
-		    modelPtr->fileString, tempformat, modelPtr->metadata,
-		    (Tk_PhotoHandle) modelPtr,
-		    0, 0, imageWidth, imageHeight, 0, 0,
-		    metadataOutObj);
-	}
-
+	result = imageFormat->fileReadProc(interp, chan,
+		modelPtr->fileString, tempformat, (Tk_PhotoHandle) modelPtr,
+		0, 0, imageWidth, imageHeight, 0, 0);
 	Tcl_Close(NULL, chan);
 	if (result != TCL_OK) {
 	    goto errorExit;
@@ -2134,22 +1975,14 @@ ImgPhotoConfigureModel(
 	    && ((modelPtr->dataString != oldData)
 		    || (modelPtr->format != oldFormat))) {
 
-	/*
-	 * Flag that we want the metadata result dict
-	 */
-
-	metadataOutObj = Tcl_NewDictObj();
-	Tcl_IncrRefCount(metadataOutObj);
-
 	if (MatchStringFormat(interp, modelPtr->dataString,
-		modelPtr->format, modelPtr->metadata, metadataOutObj,
-		&imageFormat, &imageFormatVersion3, &imageWidth,
+		modelPtr->format, &imageFormat, &imageWidth,
 		&imageHeight, &oldformat) != TCL_OK) {
 	    goto errorExit;
 	}
 	if (ImgPhotoSetSize(modelPtr, imageWidth, imageHeight) != TCL_OK) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+		    TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 	    Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 	    goto errorExit;
 	}
@@ -2161,65 +1994,14 @@ ImgPhotoConfigureModel(
 	    }
 	    tempdata = (Tcl_Obj *) Tcl_GetString(tempdata);
 	}
-	if (imageFormat != NULL) {
-	    if (imageFormat->stringReadProc(interp, tempdata, tempformat,
-		    (Tk_PhotoHandle) modelPtr, 0, 0, imageWidth, imageHeight,
-		    0, 0) != TCL_OK) {
-		goto errorExit;
-	    }
-	} else {
-	    if (imageFormatVersion3->stringReadProc(interp, tempdata, tempformat,
-		    modelPtr->metadata, (Tk_PhotoHandle) modelPtr, 0, 0,
-		    imageWidth, imageHeight, 0, 0, metadataOutObj) != TCL_OK) {
-		goto errorExit;
-	    }
+	if (imageFormat->stringReadProc(interp, tempdata, tempformat,
+		(Tk_PhotoHandle) modelPtr, 0, 0, imageWidth, imageHeight,
+		0, 0) != TCL_OK) {
+	    goto errorExit;
 	}
 
 	Tcl_ResetResult(interp);
 	modelPtr->flags |= IMAGE_CHANGED;
-    }
-
-    /*
-     * Merge driver returned metadata and master metadata
-     */
-    if (metadataOutObj != NULL) {
-	Tcl_Size dictSize;
-	if (TCL_OK != Tcl_DictObjSize(interp,metadataOutObj, &dictSize)) {
-	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "driver metadata not a dict", TCL_INDEX_NONE));
-	    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
-		    "UNRECOGNIZED_DATA", (char *)NULL);
-	    goto errorExit;
-	}
-	if (dictSize > 0) {
-
-	    /*
-	     * We have driver return metadata
-	     */
-
-	    if (modelPtr->metadata == NULL) {
-		modelPtr->metadata = metadataOutObj;
-		metadataOutObj = NULL;
-	    } else {
-		Tcl_DictSearch search;
-		Tcl_Obj *key, *value;
-		int done;
-
-		if (Tcl_IsShared(modelPtr->metadata)) {
-		    Tcl_DecrRefCount(modelPtr->metadata);
-		    modelPtr->metadata = Tcl_DuplicateObj(modelPtr->metadata);
-		    Tcl_IncrRefCount(modelPtr->metadata);
-		}
-
-		if (Tcl_DictObjFirst(interp, metadataOutObj, &search, &key,
-			&value, &done) != TCL_OK) {
-		    goto errorExit;
-		}
-		for (; !done ; Tcl_DictObjNext(&search, &key, &value, &done)) {
-		    Tcl_DictObjPut(interp, modelPtr->metadata, key, value);
-		}
-	    }
-	}
     }
 
     /*
@@ -2250,7 +2032,7 @@ ImgPhotoConfigureModel(
      * Inform the generic image code that the image has (potentially) changed.
      */
 
-    Tk_ImageChanged(modelPtr->tkModel, 0, 0, modelPtr->width,
+    Tk_ImageChanged(modelPtr->tkMaster, 0, 0, modelPtr->width,
 	    modelPtr->height, modelPtr->width, modelPtr->height);
     modelPtr->flags &= ~IMAGE_CHANGED;
 
@@ -2259,9 +2041,6 @@ ImgPhotoConfigureModel(
     }
     if (oldFormat != NULL) {
 	Tcl_DecrRefCount(oldFormat);
-    }
-    if (metadataOutObj != NULL) {
-	Tcl_DecrRefCount(metadataOutObj);
     }
 
     ToggleComplexAlphaIfNeeded(modelPtr);
@@ -2274,9 +2053,6 @@ ImgPhotoConfigureModel(
     }
     if (oldFormat != NULL) {
 	Tcl_DecrRefCount(oldFormat);
-    }
-    if (metadataOutObj != NULL) {
-	Tcl_DecrRefCount(metadataOutObj);
     }
     return TCL_ERROR;
 }
@@ -2321,7 +2097,7 @@ ToggleComplexAlphaIfNeeded(
     c += 3;			/* Start at first alpha byte. */
     for (; c < end; c += 4) {
 	if (*c && *c != 255) {
-     	    mPtr->flags |= COMPLEX_ALPHA;
+	    mPtr->flags |= COMPLEX_ALPHA;
 	    break;
 	}
     }
@@ -2360,7 +2136,7 @@ ImgPhotoDelete(
 	Tcl_CancelIdleCall(TkImgDisposeInstance, instancePtr);
 	TkImgDisposeInstance(instancePtr);
     }
-    modelPtr->tkModel = NULL;
+    modelPtr->tkMaster = NULL;
     if (modelPtr->imageCmd != NULL) {
 	Tcl_DeleteCommandFromToken(modelPtr->interp, modelPtr->imageCmd);
     }
@@ -2376,10 +2152,7 @@ ImgPhotoDelete(
     if (modelPtr->format != NULL) {
 	Tcl_DecrRefCount(modelPtr->format);
     }
-    if (modelPtr->metadata != NULL) {
-	Tcl_DecrRefCount(modelPtr->metadata);
-    }
-    Tk_FreeOptions(configSpecs, modelPtr, NULL, 0);
+    Tk_FreeOptions(configSpecs, (char *) modelPtr, NULL, 0);
     ckfree(modelPtr);
 }
 
@@ -2408,8 +2181,8 @@ ImgPhotoCmdDeletedProc(
     PhotoModel *modelPtr = (PhotoModel *)clientData;
 
     modelPtr->imageCmd = NULL;
-    if (modelPtr->tkModel != NULL) {
-	Tk_DeleteImage(modelPtr->interp, Tk_NameOfImage(modelPtr->tkModel));
+    if (modelPtr->tkMaster != NULL) {
+	Tk_DeleteImage(modelPtr->interp, Tk_NameOfImage(modelPtr->tkMaster));
     }
 }
 
@@ -2615,9 +2388,9 @@ ImgPhotoSetSize(
  *
  * Results:
  *	A standard TCL return value. If the return value is TCL_OK, a pointer
- *	to the image format record is returned in *imageFormatPtr or
- *	*imageFormatVersion3Ptr, and the width and height of the image are
- *	returned in *widthPtr and *heightPtr.
+ *	to the image format record is returned in *imageFormatPtr, and the
+ *	width and height of the image are returned in *widthPtr and
+ *	*heightPtr.
  *
  * Side effects:
  *	None.
@@ -2631,16 +2404,9 @@ MatchFileFormat(
     Tcl_Channel chan,		/* The image file, open for reading. */
     const char *fileName,	/* The name of the image file. */
     Tcl_Obj *formatObj,		/* User-specified format string, or NULL. */
-    Tcl_Obj *metadataInObj,	/* User-specified metadata, may be NULL */
-    Tcl_Obj *metadataOutObj,	/* metadata to return, may be NULL */
     Tk_PhotoImageFormat **imageFormatPtr,
 				/* A pointer to the photo image format record
-				 * is returned here. For formatVersion3, this is
-				 * set to NULL */
-    Tk_PhotoImageFormatVersion3 **imageFormatVersion3Ptr,
-				/* A pointer to the photo image formatVersion3
-				 * record is returned here. For non
-				 * formatVersion3, this is set to NULL*/
+				 * is returned here. */
     int *widthPtr, int *heightPtr,
 				/* The dimensions of the image are returned
 				 * here. */
@@ -2649,7 +2415,6 @@ MatchFileFormat(
     int matched = 0;
     int useoldformat = 0;
     Tk_PhotoImageFormat *formatPtr;
-    Tk_PhotoImageFormatVersion3 *formatVersion3Ptr;
     ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
 	    Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData));
     const char *formatString = NULL;
@@ -2695,98 +2460,62 @@ MatchFileFormat(
 	    }
 	}
     }
-
-    /*
-     * For old and not version 3 format, exit now with success
-     */
-
-    if (formatPtr != NULL) {
-	*imageFormatPtr = formatPtr;
-	*imageFormatVersion3Ptr = NULL;
-	*oldformat = useoldformat;
-	(void) Tcl_Seek(chan, Tcl_LongAsWide(0L), SEEK_SET);
-	return TCL_OK;
-    }
-
-    /*
-     * Scan through the table of file format version 3 handlers to find one
-     * which can handle the image.
-     */
-
-    for (formatVersion3Ptr = tsdPtr->formatListVersion3;
-	    formatVersion3Ptr != NULL;
-	    formatVersion3Ptr = formatVersion3Ptr->nextPtr) {
-	if (formatObj != NULL) {
-	    if (strncasecmp(formatString,
-		    formatVersion3Ptr->name, strlen(formatVersion3Ptr->name))
-		    != 0) {
-		continue;
-	    }
-	    matched = 1;
-	    if (formatVersion3Ptr->fileMatchProc == NULL) {
-		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-			"-file option isn't supported for %s images",
-			formatString));
-		Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
-			"NOT_FILE_FORMAT", (char *)NULL);
-		return TCL_ERROR;
-	    }
-	}
-	if (formatVersion3Ptr->fileMatchProc != NULL) {
-	    (void) Tcl_Seek(chan, Tcl_LongAsWide(0L), SEEK_SET);
-
-	    if (formatVersion3Ptr->fileMatchProc(interp, chan, fileName,
-		    formatObj, metadataInObj, widthPtr, heightPtr,
-		    metadataOutObj)) {
-		if (*widthPtr < 1) {
-		    *widthPtr = 1;
+    if (formatPtr == NULL) {
+	useoldformat = 1;
+	for (formatPtr = tsdPtr->oldFormatList; formatPtr != NULL;
+		formatPtr = formatPtr->nextPtr) {
+	    if (formatString != NULL) {
+		if (strncasecmp(formatString,
+			formatPtr->name, strlen(formatPtr->name)) != 0) {
+		    continue;
 		}
-		if (*heightPtr < 1) {
-		    *heightPtr = 1;
+		matched = 1;
+		if (formatPtr->fileMatchProc == NULL) {
+		    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
+			    "-file option isn't supported for %s images",
+			    formatString));
+		    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
+			    "NOT_FILE_FORMAT", (char *)NULL);
+		    return TCL_ERROR;
 		}
-		*imageFormatVersion3Ptr = formatVersion3Ptr;
-		*imageFormatPtr = NULL;
-		*oldformat = 0;
+	    }
+	    if (formatPtr->fileMatchProc != NULL) {
 		(void) Tcl_Seek(chan, Tcl_LongAsWide(0L), SEEK_SET);
-		return TCL_OK;
-	    }
-
-	    /*
-	     * Check if driver has shared or changed the metadata Tcl object.
-	     * In this case, release and recreate it.
-	     */
-
-	    if (metadataOutObj != NULL) {
-		Tcl_Size dictSize;
-		if (Tcl_IsShared(metadataOutObj)
-			|| TCL_OK != Tcl_DictObjSize(interp,metadataOutObj, &dictSize)
-			|| dictSize > 0) {
-		    Tcl_DecrRefCount(metadataOutObj);
-		    metadataOutObj = Tcl_NewDictObj();
-		    Tcl_IncrRefCount(metadataOutObj);
+		if (formatPtr->fileMatchProc(chan, fileName, (Tcl_Obj *)
+			formatString, widthPtr, heightPtr, interp)) {
+		    if (*widthPtr < 1) {
+			*widthPtr = 1;
+		    }
+		    if (*heightPtr < 1) {
+			*heightPtr = 1;
+		    }
+		    break;
 		}
 	    }
 	}
     }
 
-    /*
-     * No matching format found
-     */
-
-    if ((formatObj != NULL) && !matched) {
-	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		"image file format \"%s\" is not supported",
-		formatString));
-	Tcl_SetErrorCode(interp, "TK", "LOOKUP", "PHOTO_FORMAT",
-		formatString, (char *)NULL);
-    } else {
-	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		"couldn't recognize data in image file \"%s\"",
-		fileName));
-	Tcl_SetErrorCode(interp, "TK", "PHOTO", "IMAGE",
-		"UNRECOGNIZED_DATA", (char *)NULL);
+    if (formatPtr == NULL) {
+	if ((formatObj != NULL) && !matched) {
+	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
+		    "image file format \"%s\" is not supported",
+		    formatString));
+	    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "PHOTO_FORMAT",
+		    formatString, (char *)NULL);
+	} else {
+	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
+		    "couldn't recognize data in image file \"%s\"",
+		    fileName));
+	    Tcl_SetErrorCode(interp, "TK", "PHOTO", "IMAGE",
+		    "UNRECOGNIZED_DATA", (char *)NULL);
+	}
+	return TCL_ERROR;
     }
-    return TCL_ERROR;
+
+    *imageFormatPtr = formatPtr;
+    *oldformat = useoldformat;
+    (void) Tcl_Seek(chan, Tcl_LongAsWide(0L), SEEK_SET);
+    return TCL_OK;
 }
 
 /*
@@ -2801,9 +2530,9 @@ MatchFileFormat(
  *
  * Results:
  *	A standard TCL return value. If the return value is TCL_OK, a pointer
- *	to the image format record is returned in *imageFormatPtr or
- *	*imageFormatVersion3Ptr, and the width and height of the image are
- *	returned in *widthPtr and *heightPtr.
+ *	to the image format record is returned in *imageFormatPtr, and the
+ *	width and height of the image are returned in *widthPtr and
+ *	*heightPtr.
  *
  * Side effects:
  *	None.
@@ -2816,24 +2545,16 @@ MatchStringFormat(
     Tcl_Interp *interp,		/* Interpreter to use for reporting errors. */
     Tcl_Obj *data,		/* Object containing the image data. */
     Tcl_Obj *formatObj,		/* User-specified format string, or NULL. */
-    Tcl_Obj *metadataInObj,	/* User-specified metadata, may be NULL */
-    Tcl_Obj *metadataOutObj,	/* metadata output dict, may be NULL */
     Tk_PhotoImageFormat **imageFormatPtr,
 				/* A pointer to the photo image format record
-				 * is returned here. For formatVersion3, this is
-				 * set to NULL*/
-    Tk_PhotoImageFormatVersion3 **imageFormatVersion3Ptr,
-				/* A pointer to the photo image formatVersion3
-				 * record is returned here. For non
-				 * formatVersion3, this is set to NULL*/
+				 * is returned here. */
     int *widthPtr, int *heightPtr,
 				/* The dimensions of the image are returned
 				 * here. */
     int *oldformat)		/* Returns 1 if the old image API is used. */
 {
     int matched = 0, useoldformat = 0;
-    Tk_PhotoImageFormat *formatPtr, *defaultFormatPtr = NULL;
-    Tk_PhotoImageFormatVersion3 *formatVersion3Ptr = NULL;
+    Tk_PhotoImageFormat *formatPtr;
     ThreadSpecificData *tsdPtr = (ThreadSpecificData *)
 	    Tcl_GetThreadData(&dataKey, sizeof(ThreadSpecificData));
     const char *formatString = NULL;
@@ -2849,16 +2570,6 @@ MatchStringFormat(
 
     for (formatPtr = tsdPtr->formatList; formatPtr != NULL;
 	    formatPtr = formatPtr->nextPtr) {
-	/*
-	 * To keep the behaviour of older versions (Tk <= 8.6), the default
-	 * list-of-lists string format is checked last. Remember its position.
-	 */
-
-	if (strncasecmp("default", formatPtr->name, strlen(formatPtr->name))
-		== 0) {
-	    defaultFormatPtr = formatPtr;
-	}
-
 	if (formatObj != NULL) {
 	    if (strncasecmp(formatString,
 		    formatPtr->name, strlen(formatPtr->name)) != 0) {
@@ -2874,16 +2585,6 @@ MatchStringFormat(
 		return TCL_ERROR;
 	    }
 	}
-
-	/*
-	 * If this is the default format, and it was not passed as -format
-	 * option, skip the stringMatchProc test. It'll be done later
-	 */
-
-	if (formatObj == NULL && formatPtr == defaultFormatPtr) {
-	    continue;
-	}
-
 	if ((formatPtr->stringMatchProc != NULL)
 		&& (formatPtr->stringReadProc != NULL)
 		&& formatPtr->stringMatchProc(data, formatObj,
@@ -2893,18 +2594,16 @@ MatchStringFormat(
     }
 
     if (formatPtr == NULL) {
-	useoldformat = 0;
-	for (formatVersion3Ptr = tsdPtr->formatListVersion3;
-		formatVersion3Ptr != NULL;
-		formatVersion3Ptr = formatVersion3Ptr->nextPtr) {
+	useoldformat = 1;
+	for (formatPtr = tsdPtr->oldFormatList; formatPtr != NULL;
+		formatPtr = formatPtr->nextPtr) {
 	    if (formatObj != NULL) {
 		if (strncasecmp(formatString,
-			formatVersion3Ptr->name, strlen(formatVersion3Ptr->name)
-			) != 0) {
+			formatPtr->name, strlen(formatPtr->name)) != 0) {
 		    continue;
 		}
 		matched = 1;
-		if (formatVersion3Ptr->stringMatchProc == NULL) {
+		if (formatPtr->stringMatchProc == NULL) {
 		    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			    "-data option isn't supported for %s images",
 			    formatString));
@@ -2913,81 +2612,33 @@ MatchStringFormat(
 		    return TCL_ERROR;
 		}
 	    }
-	    if ((formatVersion3Ptr->stringMatchProc != NULL)
-		    && (formatVersion3Ptr->stringReadProc != NULL)
-		    && formatVersion3Ptr->stringMatchProc(interp, data,
-			    formatObj, metadataInObj, widthPtr, heightPtr,
-			    metadataOutObj)) {
+	    if ((formatPtr->stringMatchProc != NULL)
+		    && (formatPtr->stringReadProc != NULL)
+		    && formatPtr->stringMatchProc(
+			    (Tcl_Obj *) Tcl_GetString(data),
+			    (Tcl_Obj *) formatString,
+			    widthPtr, heightPtr, interp)) {
 		break;
-	    }
-
-	    /*
-	     * Check if driver has shared or changed the metadata tcl object.
-	     * In this case, release and recreate it.
-	     */
-
-	    if (metadataOutObj != NULL) {
-		Tcl_Size dictSize;
-		if (Tcl_IsShared(metadataOutObj)
-			|| TCL_OK != Tcl_DictObjSize(interp,metadataOutObj, &dictSize)
-			|| dictSize > 0) {
-		    Tcl_DecrRefCount(metadataOutObj);
-		    metadataOutObj = Tcl_NewDictObj();
-		    Tcl_IncrRefCount(metadataOutObj);
-		}
 	    }
 	}
     }
-
-    if (formatPtr == NULL && formatVersion3Ptr == NULL) {
-	/*
-	 * Try the default format as last resort (only if no -format option
-	 * was passed).
-	 */
-
-	if ( formatObj == NULL && defaultFormatPtr == NULL) {
-	    Tcl_Panic("default image format handler not registered");
-	}
-	if ( formatObj == NULL
-		&& defaultFormatPtr->stringMatchProc != NULL
-		&& defaultFormatPtr->stringReadProc != NULL
-		&& defaultFormatPtr->stringMatchProc(data, formatObj,
-		widthPtr, heightPtr, interp) != 0) {
-	    useoldformat = 0;
-	    formatPtr = defaultFormatPtr;
-	} else if ((formatObj != NULL) && !matched) {
+    if (formatPtr == NULL) {
+	if ((formatObj != NULL) && !matched) {
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "image format \"%s\" is not supported", formatString));
 	    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "PHOTO_FORMAT",
 		    formatString, (char *)NULL);
-	    return TCL_ERROR;
 	} else {
-
-	    /*
-	     * Some lower level routine (stringMatchProc) may have already set
-	     * a specific error message, so just return this. Otherwise return
-	     * a generic image data error.
-	     */
-
-	    if (Tcl_GetString(Tcl_GetObjResult(interp))[0] == '\0') {
-		Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			"couldn't recognize image data", TCL_INDEX_NONE));
-		Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
-			"UNRECOGNIZED_DATA", (char *)NULL);
-	    }
-	    return TCL_ERROR;
+	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
+		    "couldn't recognize image data", -1));
+	    Tcl_SetErrorCode(interp, "TK", "IMAGE", "PHOTO",
+		    "UNRECOGNIZED_DATA", (char *)NULL);
 	}
+	return TCL_ERROR;
     }
 
     *imageFormatPtr = formatPtr;
-    *imageFormatVersion3Ptr = formatVersion3Ptr;
     *oldformat = useoldformat;
-
-    /*
-     * Some stringMatchProc might have left error messages and error codes in
-     * interp.	Clear them before return.
-     */
-    Tcl_ResetResult(interp);
     return TCL_OK;
 }
 
@@ -3019,7 +2670,7 @@ Tk_FindPhoto(
 {
     const Tk_ImageType *typePtr;
     void *clientData =
-	    Tk_GetImageModelData(interp, imageName, &typePtr);
+	    Tk_GetImageMasterData(interp, imageName, &typePtr);
 
     if ((typePtr == NULL) || (typePtr->name != tkPhotoImageType.name)) {
 	return NULL;
@@ -3128,7 +2779,7 @@ Tk_PhotoPutBlock(
 	if (sourceBlock.pixelPtr == NULL) {
 	    if (interp != NULL) {
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+			TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 		Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 	    }
 	    return TCL_ERROR;
@@ -3145,7 +2796,7 @@ Tk_PhotoPutBlock(
 		MAX(yEnd, modelPtr->height)) == TCL_ERROR) {
 	    if (interp != NULL) {
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+			TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 		Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 	    }
 	    goto errorExit;
@@ -3449,7 +3100,7 @@ Tk_PhotoPutBlock(
      * Tell the core image code that this image has changed.
      */
 
-    Tk_ImageChanged(modelPtr->tkModel, x, y, width, height,
+    Tk_ImageChanged(modelPtr->tkMaster, x, y, width, height,
 	    modelPtr->width, modelPtr->height);
 
     if (memToFree) ckfree(memToFree);
@@ -3574,7 +3225,7 @@ Tk_PhotoPutZoomedBlock(
 	if (sourceBlock.pixelPtr == NULL) {
 	    if (interp != NULL) {
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+			TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 		Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 	    }
 	    return TCL_ERROR;
@@ -3590,7 +3241,7 @@ Tk_PhotoPutZoomedBlock(
 		MAX(yEnd, modelPtr->height)) == TCL_ERROR) {
 	    if (interp != NULL) {
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+			TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 		Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 	    }
 	    goto errorExit;
@@ -3686,7 +3337,7 @@ Tk_PhotoPutZoomedBlock(
 			    *destPtr++ = srcPtr[blueOffset];
 			    *destPtr++ = 255;
 			    continue;
- 			}
+			}
 
 			if (compRule==TK_PHOTO_COMPOSITE_SET || !destPtr[3]) {
 			    /*
@@ -3805,7 +3456,7 @@ Tk_PhotoPutZoomedBlock(
      * Tell the core image code that this image has changed.
      */
 
-    Tk_ImageChanged(modelPtr->tkModel, x, y, width, height, modelPtr->width,
+    Tk_ImageChanged(modelPtr->tkMaster, x, y, width, height, modelPtr->width,
 	    modelPtr->height);
 
     if (memToFree) ckfree(memToFree);
@@ -3951,7 +3602,7 @@ Tk_PhotoBlank(
      * Tell the core image code that this image has changed.
      */
 
-    Tk_ImageChanged(modelPtr->tkModel, 0, 0, modelPtr->width,
+    Tk_ImageChanged(modelPtr->tkMaster, 0, 0, modelPtr->width,
 	    modelPtr->height, modelPtr->width, modelPtr->height);
 }
 
@@ -3995,12 +3646,12 @@ Tk_PhotoExpand(
 		MAX(height, modelPtr->height)) == TCL_ERROR) {
 	    if (interp != NULL) {
 		Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+			TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 		Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 	    }
 	    return TCL_ERROR;
 	}
-	Tk_ImageChanged(modelPtr->tkModel, 0, 0, 0, 0, modelPtr->width,
+	Tk_ImageChanged(modelPtr->tkMaster, 0, 0, 0, 0, modelPtr->width,
 		modelPtr->height);
     }
     return TCL_OK;
@@ -4070,12 +3721,12 @@ Tk_PhotoSetSize(
 	    ((height > 0) ? height: modelPtr->height)) == TCL_ERROR) {
 	if (interp != NULL) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    TK_PHOTO_ALLOC_FAILURE_MESSAGE, TCL_INDEX_NONE));
+		    TK_PHOTO_ALLOC_FAILURE_MESSAGE, -1));
 	    Tcl_SetErrorCode(interp, "TK", "MALLOC", (char *)NULL);
 	}
 	return TCL_ERROR;
     }
-    Tk_ImageChanged(modelPtr->tkModel, 0, 0, 0, 0,
+    Tk_ImageChanged(modelPtr->tkMaster, 0, 0, 0, 0,
 	    modelPtr->width, modelPtr->height);
     return TCL_OK;
 }
@@ -4257,7 +3908,7 @@ ImgGetPhoto(
 			    blockPtr->width * blockPtr->pixelSize;
 		}
 	    } else {
-	 	int gray = (unsigned char) (((optPtr->background->red>>8) * 11
+		int gray = (unsigned char) (((optPtr->background->red>>8) * 11
 			+ (optPtr->background->green>>8) * 16
 			+ (optPtr->background->blue>>8) * 5 + 16) >> 5);
 
@@ -4300,6 +3951,57 @@ ImgGetPhoto(
 	return data;
     }
     return NULL;
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * ImgStringWrite --
+ *
+ *	Default string write function. The data is formatted in the default
+ *	format as accepted by the "<img> put" command.
+ *
+ * Results:
+ *	A standard Tcl result.
+ *
+ * Side effects:
+ *	See the user documentation.
+ *
+ *----------------------------------------------------------------------
+ */
+
+static int
+ImgStringWrite(
+    Tcl_Interp *interp,
+    Tcl_Obj *formatString,
+    Tk_PhotoImageBlock *blockPtr)
+{
+    int greenOffset, blueOffset;
+    Tcl_Obj *data;
+
+    greenOffset = blockPtr->offset[1] - blockPtr->offset[0];
+    blueOffset = blockPtr->offset[2] - blockPtr->offset[0];
+
+    data = Tcl_NewObj();
+    if ((blockPtr->width > 0) && (blockPtr->height > 0)) {
+	int row, col;
+
+	for (row=0; row<blockPtr->height; row++) {
+	    Tcl_Obj *line = Tcl_NewObj();
+	    unsigned char *pixelPtr = blockPtr->pixelPtr + blockPtr->offset[0]
+		    + row * blockPtr->pitch;
+
+	    for (col=0; col<blockPtr->width; col++) {
+		Tcl_AppendPrintfToObj(line, "%s#%02x%02x%02x",
+			col ? " " : "", *pixelPtr,
+			pixelPtr[greenOffset], pixelPtr[blueOffset]);
+		pixelPtr += blockPtr->pixelSize;
+	    }
+	    Tcl_ListObjAppendElement(NULL, data, line);
+	}
+    }
+    Tcl_SetObjResult(interp, data);
+    return TCL_OK;
 }
 
 /*
@@ -4377,6 +4079,106 @@ ImgPhotoPostscript(
     block.pixelPtr += y * block.pitch + x * block.pixelSize;
 
     return Tk_PostscriptPhoto(interp, &block, psInfo, width, height);
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * Tk_PhotoPutBlock_NoComposite, Tk_PhotoPutZoomedBlock_NoComposite --
+ *
+ * These backward-compatibility functions just exist to fill slots in stubs
+ * table. For the behaviour of *_NoComposite, refer to the corresponding
+ * function without the extra suffix, except that the compositing rule is
+ * always "overlay" and the function always panics on memory-allocation
+ * failure.
+ *
+ *----------------------------------------------------------------------
+ */
+
+void
+Tk_PhotoPutBlock_NoComposite(
+    Tk_PhotoHandle handle,
+    Tk_PhotoImageBlock *blockPtr,
+    int x, int y, int width, int height)
+{
+    if (Tk_PhotoPutBlock(NULL, handle, blockPtr, x, y, width, height,
+	    TK_PHOTO_COMPOSITE_OVERLAY) != TCL_OK) {
+	Tcl_Panic(TK_PHOTO_ALLOC_FAILURE_MESSAGE);
+    }
+}
+
+void
+Tk_PhotoPutZoomedBlock_NoComposite(
+    Tk_PhotoHandle handle,
+    Tk_PhotoImageBlock *blockPtr,
+    int x, int y, int width, int height,
+    int zoomX, int zoomY, int subsampleX, int subsampleY)
+{
+    if (Tk_PhotoPutZoomedBlock(NULL, handle, blockPtr, x, y, width, height,
+	    zoomX, zoomY, subsampleX, subsampleY,
+	    TK_PHOTO_COMPOSITE_OVERLAY) != TCL_OK) {
+	Tcl_Panic(TK_PHOTO_ALLOC_FAILURE_MESSAGE);
+    }
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * Tk_PhotoExpand_Panic, Tk_PhotoPutBlock_Panic,
+ * Tk_PhotoPutZoomedBlock_Panic, Tk_PhotoSetSize_Panic
+ *
+ * Backward compatibility functions for preserving the old behaviour (i.e.
+ * panic on memory allocation failure) so that extensions do not need to be
+ * significantly updated to take account of TIP #116. These call the new
+ * interface (i.e. the interface without the extra suffix), but panic if an
+ * error condition is returned.
+ *
+ *----------------------------------------------------------------------
+ */
+
+void
+Tk_PhotoExpand_Panic(
+    Tk_PhotoHandle handle,
+    int width, int height)
+{
+    if (Tk_PhotoExpand(NULL, handle, width, height) != TCL_OK) {
+	Tcl_Panic(TK_PHOTO_ALLOC_FAILURE_MESSAGE);
+    }
+}
+
+void
+Tk_PhotoPutBlock_Panic(
+    Tk_PhotoHandle handle,
+    Tk_PhotoImageBlock *blockPtr,
+    int x, int y, int width, int height, int compRule)
+{
+    if (Tk_PhotoPutBlock(NULL, handle, blockPtr, x, y, width, height,
+	    compRule) != TCL_OK) {
+	Tcl_Panic(TK_PHOTO_ALLOC_FAILURE_MESSAGE);
+    }
+}
+
+void
+Tk_PhotoPutZoomedBlock_Panic(
+    Tk_PhotoHandle handle, Tk_PhotoImageBlock *blockPtr,
+    int x, int y, int width, int height,
+    int zoomX, int zoomY, int subsampleX, int subsampleY,
+    int compRule)
+{
+    if (Tk_PhotoPutZoomedBlock(NULL, handle, blockPtr, x, y, width, height,
+	    zoomX, zoomY, subsampleX, subsampleY, compRule) != TCL_OK) {
+	Tcl_Panic(TK_PHOTO_ALLOC_FAILURE_MESSAGE);
+    }
+}
+
+void
+Tk_PhotoSetSize_Panic(
+    Tk_PhotoHandle handle,
+    int width, int height)
+{
+    if (Tk_PhotoSetSize(NULL, handle, width, height) != TCL_OK) {
+	Tcl_Panic(TK_PHOTO_ALLOC_FAILURE_MESSAGE);
+    }
 }
 
 /*

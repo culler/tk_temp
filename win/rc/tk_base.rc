@@ -50,6 +50,12 @@ END
 
 
 //
+// Bitmaps
+//
+
+buttons			BITMAP  DISCARDABLE	"buttons.bmp"
+
+//
 // Cursors
 //
 

@@ -8,7 +8,7 @@ if {![info exists widgetDemo]} {
     error "This script should be run from the \"widget\" demo."
 }
 
-package require tk
+package require Tk
 
 set w .textpeer
 catch {destroy $w}

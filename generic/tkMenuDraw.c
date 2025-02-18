@@ -4,7 +4,7 @@
  *	This module implements the platform-independent drawing and geometry
  *	calculations of menu widgets.
  *
- * Copyright © 1996-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1996-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -19,8 +19,8 @@
 
 static void		AdjustMenuCoords(TkMenu *menuPtr, TkMenuEntry *mePtr,
 			    int *xPtr, int *yPtr);
-static void		ComputeMenuGeometry(void *clientData);
-static void		DisplayMenu(void *clientData);
+static void		ComputeMenuGeometry(ClientData clientData);
+static void		DisplayMenu(ClientData clientData);
 
 /*
  *----------------------------------------------------------------------
@@ -298,7 +298,7 @@ TkMenuConfigureDrawOptions(
 int
 TkMenuConfigureEntryDrawOptions(
     TkMenuEntry *mePtr,
-    Tcl_Size index)
+    int index)
 {
     XGCValues gcValues;
     GC newGC, newActiveGC, newDisabledGC, newIndicatorGC;
@@ -315,7 +315,7 @@ TkMenuConfigureEntryDrawOptions(
 	}
     } else {
 	if (index == menuPtr->active) {
-	    TkActivateMenuEntry(menuPtr, TCL_INDEX_NONE);
+	    TkActivateMenuEntry(menuPtr, -1);
 	}
     }
 
@@ -487,7 +487,7 @@ TkEventuallyRedrawMenu(
     TkMenuEntry *mePtr)/* Entry to redraw. NULL means redraw all the
 				 * entries in the menu. */
 {
-    Tcl_Size i;
+    int i;
 
     if (menuPtr->tkwin == NULL) {
 	return;
@@ -528,9 +528,9 @@ TkEventuallyRedrawMenu(
 
 static void
 ComputeMenuGeometry(
-    void *clientData)	/* Structure describing menu. */
+    ClientData clientData)	/* Structure describing menu. */
 {
-    TkMenu *menuPtr = (TkMenu *)clientData;
+    TkMenu *menuPtr = clientData;
 
     if (menuPtr->tkwin == NULL) {
 	return;
@@ -579,15 +579,14 @@ ComputeMenuGeometry(
 
 void
 TkMenuSelectImageProc(
-    void *clientData,	/* Pointer to widget record. */
-    TCL_UNUSED(int), /* Upper left pixel (within image) that must */
-    TCL_UNUSED(int), /* be redisplayed. */
-    TCL_UNUSED(int), /* Dimensions of area to redisplay (may be */
-    TCL_UNUSED(int), /* <= 0). */
-    TCL_UNUSED(int),
-    TCL_UNUSED(int))/* New dimensions of image. */
+    ClientData clientData,	/* Pointer to widget record. */
+    int x, int y,		/* Upper left pixel (within image) that must
+				 * be redisplayed. */
+    int width, int height,	/* Dimensions of area to redisplay (may be
+				 * <=0). */
+    int imgWidth, int imgHeight)/* New dimensions of image. */
 {
-    TkMenuEntry *mePtr = (TkMenuEntry *)clientData;
+    TkMenuEntry *mePtr = clientData;
 
     if ((mePtr->entryFlags & ENTRY_SELECTED)
 	    && !(mePtr->menuPtr->menuFlags & REDRAW_PENDING)) {
@@ -614,18 +613,18 @@ TkMenuSelectImageProc(
 
 static void
 DisplayMenu(
-    void *clientData)	/* Information about widget. */
+    ClientData clientData)	/* Information about widget. */
 {
-    TkMenu *menuPtr = (TkMenu *)clientData;
+    TkMenu *menuPtr = clientData;
     TkMenuEntry *mePtr;
     Tk_Window tkwin = menuPtr->tkwin;
-    Tcl_Size index;
-    int strictMotif;
+    int index, strictMotif;
     Tk_Font tkfont;
     Tk_FontMetrics menuMetrics;
     int width;
     int borderWidth;
     Tk_3DBorder border;
+    int relief;
 
 
     menuPtr->menuFlags &= ~REDRAW_PENDING;
@@ -731,9 +730,10 @@ DisplayMenu(
 		width, height, 0, TK_RELIEF_FLAT);
     }
 
+    Tk_GetReliefFromObj(NULL, menuPtr->reliefPtr, &relief);
     Tk_Draw3DRectangle(menuPtr->tkwin, Tk_WindowId(tkwin),
 	    border, 0, 0, Tk_Width(tkwin), Tk_Height(tkwin), borderWidth,
-	    menuPtr->relief);
+	    relief);
 }
 
 /*
@@ -756,10 +756,10 @@ DisplayMenu(
 
 void
 TkMenuEventProc(
-    void *clientData,	/* Information about window. */
+    ClientData clientData,	/* Information about window. */
     XEvent *eventPtr)		/* Information about event. */
 {
-    TkMenu *menuPtr = (TkMenu *)clientData;
+    TkMenu *menuPtr = clientData;
 
     if ((eventPtr->type == Expose) && (eventPtr->xexpose.count == 0)) {
 	TkEventuallyRedrawMenu(menuPtr, NULL);
@@ -768,7 +768,7 @@ TkMenuEventProc(
 	TkEventuallyRedrawMenu(menuPtr, NULL);
     } else if (eventPtr->type == ActivateNotify) {
 	if (menuPtr->menuType == TEAROFF_MENU) {
-	    Tk_SetMainMenubar(menuPtr->interp, menuPtr->tkwin, NULL);
+	    TkpSetMainMenubar(menuPtr->interp, menuPtr->tkwin, NULL);
 	}
     } else if (eventPtr->type == DestroyNotify) {
 	if (menuPtr->tkwin != NULL) {
@@ -817,15 +817,14 @@ TkMenuEventProc(
 
 void
 TkMenuImageProc(
-    void *clientData,/* Pointer to widget record. */
-    TCL_UNUSED(int), /* Upper left pixel (within image) that must */
-    TCL_UNUSED(int), /*		 * be redisplayed. */
-    TCL_UNUSED(int), /* Dimensions of area to redisplay (may be */
-    TCL_UNUSED(int), /* <=0). */
-    TCL_UNUSED(int), /* New dimensions of image. */
-    TCL_UNUSED(int))
+    ClientData clientData,	/* Pointer to widget record. */
+    int x, int y,		/* Upper left pixel (within image) that must
+				 * be redisplayed. */
+    int width, int height,	/* Dimensions of area to redisplay (may be
+				 * <=0). */
+    int imgWidth, int imgHeight)/* New dimensions of image. */
 {
-    TkMenu *menuPtr = (TkMenu *)((TkMenuEntry *) clientData)->menuPtr;
+    TkMenu *menuPtr = ((TkMenuEntry *) clientData)->menuPtr;
 
     if ((menuPtr->tkwin != NULL) && !(menuPtr->menuFlags & RESIZE_PENDING)) {
 	menuPtr->menuFlags |= RESIZE_PENDING;
@@ -912,7 +911,7 @@ TkPostSubmenu(
 	 */
 
 	subary[0] = menuPtr->postedCascade->namePtr;
-	subary[1] = Tcl_NewStringObj("unpost", TCL_INDEX_NONE);
+	subary[1] = Tcl_NewStringObj("unpost", -1);
 	Tcl_IncrRefCount(subary[1]);
 	TkEventuallyRedrawMenu(menuPtr, NULL);
 	result = Tcl_EvalObjv(interp, 2, subary, 0);
@@ -941,9 +940,9 @@ TkPostSubmenu(
 
 	menuPtr->postedCascade = mePtr;
 	subary[0] = mePtr->namePtr;
-	subary[1] = Tcl_NewStringObj("post", TCL_INDEX_NONE);
-	subary[2] = Tcl_NewWideIntObj(x);
-	subary[3] = Tcl_NewWideIntObj(y);
+	subary[1] = Tcl_NewStringObj("post", -1);
+	subary[2] = Tcl_NewIntObj(x);
+	subary[3] = Tcl_NewIntObj(y);
 	Tcl_IncrRefCount(subary[1]);
 	Tcl_IncrRefCount(subary[2]);
 	Tcl_IncrRefCount(subary[3]);

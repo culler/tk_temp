@@ -23,17 +23,7 @@ bind TSpinbox <Down> 			{ event generate %W <<Decrement>> }
 bind TSpinbox <<Increment>>		{ ttk::spinbox::Spin %W +1 }
 bind TSpinbox <<Decrement>> 		{ ttk::spinbox::Spin %W -1 }
 
-ttk::bindMouseWheel TSpinbox 		{ ttk::spinbox::Spin %W }
-bind TSpinbox <Shift-MouseWheel> {
-    # Ignore the event
-}
-bind TSpinbox <TouchpadScroll> {
-    lassign [tk::PreciseScrollDeltas %D] tk::Priv(deltaX) tk::Priv(deltaY)
-    # TouchpadScroll events fire about 60 times per second.
-    if {$tk::Priv(deltaY) != 0 && %# %% 12 == 0} {
-	ttk::spinbox::Spin %W [expr {$tk::Priv(deltaY) > 0 ? -1 : 1}]
-    }
-}
+ttk::bindMouseWheel TSpinbox 		[list ttk::spinbox::MouseWheel %W]
 
 ## Motion --
 #	Sets cursor.
@@ -90,13 +80,13 @@ proc ttk::spinbox::Release {w} {
 
 ## MouseWheel --
 #	Mousewheel callback.  Turn these into <<Increment>> (-1, up)
-# 	or <<Decrement> (+1, down) events. Not used any more.
+# 	or <<Decrement> (+1, down) events.
 #
-proc ttk::spinbox::MouseWheel {w dir {factor 1.0}} {
+proc ttk::spinbox::MouseWheel {w dir} {
     if {[$w instate disabled]} { return }
-    if {($dir < 0) ^ ($factor < 0)} {
+    if {$dir < 0} {
 	event generate $w <<Increment>>
-    } elseif {$dir != 0} {
+    } else {
 	event generate $w <<Decrement>>
     }
 }
@@ -144,7 +134,7 @@ proc ttk::spinbox::Adjust {w v min max} {
 #	Otherwise cycle through numeric range based on
 #	-from, -to, and -increment.
 #
-proc ttk::spinbox::Spin {w dir {factor -1.0}} {
+proc ttk::spinbox::Spin {w dir} {
     variable State
 
     if {[$w instate disabled]} { return }
@@ -156,8 +146,6 @@ proc ttk::spinbox::Spin {w dir {factor -1.0}} {
     set State($w,values) [$w cget -values]
     set State($w,values.length) [llength $State($w,values)]
 
-    set d [expr {-($dir/$factor)}]
-    set d [expr {int($d > 0 ? ceil($d) : floor($d))}]
     if {$State($w,values.length) > 0} {
 	set value [$w get]
 	set current $State($w,values.index)
@@ -165,13 +153,13 @@ proc ttk::spinbox::Spin {w dir {factor -1.0}} {
 	    set current [lsearch -exact $State($w,values) $value]
 	    if {$current < 0} {set current -1}
 	}
-	set State($w,values.index) [Adjust $w [expr {$current + $d}] 0 \
+	set State($w,values.index) [Adjust $w [expr {$current + $dir}] 0 \
 		[expr {$State($w,values.length) - 1}]]
 	set State($w,values.last) [lindex $State($w,values) $State($w,values.index)]
 	$w set $State($w,values.last)
     } else {
 	if {[catch {
-	    set v [expr {[scan [$w get] %f] + $d * [$w cget -increment]}]
+	    set v [expr {[scan [$w get] %f] + $dir * [$w cget -increment]}]
 	}]} {
 	    set v [$w cget -from]
 	}

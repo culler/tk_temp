@@ -134,7 +134,6 @@ ServicesEventProc(
 @end
 
 /*
-
  * Instantiate a TkService object and register it with the NSApplication.
  * This is called exactly one time from TkpInit.
  */

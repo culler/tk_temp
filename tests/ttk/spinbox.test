@@ -2,7 +2,7 @@
 # ttk::spinbox widget tests
 #
 
-package require tk
+package require Tk
 package require tcltest 2.2
 namespace import -force tcltest::*
 loadTestedCommands
@@ -209,18 +209,24 @@ test spinbox-3.0 "textarea should expand to fill widget" -setup {
     set ::spinbox_test {}
     ttk::spinbox .sb -from 0 -to 10 -textvariable SBV
 } -body {
-    grid .sb -sticky ew
-    wm geometry . "300x80"
-    update
-    lappend ::spinbox_test [.sb identify 275 10]
     grid columnconfigure . 0 -weight 1
-    update
-    lappend ::spinbox_test [.sb identify 200 10]
+    update idletasks
+    set timer [after 500 {set ::spinbox_test timedout}]
+    bind . <Map> {
+        after idle {
+            wm geometry . "210x80"
+	    update idletasks
+            set ::spinbox_test [.sb identify element 25 5]
+        }
+        bind . <Map> {}
+    }
+    grid .sb -sticky ew
+    vwait ::spinbox_test
     set ::spinbox_test
 } -cleanup {
     destroy .sb
     unset -nocomplain ::spinbox_test SBV
-} -result {{} textarea}
+} -result {textarea}
 
 test spinbox-4.0 "Increment with duplicates in -values, wrap" -setup {
     ttk::spinbox .sb -values {one two three 4 5 two six} -wrap true
@@ -285,22 +291,15 @@ test spinbox-11.2 {Bugs [2a32225cd1] and [9fa3e08243]} -setup {
     destroy .s
     pack [ttk::spinbox .s]
     update
-    set res {}
 } -body {
     .s insert end "A sample text"
     .s icursor end
     event generate .s <<PrevWord>>  ; # shall move insert to index 9
     .s delete insert end
-    lappend res [.s get]
-    .s delete 0 end
-    .s insert end "A sample text"
-    .s icursor 2
-    event generate .s <<NextWord>>  ; # shall move insert to index 9
-    .s delete 0 insert
-    lappend res [.s get]
+    .s get
 } -cleanup {
     destroy .s
-} -result {{A sample } text}
+} -result {A sample }
 
 
 # nostomp: NB intentional difference between ttk::spinbox and tk::spinbox;
@@ -376,20 +375,6 @@ test spinbox-dieoctaldie-2 "Cope with general bad input" -body {
 } -result [list asdfasdf 000 asdfasdf 000] -cleanup {
     destroy .sb
 }
-
-test spinbox-5.1 "style command" -body {
-    ttk::spinbox .w
-    list [.w cget -style] [.w style] [winfo class .w]
-} -cleanup {
-    destroy .w
-} -result {{} TSpinbox TSpinbox}
-test spinbox-5.2 "style command" -body {
-    ttk::style configure customStyle.TSpinbox
-    ttk::spinbox .w -style customStyle.TSpinbox
-    list [.w cget -style] [.w style] [winfo class .w]
-} -cleanup {
-    destroy .w
-} -result {customStyle.TSpinbox customStyle.TSpinbox TSpinbox}
 
 tcltest::cleanupTests
 

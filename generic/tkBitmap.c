@@ -5,8 +5,8 @@
  *	toolkit. This allows bitmaps to be shared between widgets and also
  *	avoids interactions with the X server.
  *
- * Copyright © 1990-1994 The Regents of the University of California.
- * Copyright © 1994-1998 Sun Microsystems, Inc.
+ * Copyright (c) 1990-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1998 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -125,14 +125,12 @@ static void		InitBitmapObj(Tcl_Obj *objPtr);
  * field of the Tcl_Obj points to a TkBitmap object.
  */
 
-const TkObjType tkBitmapObjType = {
-    {"bitmap",			/* name */
+const Tcl_ObjType tkBitmapObjType = {
+    "bitmap",			/* name */
     FreeBitmapObjProc,		/* freeIntRepProc */
     DupBitmapObjProc,		/* dupIntRepProc */
     NULL,			/* updateStringProc */
-    NULL,			/* setFromAnyProc */
-    TCL_OBJTYPE_V0},
-    0
+    NULL			/* setFromAnyProc */
 };
 
 /*
@@ -170,7 +168,7 @@ Tk_AllocBitmapFromObj(
 {
     TkBitmap *bitmapPtr;
 
-    if (objPtr->typePtr != &tkBitmapObjType.objType) {
+    if (objPtr->typePtr != &tkBitmapObjType) {
 	InitBitmapObj(objPtr);
     }
     bitmapPtr = (TkBitmap *)objPtr->internalRep.twoPtrValue.ptr1;
@@ -350,8 +348,8 @@ GetBitmap(
 	if (Tcl_IsSafe(interp)) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		    "can't specify bitmap with '@' in a safe interpreter",
-		    TCL_INDEX_NONE));
-	    Tcl_SetErrorCode(interp, "TK", "SAFE", "BITMAP_FILE", (char *)NULL);
+		    -1));
+	    Tcl_SetErrorCode(interp, "TK", "SAFE", "BITMAP_FILE", NULL);
 	    goto error;
 	}
 
@@ -373,7 +371,7 @@ GetBitmap(
 	    if (interp != NULL) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"error reading bitmap file \"%s\"", string));
-		Tcl_SetErrorCode(interp, "TK", "BITMAP", "FILE_ERROR", (char *)NULL);
+		Tcl_SetErrorCode(interp, "TK", "BITMAP", "FILE_ERROR", NULL);
 	    }
 	    Tcl_DStringFree(&buffer);
 	    goto error;
@@ -396,7 +394,7 @@ GetBitmap(
 		    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			    "bitmap \"%s\" not defined", string));
 		    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "BITMAP", string,
-			    (char *)NULL);
+			    NULL);
 		}
 		goto error;
 	    }
@@ -500,7 +498,7 @@ Tk_DefineBitmap(
     if (!isNew) {
 	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		"bitmap \"%s\" is already defined", name));
-	Tcl_SetErrorCode(interp, "TK", "BITMAP", "EXISTS", (char *)NULL);
+	Tcl_SetErrorCode(interp, "TK", "BITMAP", "EXISTS", NULL);
 	return TCL_ERROR;
     }
     predefPtr = (TkPredefBitmap *)ckalloc(sizeof(TkPredefBitmap));
@@ -542,7 +540,7 @@ Tk_NameOfBitmap(
 	Tcl_Panic("Tk_NameOfBitmap received unknown bitmap argument");
     }
 
-    idHashPtr = Tcl_FindHashEntry(&dispPtr->bitmapIdTable, bitmap);
+    idHashPtr = Tcl_FindHashEntry(&dispPtr->bitmapIdTable, (char *) bitmap);
     if (idHashPtr == NULL) {
 	goto unknown;
     }
@@ -584,7 +582,7 @@ Tk_SizeOfBitmap(
 	Tcl_Panic("Tk_SizeOfBitmap received unknown bitmap argument");
     }
 
-    idHashPtr = Tcl_FindHashEntry(&dispPtr->bitmapIdTable, bitmap);
+    idHashPtr = Tcl_FindHashEntry(&dispPtr->bitmapIdTable, (char *) bitmap);
     if (idHashPtr == NULL) {
 	goto unknownBitmap;
     }
@@ -672,7 +670,7 @@ Tk_FreeBitmap(
 	Tcl_Panic("Tk_FreeBitmap called before Tk_GetBitmap");
     }
 
-    idHashPtr = Tcl_FindHashEntry(&dispPtr->bitmapIdTable, bitmap);
+    idHashPtr = Tcl_FindHashEntry(&dispPtr->bitmapIdTable, (char *) bitmap);
     if (idHashPtr == NULL) {
 	Tcl_Panic("Tk_FreeBitmap received unknown bitmap argument");
     }
@@ -911,7 +909,7 @@ GetBitmapFromObj(
     Tcl_HashEntry *hashPtr;
     TkDisplay *dispPtr = ((TkWindow *) tkwin)->dispPtr;
 
-    if (objPtr->typePtr != &tkBitmapObjType.objType) {
+    if (objPtr->typePtr != &tkBitmapObjType) {
 	InitBitmapObj(objPtr);
     }
 
@@ -986,7 +984,7 @@ InitBitmapObj(
     if ((typePtr != NULL) && (typePtr->freeIntRepProc != NULL)) {
 	typePtr->freeIntRepProc(objPtr);
     }
-    objPtr->typePtr = &tkBitmapObjType.objType;
+    objPtr->typePtr = &tkBitmapObjType;
     objPtr->internalRep.twoPtrValue.ptr1 = NULL;
 }
 
@@ -1161,9 +1159,9 @@ TkDebugBitmap(
 	for ( ; (bitmapPtr != NULL); bitmapPtr = bitmapPtr->nextPtr) {
 	    objPtr = Tcl_NewObj();
 	    Tcl_ListObjAppendElement(NULL, objPtr,
-		    Tcl_NewWideIntObj(bitmapPtr->resourceRefCount));
+		    Tcl_NewIntObj(bitmapPtr->resourceRefCount));
 	    Tcl_ListObjAppendElement(NULL, objPtr,
-		    Tcl_NewWideIntObj(bitmapPtr->objRefCount));
+		    Tcl_NewIntObj(bitmapPtr->objRefCount));
 	    Tcl_ListObjAppendElement(NULL, resultPtr, objPtr);
 	}
     }

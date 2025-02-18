@@ -6,7 +6,7 @@ if {![info exists widgetDemo]} {
     error "This script should be run from the \"widget\" demo."
 }
 
-package require tk
+package require Tk
 
 set w .combo
 catch {destroy $w}
@@ -43,8 +43,7 @@ set secondValue unchangable
 set ozCity Sydney
 
 ttk::labelframe $w.c1 -text "Fully Editable"
-ttk::combobox $w.c1.c -textvariable firstValue -placeholder {Enter text here}
-ttk::style configure TEntry -placeholderforeground gray50
+ttk::combobox $w.c1.c -textvariable firstValue
 ttk::labelframe $w.c2 -text Disabled
 ttk::combobox $w.c2.c -textvariable secondValue -state disabled
 ttk::labelframe $w.c3 -text "Defined List Only"
@@ -56,7 +55,7 @@ bind $w.c1.c <Return> {
     }
 }
 
-pack $w.c1 $w.c2 $w.c3 -side top -pady 3p -padx 7.5p
-pack $w.c1.c -pady 3p -padx 7.5p
-pack $w.c2.c -pady 3p -padx 7.5p
-pack $w.c3.c -pady 3p -padx 7.5p
+pack $w.c1 $w.c2 $w.c3 -side top -pady 5 -padx 10
+pack $w.c1.c -pady 5 -padx 10
+pack $w.c2.c -pady 5 -padx 10
+pack $w.c3.c -pady 5 -padx 10

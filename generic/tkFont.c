@@ -4,8 +4,8 @@
  *	This file maintains a database of fonts for the Tk toolkit. It also
  *	provides several utility functions for measuring and displaying text.
  *
- * Copyright © 1990-1994 The Regents of the University of California.
- * Copyright © 1994-1998 Sun Microsystems, Inc.
+ * Copyright (c) 1990-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1998 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -48,7 +48,7 @@ typedef struct TkFontInfo {
  */
 
 typedef struct NamedFont {
-    size_t refCount;		/* Number of users of named font. */
+    int refCount;		/* Number of users of named font. */
     int deletePending;		/* Non-zero if font should be deleted when
 				 * last reference goes away. */
     TkFontAttributes fa;	/* Desired attributes for named font. */
@@ -73,9 +73,9 @@ typedef struct LayoutChunk {
     const char *start;		/* Pointer to simple string to be displayed.
 				 * This is a pointer into the TkTextLayout's
 				 * string. */
-    Tcl_Size numBytes;		/* The number of bytes in this chunk. */
-    Tcl_Size numChars;		/* The number of characters in this chunk. */
-    Tcl_Size numDisplayChars;	/* The number of characters to display when
+    int numBytes;		/* The number of bytes in this chunk. */
+    int numChars;		/* The number of characters in this chunk. */
+    int numDisplayChars;	/* The number of characters to display when
 				 * this chunk is displayed. Can be less than
 				 * numChars if extra space characters were
 				 * absorbed by the end of the chunk. This will
@@ -98,7 +98,7 @@ typedef struct TextLayout {
     const char *string;		/* The string that was layed out. */
     int width;			/* The maximum width of all lines in the text
 				 * layout. */
-    Tcl_Size numChunks;		/* Number of chunks actually used in following
+    int numChunks;		/* Number of chunks actually used in following
 				 * array. */
     LayoutChunk chunks[TKFLEXARRAY];/* Array of chunks. The actual size will be
 				 * maxChunks. THIS FIELD MUST BE THE LAST IN
@@ -328,7 +328,7 @@ static const char *const globalFontClass[] = {
 
 
 static int		ConfigAttributesObj(Tcl_Interp *interp,
-			    Tk_Window tkwin, Tcl_Size objc, Tcl_Obj *const objv[],
+			    Tk_Window tkwin, int objc, Tcl_Obj *const objv[],
 			    TkFontAttributes *faPtr);
 static void		DupFontObjProc(Tcl_Obj *srcObjPtr, Tcl_Obj *dupObjPtr);
 static int		FieldSpecified(const char *field);
@@ -337,13 +337,13 @@ static void		FreeFontObjProc(Tcl_Obj *objPtr);
 static int		GetAttributeInfoObj(Tcl_Interp *interp,
 			    const TkFontAttributes *faPtr, Tcl_Obj *objPtr);
 static LayoutChunk *	NewChunk(TextLayout **layoutPtrPtr, int *maxPtr,
-			    const char *start, Tcl_Size numChars, int curX,
+			    const char *start, int numChars, int curX,
 			    int newX, int y);
 static int		ParseFontNameObj(Tcl_Interp *interp, Tk_Window tkwin,
 			    Tcl_Obj *objPtr, TkFontAttributes *faPtr);
 static void		RecomputeWidgets(TkWindow *winPtr);
 static int		SetFontFromAny(Tcl_Interp *interp, Tcl_Obj *objPtr);
-static void		TheWorldHasChanged(void *clientData);
+static void		TheWorldHasChanged(ClientData clientData);
 static void		UpdateDependentFonts(TkFontInfo *fiPtr,
 			    Tk_Window tkwin, Tcl_HashEntry *namedHashPtr);
 
@@ -353,14 +353,12 @@ static void		UpdateDependentFonts(TkFontInfo *fiPtr,
  * font object points to the TkFont structure for the font, or NULL.
  */
 
-const TkObjType tkFontObjType = {
-    {"font",			/* name */
+const Tcl_ObjType tkFontObjType = {
+    "font",			/* name */
     FreeFontObjProc,		/* freeIntRepProc */
     DupFontObjProc,		/* dupIntRepProc */
     NULL,			/* updateStringProc */
-    NULL,			/* setFromAnyProc */
-    TCL_OBJTYPE_V0},
-    0
+    SetFontFromAny		/* setFromAnyProc */
 };
 
 /*
@@ -477,7 +475,7 @@ TkFontPkgFree(
 
 int
 Tk_FontObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
@@ -566,7 +564,7 @@ Tk_FontObjCmd(
 
 	if (objc < 3 || n < objc) {
 	    Tcl_WrongNumArgs(interp, 2, objv,
-		    "font ?-displayof window? ?-option? ?--? ?char?");
+		    "font ?-displayof window? ?option? ?--? ?char?");
 	    return TCL_ERROR;
 	}
 
@@ -576,14 +574,14 @@ Tk_FontObjCmd(
 
 	if (charPtr != NULL) {
 	    const char *string = Tcl_GetString(charPtr);
-	    size_t len = Tcl_UtfToUniChar(string, &uniChar);
+	    int len = TkUtfToUniChar(string, &uniChar);
 
-	    if (len != (size_t)charPtr->length) {
+	    if (len != charPtr->length) {
 		resultPtr = Tcl_NewStringObj(
-			"expected a single character but got \"", TCL_INDEX_NONE);
+			"expected a single character but got \"", -1);
 		Tcl_AppendLimitedToObj(resultPtr, string,
-			TCL_INDEX_NONE, 40, "...");
-		Tcl_AppendToObj(resultPtr, "\"", TCL_INDEX_NONE);
+			-1, 40, "...");
+		Tcl_AppendToObj(resultPtr, "\"", -1);
 		Tcl_SetObjResult(interp, resultPtr);
 		Tcl_SetErrorCode(interp, "TK", "VALUE", "FONT_SAMPLE", NULL);
 		return TCL_ERROR;
@@ -687,7 +685,7 @@ Tk_FontObjCmd(
 	if (TkCreateNamedFont(interp, tkwin, name, &fa) != TCL_OK) {
 	    return TCL_ERROR;
 	}
-	Tcl_SetObjResult(interp, Tcl_NewStringObj(name, TCL_INDEX_NONE));
+	Tcl_SetObjResult(interp, Tcl_NewStringObj(name, -1));
 	break;
     }
     case FONT_DELETE: {
@@ -725,7 +723,7 @@ Tk_FontObjCmd(
     case FONT_MEASURE: {
 	const char *string;
 	Tk_Font tkfont;
-	Tcl_Size length = 0;
+	int length = 0;
 	int skip = 0;
 
 	if (objc > 4) {
@@ -744,7 +742,7 @@ Tk_FontObjCmd(
 	    return TCL_ERROR;
 	}
 	string = Tcl_GetStringFromObj(objv[3 + skip], &length);
-	Tcl_SetObjResult(interp, Tcl_NewWideIntObj(
+	Tcl_SetObjResult(interp, Tcl_NewIntObj(
 		Tk_TextWidth(tkfont, string, length)));
 	Tk_FreeFont(tkfont);
 	break;
@@ -754,7 +752,7 @@ Tk_FontObjCmd(
 	int skip, i;
 	const TkFontMetrics *fmPtr;
 	static const char *const switches[] = {
-	    "-ascent", "-descent", "-fixed", "-linespace", NULL
+	    "-ascent", "-descent", "-linespace", "-fixed", NULL
 	};
 
 	skip = TkGetDisplayOf(interp, objc - 3, objv + 3, &tkwin);
@@ -763,7 +761,7 @@ Tk_FontObjCmd(
 	}
 	if ((objc < 3) || (objc > 4 + skip)) {
 	    Tcl_WrongNumArgs(interp, 2, objv,
-		    "font ?-displayof window? ?-option?");
+		    "font ?-displayof window? ?option?");
 	    return TCL_ERROR;
 	}
 	tkfont = Tk_AllocFontFromObj(interp, tkwin, objv[2]);
@@ -788,10 +786,10 @@ Tk_FontObjCmd(
 	    switch (index) {
 	    case 0: i = fmPtr->ascent;			break;
 	    case 1: i = fmPtr->descent;			break;
-	    case 2: i = fmPtr->fixed;			break;
-	    case 3: i = fmPtr->ascent + fmPtr->descent;	break;
+	    case 2: i = fmPtr->ascent + fmPtr->descent;	break;
+	    case 3: i = fmPtr->fixed;			break;
 	    }
-	    Tcl_SetObjResult(interp, Tcl_NewWideIntObj(i));
+	    Tcl_SetObjResult(interp, Tcl_NewIntObj(i));
 	}
 	Tk_FreeFont(tkfont);
 	break;
@@ -815,7 +813,7 @@ Tk_FontObjCmd(
 			namedHashPtr);
 
 		Tcl_ListObjAppendElement(NULL, resultPtr,
-			Tcl_NewStringObj(string, TCL_INDEX_NONE));
+			Tcl_NewStringObj(string, -1));
 	    }
 	    namedHashPtr = Tcl_NextHashEntry(&search);
 	}
@@ -883,9 +881,20 @@ UpdateDependentFonts(
 
 static void
 TheWorldHasChanged(
-    void *clientData)	/* Info about application's fonts. */
+    ClientData clientData)	/* Info about application's fonts. */
 {
     TkFontInfo *fiPtr = (TkFontInfo *)clientData;
+
+    /*
+     * On macOS it is catastrophic to recompute all widgets while the
+     * [NSView drawRect] method is drawing. The best that we can do in
+     * that situation is to abort the recomputation and hope for the best.
+     * This is ignored on other platforms.
+     */
+
+    if (TkpWillDrawWidget(NULL)) {
+	return;
+    }
 
     fiPtr->updatePending = 0;
     RecomputeWidgets(fiPtr->mainPtr->winPtr);
@@ -930,8 +939,8 @@ RecomputeWidgets(
      * Broadcast font change virtually for mega-widget layout managers.
      * Do this after the font change has been propagated to core widgets.
     */
-    Tk_SendVirtualEvent((Tk_Window)winPtr, "TkWorldChanged",
-			Tcl_NewStringObj("FontChanged",-1));
+    TkSendVirtualEvent((Tk_Window)winPtr, "TkWorldChanged",
+		       Tcl_NewStringObj("FontChanged",-1));
 }
 
 /*
@@ -1075,7 +1084,7 @@ Tk_GetFont(
     Tk_Font tkfont;
     Tcl_Obj *strPtr;
 
-    strPtr = Tcl_NewStringObj(string, TCL_INDEX_NONE);
+    strPtr = Tcl_NewStringObj(string, -1);
     Tcl_IncrRefCount(strPtr);
     tkfont = Tk_AllocFontFromObj(interp, tkwin, strPtr);
     Tcl_DecrRefCount(strPtr);
@@ -1117,7 +1126,7 @@ Tk_AllocFontFromObj(
     int isNew, descent;
     NamedFont *nfPtr;
 
-    if (objPtr->typePtr != &tkFontObjType.objType
+    if (objPtr->typePtr != &tkFontObjType
 	    || objPtr->internalRep.twoPtrValue.ptr2 != fiPtr) {
 	SetFontFromAny(interp, objPtr);
     }
@@ -1215,7 +1224,7 @@ Tk_AllocFontFromObj(
 	}
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		"failed to allocate font due to internal system font engine"
-		" problem", TCL_INDEX_NONE));
+		" problem", -1));
 	Tcl_SetErrorCode(interp, "TK", "FONT", "INTERNAL_PROBLEM", NULL);
 	return NULL;
     }
@@ -1302,7 +1311,7 @@ Tk_GetFontFromObj(
     TkFont *fontPtr;
     Tcl_HashEntry *hashPtr;
 
-    if (objPtr->typePtr != &tkFontObjType.objType
+    if (objPtr->typePtr != &tkFontObjType
 	    || objPtr->internalRep.twoPtrValue.ptr2 != fiPtr) {
 	SetFontFromAny(NULL, objPtr);
     }
@@ -1383,7 +1392,7 @@ SetFontFromAny(
     if ((typePtr != NULL) && (typePtr->freeIntRepProc != NULL)) {
 	typePtr->freeIntRepProc(objPtr);
     }
-    objPtr->typePtr = &tkFontObjType.objType;
+    objPtr->typePtr = &tkFontObjType;
     objPtr->internalRep.twoPtrValue.ptr1 = NULL;
     objPtr->internalRep.twoPtrValue.ptr2 = NULL;
 
@@ -1724,7 +1733,7 @@ Tk_PostscriptFontName(
 	 * to do.
 	 */
 
-	Tcl_DStringAppend(dsPtr, family, TCL_INDEX_NONE);
+	Tcl_DStringAppend(dsPtr, family, -1);
 
 	src = dest = Tcl_DStringValue(dsPtr) + len;
 	upper = 1;
@@ -1733,27 +1742,31 @@ Tk_PostscriptFontName(
 		src++;
 		upper = 1;
 	    }
-	    src += Tcl_UtfToUniChar(src, &ch);
-	    if (upper) {
-		ch = Tcl_UniCharToUpper(ch);
-		upper = 0;
+	    src += TkUtfToUniChar(src, &ch);
+	    if (ch <= 0xffff) {
+		if (upper) {
+		    ch = Tcl_UniCharToUpper(ch);
+		    upper = 0;
+		} else {
+		    ch = Tcl_UniCharToLower(ch);
+		}
 	    } else {
-		ch = Tcl_UniCharToLower(ch);
+		upper = 0;
 	    }
-	    dest += Tcl_UniCharToUtf(ch, dest);
+	    dest += TkUniCharToUtf(ch, dest);
 	}
 	*dest = '\0';
 	Tcl_DStringSetLength(dsPtr, dest - Tcl_DStringValue(dsPtr));
 	family = Tcl_DStringValue(dsPtr) + len;
     }
     if (family != Tcl_DStringValue(dsPtr) + len) {
-	Tcl_DStringAppend(dsPtr, family, TCL_INDEX_NONE);
+	Tcl_DStringAppend(dsPtr, family, -1);
 	family = Tcl_DStringValue(dsPtr) + len;
     }
 
     if (strcasecmp(family, "NewCenturySchoolbook") == 0) {
 	Tcl_DStringSetLength(dsPtr, len);
-	Tcl_DStringAppend(dsPtr, "NewCenturySchlbk", TCL_INDEX_NONE);
+	Tcl_DStringAppend(dsPtr, "NewCenturySchlbk", -1);
 	family = Tcl_DStringValue(dsPtr) + len;
     }
 
@@ -1803,15 +1816,15 @@ Tk_PostscriptFontName(
 	if ((strcmp(family, "Times") == 0)
 		|| (strcmp(family, "NewCenturySchlbk") == 0)
 		|| (strcmp(family, "Palatino") == 0)) {
-	    Tcl_DStringAppend(dsPtr, "-Roman", TCL_INDEX_NONE);
+	    Tcl_DStringAppend(dsPtr, "-Roman", -1);
 	}
     } else {
-	Tcl_DStringAppend(dsPtr, "-", TCL_INDEX_NONE);
+	Tcl_DStringAppend(dsPtr, "-", -1);
 	if (weightString != NULL) {
-	    Tcl_DStringAppend(dsPtr, weightString, TCL_INDEX_NONE);
+	    Tcl_DStringAppend(dsPtr, weightString, -1);
 	}
 	if (slantString != NULL) {
-	    Tcl_DStringAppend(dsPtr, slantString, TCL_INDEX_NONE);
+	    Tcl_DStringAppend(dsPtr, slantString, -1);
 	}
     }
 
@@ -1840,8 +1853,8 @@ int
 Tk_TextWidth(
     Tk_Font tkfont,		/* Font in which text will be measured. */
     const char *string,		/* String whose width will be computed. */
-    Tcl_Size numBytes)		/* Number of bytes to consider from string, or
-				 * TCL_INDEX_NONE for strlen(). */
+    int numBytes)		/* Number of bytes to consider from string, or
+				 * < 0 for strlen(). */
 {
     int width;
 
@@ -1887,8 +1900,8 @@ Tk_UnderlineChars(
 				 * underlined or overstruck. */
     int x, int y,		/* Coordinates at which first character of
 				 * string is drawn. */
-    Tcl_Size firstByte,		/* Index of first byte of first character. */
-    Tcl_Size lastByte)		/* Index of first byte after the last
+    int firstByte,		/* Index of first byte of first character. */
+    int lastByte)		/* Index of first byte after the last
 				 * character. */
 {
     TkUnderlineCharsInContext(display, drawable, gc, tkfont, string,
@@ -1906,11 +1919,11 @@ TkUnderlineCharsInContext(
 				 * dimensions, etc. */
     const char *string,		/* String containing characters to be
 				 * underlined or overstruck. */
-    Tcl_Size numBytes,		/* Number of bytes in string. */
+    int numBytes,		/* Number of bytes in string. */
     int x, int y,		/* Coordinates at which the first character of
 				 * the whole string would be drawn. */
-    Tcl_Size firstByte,		/* Index of first byte of first character. */
-    Tcl_Size lastByte)		/* Index of first byte after the last
+    int firstByte,		/* Index of first byte of first character. */
+    int lastByte)		/* Index of first byte after the last
 				 * character. */
 {
     TkFont *fontPtr = (TkFont *) tkfont;
@@ -1960,8 +1973,8 @@ Tk_ComputeTextLayout(
     Tk_Font tkfont,		/* Font that will be used to display text. */
     const char *string,		/* String whose dimensions are to be
 				 * computed. */
-    Tcl_Size numChars,		/* Number of characters to consider from
-				 * string, or TCL_INDEX_NONE for strlen(). */
+    int numChars,		/* Number of characters to consider from
+				 * string, or < 0 for strlen(). */
     int wrapLength,		/* Longest permissible line length, in pixels.
 				 * <= 0 means no automatic wrapping: just let
 				 * lines get as long as needed. */
@@ -1976,7 +1989,7 @@ Tk_ComputeTextLayout(
 {
     TkFont *fontPtr = (TkFont *) tkfont;
     const char *start, *endp, *special;
-    Tcl_Size n;
+    int n;
     int y, bytesThisChunk, maxChunks, curLine, layoutHeight;
     int baseline, height, curX, newX, maxWidth, *lineLengths;
     TextLayout *layoutPtr;
@@ -2001,7 +2014,7 @@ Tk_ComputeTextLayout(
     height = fmPtr->ascent + fmPtr->descent;
 
     if (numChars < 0) {
-	numChars = Tcl_NumUtfChars(string, TCL_INDEX_NONE);
+	numChars = Tcl_NumUtfChars(string, -1);
     }
     if (wrapLength == 0) {
 	wrapLength = -1;
@@ -2009,7 +2022,7 @@ Tk_ComputeTextLayout(
 
     maxChunks = 1;
 
-    layoutPtr = (TextLayout *)ckalloc(offsetof(TextLayout, chunks)
+    layoutPtr = (TextLayout *)ckalloc(Tk_Offset(TextLayout, chunks)
 	    + maxChunks * sizeof(LayoutChunk));
     layoutPtr->tkfont = tkfont;
     layoutPtr->string = string;
@@ -2024,7 +2037,7 @@ Tk_ComputeTextLayout(
 
     curX = 0;
 
-    endp = Tcl_UtfAtIndex(string, numChars);
+    endp = TkUtfAtIndex(string, numChars);
     special = string;
 
     flags &= TK_IGNORE_TABS | TK_IGNORE_NEWLINES;
@@ -2300,10 +2313,10 @@ Tk_DrawTextLayout(
 				 * Tk_ComputeTextLayout(). */
     int x, int y,		/* Upper-left hand corner of rectangle in
 				 * which to draw (pixels). */
-    Tcl_Size firstChar,		/* The index of the first character to draw
+    int firstChar,		/* The index of the first character to draw
 				 * from the given text item. 0 specifies the
 				 * beginning. */
-    Tcl_Size lastChar)		/* The index just after the last character to
+    int lastChar)		/* The index just after the last character to
 				 * draw from the given text item. A number < 0
 				 * means to draw all characters. */
 {
@@ -2313,7 +2326,7 @@ Tk_DrawTextLayout(
 #else
     TextLayout *layoutPtr = (TextLayout *) layout;
     int i, drawX;
-    Tcl_Size numDisplayChars;
+    int numDisplayChars;
     const char *firstByte, *lastByte;
     LayoutChunk *chunkPtr;
 
@@ -2333,14 +2346,14 @@ Tk_DrawTextLayout(
 		firstChar = 0;
 		firstByte = chunkPtr->start;
 	    } else {
-		firstByte = Tcl_UtfAtIndex(chunkPtr->start, firstChar);
+		firstByte = TkUtfAtIndex(chunkPtr->start, firstChar);
 		Tk_MeasureChars(layoutPtr->tkfont, chunkPtr->start,
 			firstByte - chunkPtr->start, -1, 0, &drawX);
 	    }
 	    if (lastChar < numDisplayChars) {
 		numDisplayChars = lastChar;
 	    }
-	    lastByte = Tcl_UtfAtIndex(chunkPtr->start, numDisplayChars);
+	    lastByte = TkUtfAtIndex(chunkPtr->start, numDisplayChars);
 #ifdef TK_DRAW_IN_CONTEXT
 	    TkpDrawCharsInContext(display, drawable, gc, layoutPtr->tkfont,
 		    chunkPtr->start, chunkPtr->numBytes,
@@ -2372,10 +2385,10 @@ TkDrawAngledTextLayout(
     int x, int y,		/* Upper-left hand corner of rectangle in
 				 * which to draw (pixels). */
     double angle,
-    Tcl_Size firstChar,		/* The index of the first character to draw
+    int firstChar,		/* The index of the first character to draw
 				 * from the given text item. 0 specifies the
 				 * beginning. */
-    Tcl_Size lastChar)		/* The index just after the last character to
+    int lastChar)		/* The index just after the last character to
 				 * draw from the given text item. A number < 0
 				 * means to draw all characters. */
 {
@@ -2403,14 +2416,14 @@ TkDrawAngledTextLayout(
 		firstChar = 0;
 		firstByte = chunkPtr->start;
 	    } else {
-		firstByte = Tcl_UtfAtIndex(chunkPtr->start, firstChar);
+		firstByte = TkUtfAtIndex(chunkPtr->start, firstChar);
 		Tk_MeasureChars(layoutPtr->tkfont, chunkPtr->start,
 			firstByte - chunkPtr->start, -1, 0, &drawX);
 	    }
 	    if (lastChar < numDisplayChars) {
 		numDisplayChars = lastChar;
 	    }
-	    lastByte = Tcl_UtfAtIndex(chunkPtr->start, numDisplayChars);
+	    lastByte = TkUtfAtIndex(chunkPtr->start, numDisplayChars);
 #ifdef TK_DRAW_IN_CONTEXT
 	    dx = cosA * (chunkPtr->x) + sinA * (chunkPtr->y);
 	    dy = -sinA * (chunkPtr->x) + cosA * (chunkPtr->y);
@@ -2480,7 +2493,7 @@ Tk_UnderlineTextLayout(
     int x, int y,		/* Upper-left hand corner of rectangle in
 				 * which to draw (pixels). */
     int underline)		/* Index of the single character to underline,
-				 * or INT_MIN for no underline. */
+				 * or -1 for no underline. */
 {
     int xx, yy, width, height;
 
@@ -2507,7 +2520,7 @@ TkUnderlineAngledTextLayout(
 				 * which to draw (pixels). */
     double angle,
     int underline)		/* Index of the single character to underline,
-				 * or INT_MIN for no underline. */
+				 * or -1 for no underline. */
 {
     int xx, yy, width, height;
 
@@ -2734,8 +2747,8 @@ int
 Tk_CharBbox(
     Tk_TextLayout layout,	/* Layout information, from a previous call to
 				 * Tk_ComputeTextLayout(). */
-    Tcl_Size index,			/* The index of the character whose bbox is
-				 * desired. Negative means count backwards. */
+    int index,			/* The index of the character whose bbox is
+				 * desired. */
     int *xPtr, int *yPtr,	/* Filled with the upper-left hand corner, in
 				 * pixels, of the bounding box for the
 				 * character specified by index, if
@@ -2746,21 +2759,17 @@ Tk_CharBbox(
 				 * index, if non-NULL. */
 {
     TextLayout *layoutPtr = (TextLayout *) layout;
-    LayoutChunk *chunkPtr = layoutPtr->chunks;
+    LayoutChunk *chunkPtr;
     int i, x = 0, w;
     Tk_Font tkfont;
     TkFont *fontPtr;
     const char *end;
 
     if (index < 0) {
-	for (i = 0; i < layoutPtr->numChunks; i++) {
-	    index += (chunkPtr + i)->numChars;
-	}
-	if (index < 0) {
-	    return 0;
-	}
+	return 0;
     }
 
+    chunkPtr = layoutPtr->chunks;
     tkfont = layoutPtr->tkfont;
     fontPtr = (TkFont *) tkfont;
 
@@ -2772,7 +2781,7 @@ Tk_CharBbox(
 		goto check;
 	    }
 	} else if (index < chunkPtr->numChars) {
-	    end = Tcl_UtfAtIndex(chunkPtr->start, index);
+	    end = TkUtfAtIndex(chunkPtr->start, index);
 	    if (xPtr != NULL) {
 		Tk_MeasureChars(tkfont, chunkPtr->start,
 			end - chunkPtr->start, -1, 0, &x);
@@ -2780,7 +2789,7 @@ Tk_CharBbox(
 	    }
 	    if (widthPtr != NULL) {
 		int ch;
-		Tk_MeasureChars(tkfont, end, Tcl_UtfToUniChar(end, &ch), -1, 0, &w);
+		Tk_MeasureChars(tkfont, end, TkUtfToUniChar(end, &ch), -1, 0, &w);
 	    }
 	    goto check;
 	}
@@ -3300,20 +3309,20 @@ Tk_TextLayoutToPostscript(
     int baseline = chunkPtr->y;
     Tcl_Obj *psObj = Tcl_NewObj();
     int i, j;
-    Tcl_Size len;
+    int len;
     const char *p, *glyphname;
     char uindex[5], c, *ps;
     int ch;
 
-    Tcl_AppendToObj(psObj, "[(", TCL_INDEX_NONE);
+    Tcl_AppendToObj(psObj, "[(", -1);
     for (i = 0; i < layoutPtr->numChunks; i++, chunkPtr++) {
 	if (baseline != chunkPtr->y) {
-	    Tcl_AppendToObj(psObj, ")]\n[(", TCL_INDEX_NONE);
+	    Tcl_AppendToObj(psObj, ")]\n[(", -1);
 	    baseline = chunkPtr->y;
 	}
 	if (chunkPtr->numDisplayChars <= 0) {
 	    if (chunkPtr->start[0] == '\t') {
-		Tcl_AppendToObj(psObj, "\\t", TCL_INDEX_NONE);
+		Tcl_AppendToObj(psObj, "\\t", -1);
 	    }
 	    continue;
 	}
@@ -3326,7 +3335,7 @@ Tk_TextLayoutToPostscript(
 	     * international postscript fonts.
 	     */
 
-	    p += Tcl_UtfToUniChar(p, &ch);
+	    p += TkUtfToUniChar(p, &ch);
 	    if ((ch == '(') || (ch == ')') || (ch == '\\') || (ch < 0x20)) {
 		/*
 		 * Tricky point: the "03" is necessary in the snprintf below,
@@ -3366,10 +3375,10 @@ Tk_TextLayoutToPostscript(
 
 		    ps[len-1] = '/';
 		} else {
-		    Tcl_AppendToObj(psObj, ")/", TCL_INDEX_NONE);
+		    Tcl_AppendToObj(psObj, ")/", -1);
 		}
-		Tcl_AppendToObj(psObj, glyphname, TCL_INDEX_NONE);
-		Tcl_AppendToObj(psObj, "(", TCL_INDEX_NONE);
+		Tcl_AppendToObj(psObj, glyphname, -1);
+		Tcl_AppendToObj(psObj, "(", -1);
 	    } else {
 		/*
 		 * No known mapping for the character into the space of
@@ -3384,7 +3393,7 @@ noMapping:	;
 	    }
 	}
     }
-    Tcl_AppendToObj(psObj, ")]\n", TCL_INDEX_NONE);
+    Tcl_AppendToObj(psObj, ")]\n", -1);
     Tcl_AppendObjToObj(Tcl_GetObjResult(interp), psObj);
     Tcl_DecrRefCount(psObj);
 }
@@ -3414,13 +3423,13 @@ static int
 ConfigAttributesObj(
     Tcl_Interp *interp,		/* Interp for error return. */
     TCL_UNUSED(Tk_Window),	/* For display on which font will be used. */
-    Tcl_Size objc,			/* Number of elements in argv. */
+    int objc,			/* Number of elements in argv. */
     Tcl_Obj *const objv[],	/* Command line options. */
     TkFontAttributes *faPtr)	/* Font attributes structure whose fields are
 				 * to be modified. Structure must already be
 				 * properly initialized. */
 {
-    Tcl_Size i;
+    int i;
     int n, index;
     Tcl_Obj *optionPtr, *valuePtr;
     const char *value;
@@ -3550,20 +3559,20 @@ GetAttributeInfoObj(
 
 	case FONT_SIZE:
 	    if (faPtr->size >= 0.0) {
-		valuePtr = Tcl_NewWideIntObj((Tcl_WideInt)(faPtr->size + 0.5));
+		valuePtr = Tcl_NewIntObj((int)(faPtr->size + 0.5));
 	    } else {
-		valuePtr = Tcl_NewWideIntObj(-(Tcl_WideInt)(-faPtr->size + 0.5));
+		valuePtr = Tcl_NewIntObj(-(int)(-faPtr->size + 0.5));
 	    }
 	    break;
 
 	case FONT_WEIGHT:
 	    str = TkFindStateString(weightMap, faPtr->weight);
-	    valuePtr = Tcl_NewStringObj(str, TCL_INDEX_NONE);
+	    valuePtr = Tcl_NewStringObj(str, -1);
 	    break;
 
 	case FONT_SLANT:
 	    str = TkFindStateString(slantMap, faPtr->slant);
-	    valuePtr = Tcl_NewStringObj(str, TCL_INDEX_NONE);
+	    valuePtr = Tcl_NewStringObj(str, -1);
 	    break;
 
 	case FONT_UNDERLINE:
@@ -3579,62 +3588,11 @@ GetAttributeInfoObj(
 	    return TCL_OK;
 	}
 	Tcl_ListObjAppendElement(NULL, resultPtr,
-		Tcl_NewStringObj(fontOpt[i], TCL_INDEX_NONE));
+		Tcl_NewStringObj(fontOpt[i], -1));
 	Tcl_ListObjAppendElement(NULL, resultPtr, valuePtr);
     }
     Tcl_SetObjResult(interp, resultPtr);
     return TCL_OK;
-}
-
-/*
- *---------------------------------------------------------------------------
- *
- * Tk_FontGetDescription --
- *
- *	Return information about the font description as a Tcl list. One
- *	possible result is "{{DejaVu Sans} -16 bold underline}".
- *
- * Results:
- *	The list of descriptions.
- *
- * Side effects:
- *	None.
- *
- *---------------------------------------------------------------------------
- */
-
-Tcl_Obj *
-Tk_FontGetDescription(
-    Tk_Font tkfont)		/* Font whose description is desired. */
-{
-    const TkFontAttributes *faPtr = GetFontAttributes(tkfont);
-    Tcl_Obj *resultPtr = Tcl_NewObj();
-    const char *str;
-
-    str = faPtr->family;
-    Tcl_ListObjAppendElement(NULL, resultPtr, Tcl_NewStringObj(str, str ? -1 : 0));
-    if (faPtr->size >= 0.0) {
-    	Tcl_ListObjAppendElement(NULL, resultPtr, Tcl_NewWideIntObj((int)(faPtr->size + 0.5)));
-    } else {
-    	Tcl_ListObjAppendElement(NULL, resultPtr, Tcl_NewWideIntObj(-(int)(-faPtr->size + 0.5)));
-    }
-    if (faPtr->weight != TK_FW_NORMAL) {
-	str = TkFindStateString(weightMap, faPtr->weight);
-	Tcl_ListObjAppendElement(NULL, resultPtr, Tcl_NewStringObj(str, TCL_INDEX_NONE));
-    }
-    if (faPtr->slant != TK_FS_ROMAN) {
-	str = TkFindStateString(slantMap, faPtr->slant);
-	Tcl_ListObjAppendElement(NULL, resultPtr, Tcl_NewStringObj(str, TCL_INDEX_NONE));
-    }
-    if (faPtr->underline) {
-	str = TkFindStateString(underlineMap, faPtr->underline);
-	Tcl_ListObjAppendElement(NULL, resultPtr, Tcl_NewStringObj(str, TCL_INDEX_NONE));
-    }
-    if (faPtr->overstrike) {
-	str = TkFindStateString(overstrikeMap, faPtr->overstrike);
-	Tcl_ListObjAppendElement(NULL, resultPtr, Tcl_NewStringObj(str, TCL_INDEX_NONE));
-    }
-    return resultPtr;
 }
 
 /*
@@ -3674,7 +3632,7 @@ ParseFontNameObj(
 {
     const char *dash;
     int result, n;
-    Tcl_Size objc, i;
+    int objc, i;
     Tcl_Obj **objv;
     const char *string;
 
@@ -3827,7 +3785,7 @@ NewChunk(
     TextLayout **layoutPtrPtr,
     int *maxPtr,
     const char *start,
-    Tcl_Size numBytes,
+    int numBytes,
     int curX,
     int newX,
     int y)
@@ -3841,7 +3799,7 @@ NewChunk(
     maxChunks = *maxPtr;
     if (layoutPtr->numChunks == maxChunks) {
 	maxChunks *= 2;
-	s = offsetof(TextLayout, chunks) + (maxChunks * sizeof(LayoutChunk));
+	s = Tk_Offset(TextLayout, chunks) + (maxChunks * sizeof(LayoutChunk));
 	layoutPtr = (TextLayout *)ckrealloc(layoutPtr, s);
 
 	*layoutPtrPtr = layoutPtr;
@@ -3914,7 +3872,7 @@ TkFontParseXLFD(
     }
 
     Tcl_DStringInit(&ds);
-    Tcl_DStringAppend(&ds, str, TCL_INDEX_NONE);
+    Tcl_DStringAppend(&ds, str, -1);
     src = Tcl_DStringValue(&ds);
 
     field[0] = src;
@@ -4312,9 +4270,9 @@ TkDebugFont(
 	for ( ; (fontPtr != NULL); fontPtr = fontPtr->nextPtr) {
 	    objPtr = Tcl_NewObj();
 	    Tcl_ListObjAppendElement(NULL, objPtr,
-		    Tcl_NewWideIntObj(fontPtr->resourceRefCount));
+		    Tcl_NewIntObj(fontPtr->resourceRefCount));
 	    Tcl_ListObjAppendElement(NULL, objPtr,
-		    Tcl_NewWideIntObj(fontPtr->objRefCount));
+		    Tcl_NewIntObj(fontPtr->objRefCount));
 	    Tcl_ListObjAppendElement(NULL, resultPtr, objPtr);
 	}
     }
@@ -4349,7 +4307,7 @@ TkFontGetFirstTextLayout(
 {
     TextLayout *layoutPtr = (TextLayout *) layout;
     LayoutChunk *chunkPtr;
-    Tcl_Size numBytesInChunk;
+    int numBytesInChunk;
 
     if ((layoutPtr == NULL) || (layoutPtr->numChunks == 0)
 	    || (layoutPtr->chunks->numDisplayChars <= 0)) {

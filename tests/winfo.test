@@ -1,9 +1,9 @@
 # This file is a Tcl script to test out the "winfo" command.  It is
 # organized in the standard fashion for Tcl tests.
 #
-# Copyright © 1994 The Regents of the University of California.
-# Copyright © 1994-1997 Sun Microsystems, Inc.
-# Copyright © 1998-1999 Scriptics Corporation.
+# Copyright (c) 1994 The Regents of the University of California.
+# Copyright (c) 1994-1997 Sun Microsystems, Inc.
+# Copyright (c) 1998-1999 Scriptics Corporation.
 # All rights reserved.
 
 package require tcltest 2.2
@@ -441,10 +441,8 @@ test winfo-13.3 {destroying container window} -setup {
 test winfo-13.4 {[winfo containing] with embedded windows} -setup {
     deleteWindows
 } -body {
-    wm geometry . +100+100
     frame .con -container 1
     pack .con -expand yes -fill both
-    update
     toplevel .emb -use [winfo id .con] -bd 0 -highlightthickness 0
     button .emb.b
     pack .emb.b -expand yes -fill both

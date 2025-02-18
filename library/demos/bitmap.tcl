@@ -7,7 +7,7 @@ if {![info exists widgetDemo]} {
     error "This script should be run from the \"widget\" demo."
 }
 
-package require tk
+package require Tk
 
 # bitmapRow --
 # Create a row of bitmap items in a window.

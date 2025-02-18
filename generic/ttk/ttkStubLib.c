@@ -34,23 +34,17 @@ TtkInitializeStubs(
     Tcl_Interp *interp, const char *version, int epoch, int revision)
 {
     int exact = 0;
-    const char *packageName = "ttk";
+    const char *packageName = "Ttk";
     const char *errMsg = NULL;
     void *pkgClientData = NULL;
     const char *actualVersion = Tcl_PkgRequireEx(
 	interp, packageName, version, exact, &pkgClientData);
-    const TtkStubs *stubsPtr;
+    const TtkStubs *stubsPtr = (const TtkStubs *)pkgClientData;
 
     if (!actualVersion) {
-	packageName = "Ttk";
-	actualVersion = Tcl_PkgRequireEx(
-		interp, packageName, version, exact, &pkgClientData);
-	if (!actualVersion) {
-	    return NULL;
-	}
+	return NULL;
     }
 
-    stubsPtr = (const TtkStubs *)pkgClientData;
     if (!stubsPtr) {
 	errMsg = "missing stub table pointer";
 	goto error;

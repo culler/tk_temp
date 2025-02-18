@@ -3,9 +3,9 @@
  *
  *	Declarations shared among all the files that implement canvas widgets.
  *
- * Copyright © 1991-1994 The Regents of the University of California.
- * Copyright © 1994-1995 Sun Microsystems, Inc.
- * Copyright © 1998 Scriptics Corporation.
+ * Copyright (c) 1991-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1995 Sun Microsystems, Inc.
+ * Copyright (c) 1998 Scriptics Corporation.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -147,7 +147,7 @@ typedef struct TkCanvas {
 				 * currentItem is based. Must be saved so that
 				 * if the currentItem is deleted, can pick
 				 * another. */
-    unsigned int state;		/* Last known modifier state. Used to defer
+    int state;			/* Last known modifier state. Used to defer
 				 * picking a new current object while buttons
 				 * are down. */
 
@@ -214,7 +214,7 @@ typedef struct TkCanvas {
 				 * when converting coordinates. */
     int flags;			/* Various flags; see below for
 				 * definitions. */
-    Tcl_Size nextId;			/* Number to use as id for next item created
+    int nextId;			/* Number to use as id for next item created
 				 * in widget. */
     Tk_PostscriptInfo psInfo;	/* Pointer to information used for generating
 				 * Postscript for the canvas. NULL means no
@@ -241,7 +241,7 @@ typedef struct TkCanvas {
  *
  * REDRAW_PENDING -		1 means a DoWhenIdle handler has already been
  *				created to redraw some or all of the canvas.
- * REDRAW_BORDERS - 		1 means that the borders need to be redrawn
+ * REDRAW_BORDERS -		1 means that the borders need to be redrawn
  *				during the next redisplay operation.
  * REPICK_NEEDED -		1 means DisplayCanvas should pick a new
  *				current item before redrawing the canvas.
@@ -290,9 +290,9 @@ typedef struct TkCanvas {
  * to the outside world:
  */
 
-MODULE_SCOPE int	TkCanvPostscriptObjCmd(TkCanvas *canvasPtr,
-			    Tcl_Interp *interp, Tcl_Size argc, Tcl_Obj *const objv[]);
-MODULE_SCOPE int 	TkCanvTranslatePath(TkCanvas *canvPtr,
+MODULE_SCOPE int	TkCanvPostscriptCmd(TkCanvas *canvasPtr,
+			    Tcl_Interp *interp, int argc, const char **argv);
+MODULE_SCOPE int	TkCanvTranslatePath(TkCanvas *canvPtr,
 			    int numVertex, double *coordPtr, int closed,
 			    XPoint *outPtr);
 /*

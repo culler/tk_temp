@@ -3,7 +3,7 @@
  *
  *	Grid based geometry manager.
  *
- * Copyright © 1996-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1996-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -255,45 +255,45 @@ typedef struct UniformGroup {
 
 static void		AdjustForSticky(Gridder *contentPtr, int *xPtr,
 			    int *yPtr, int *widthPtr, int *heightPtr);
-static int		AdjustOffsets(int width, Tcl_Size elements,
+static int		AdjustOffsets(int width, int elements,
 			    SlotInfo *slotPtr);
-static void		ArrangeGrid(void *clientData);
-static int		CheckSlotData(Gridder *containerPtr, Tcl_Size slot,
+static void		ArrangeGrid(ClientData clientData);
+static int		CheckSlotData(Gridder *containerPtr, int slot,
 			    int slotType, int checkOnly);
 static int		ConfigureContent(Tcl_Interp *interp, Tk_Window tkwin,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int objc, Tcl_Obj *const objv[]);
 static Tcl_FreeProc	DestroyGrid;
 static Gridder *	GetGrid(Tk_Window tkwin);
 static int		GridAnchorCommand(Tk_Window tkwin, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int objc, Tcl_Obj *const objv[]);
 static int		GridBboxCommand(Tk_Window tkwin, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int objc, Tcl_Obj *const objv[]);
 static int		GridForgetRemoveCommand(Tk_Window tkwin,
-			    Tcl_Interp *interp, Tcl_Size objc,
+			    Tcl_Interp *interp, int objc,
 			    Tcl_Obj *const objv[]);
 static int		GridInfoCommand(Tk_Window tkwin, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int objc, Tcl_Obj *const objv[]);
 static int		GridLocationCommand(Tk_Window tkwin,
-			    Tcl_Interp *interp, Tcl_Size objc,
+			    Tcl_Interp *interp, int objc,
 			    Tcl_Obj *const objv[]);
 static int		GridPropagateCommand(Tk_Window tkwin,
-			    Tcl_Interp *interp, Tcl_Size objc,
+			    Tcl_Interp *interp, int objc,
 			    Tcl_Obj *const objv[]);
 static int		GridRowColumnConfigureCommand(Tk_Window tkwin,
-			    Tcl_Interp *interp, Tcl_Size objc,
+			    Tcl_Interp *interp, int objc,
 			    Tcl_Obj *const objv[]);
 static int		GridSizeCommand(Tk_Window tkwin, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int objc, Tcl_Obj *const objv[]);
 static int		GridContentCommand(Tk_Window tkwin, Tcl_Interp *interp,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
-static void		GridStructureProc(void *clientData,
+			    int objc, Tcl_Obj *const objv[]);
+static void		GridStructureProc(ClientData clientData,
 			    XEvent *eventPtr);
-static void		GridLostContentProc(void *clientData,
+static void		GridLostContentProc(ClientData clientData,
 			    Tk_Window tkwin);
-static void		GridReqProc(void *clientData, Tk_Window tkwin);
+static void		GridReqProc(ClientData clientData, Tk_Window tkwin);
 static void		InitContainerData(Gridder *containerPtr);
-static Tcl_Obj *	NewPairObj(Tcl_WideInt, Tcl_WideInt);
-static Tcl_Obj *	NewQuadObj(Tcl_WideInt, Tcl_WideInt, Tcl_WideInt, Tcl_WideInt);
+static Tcl_Obj *	NewPairObj(int, int);
+static Tcl_Obj *	NewQuadObj(int, int, int, int);
 static int		ResolveConstraints(Gridder *gridPtr, int rowOrColumn,
 			    int maxOffset);
 static void		SetGridSize(Gridder *gridPtr);
@@ -308,7 +308,7 @@ static void		Unlink(Gridder *gridPtr);
 static const Tk_GeomMgr gridMgrType = {
     "grid",			/* name */
     GridReqProc,		/* requestProc */
-    GridLostContentProc,		/* lostContentProc */
+    GridLostContentProc,		/* lostSlaveProc */
 };
 
 /*
@@ -330,7 +330,7 @@ static const Tk_GeomMgr gridMgrType = {
 
 int
 Tk_GridObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
@@ -340,11 +340,6 @@ Tk_GridObjCmd(
 	"anchor", "bbox", "columnconfigure", "configure",
 	"content", "forget", "info", "location", "propagate",
 	"remove", "rowconfigure", "size", "slaves", NULL
-    };
-    static const char *const optionStringsNoDep[] = {
-	"anchor", "bbox", "columnconfigure", "configure",
-	"content", "forget", "info", "location", "propagate",
-	"remove", "rowconfigure", "size", NULL
     };
     enum options {
 	GRID_ANCHOR, GRID_BBOX, GRID_COLUMNCONFIGURE, GRID_CONFIGURE,
@@ -366,16 +361,8 @@ Tk_GridObjCmd(
 	return TCL_ERROR;
     }
 
-    if (Tcl_GetIndexFromObjStruct(NULL, objv[1], optionStrings,
+    if (Tcl_GetIndexFromObjStruct(interp, objv[1], optionStrings,
 	    sizeof(char *), "option", 0, &index) != TCL_OK) {
-	/*
-	 * Call it again without the deprecated ones to get a proper error
-	 * message. This works well since there can't be any ambiguity between
-	 * deprecated and new options.
-	 */
-
-	Tcl_GetIndexFromObjStruct(interp, objv[1], optionStringsNoDep,
-		sizeof(char *), "option", 0, &index);
 	return TCL_ERROR;
     }
 
@@ -416,7 +403,7 @@ Tk_GridObjCmd(
     }
 
     /* This should not happen */
-    Tcl_SetObjResult(interp, Tcl_NewStringObj("internal error in grid", TCL_INDEX_NONE));
+    Tcl_SetObjResult(interp, Tcl_NewStringObj("internal error in grid", -1));
     Tcl_SetErrorCode(interp, "TK", "API_ABUSE", NULL);
     return TCL_ERROR;
 }
@@ -442,7 +429,7 @@ static int
 GridAnchorCommand(
     Tk_Window tkwin,		/* Main window of the application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_Window container;
@@ -458,7 +445,9 @@ GridAnchorCommand(
     if (TkGetWindowFromObj(interp, tkwin, objv[2], &container) != TCL_OK) {
 	return TCL_ERROR;
     }
-    containerPtr = GetGrid(container);
+    if (!(containerPtr = GetGrid(container))) {
+	return TCL_OK;
+    }
 
     if (objc == 3) {
 	gridPtr = containerPtr->containerDataPtr;
@@ -511,7 +500,7 @@ static int
 GridBboxCommand(
     Tk_Window tkwin,		/* Main window of the application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_Window container;
@@ -524,14 +513,16 @@ GridBboxCommand(
     int width, height;		/* size of the bounding box */
 
     if (objc!=3 && objc != 5 && objc != 7) {
-	Tcl_WrongNumArgs(interp, 2, objv, "window ?column row ?column row??");
+	Tcl_WrongNumArgs(interp, 2, objv, "master ?column row ?column row??");
 	return TCL_ERROR;
     }
 
     if (TkGetWindowFromObj(interp, tkwin, objv[2], &container) != TCL_OK) {
 	return TCL_ERROR;
     }
-    containerPtr = GetGrid(container);
+    if (!(containerPtr = GetGrid(container))) {
+	return TCL_OK;
+    }
 
     if (objc >= 5) {
 	if (Tcl_GetIntFromObj(interp, objv[3], &column) != TCL_OK) {
@@ -641,12 +632,12 @@ static int
 GridForgetRemoveCommand(
     Tk_Window tkwin,		/* Main window of the application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_Window content;
     Gridder *contentPtr;
-    Tcl_Size i;
+    int i;
     const char *string = Tcl_GetString(objv[1]);
     char c = string[0];
 
@@ -655,7 +646,9 @@ GridForgetRemoveCommand(
 	    return TCL_ERROR;
 	}
 
-	contentPtr = GetGrid(content);
+	if (!(contentPtr = GetGrid(content))) {
+	    continue;
+	}
 	if (contentPtr->containerPtr != NULL) {
 	    /*
 	     * For "forget", reset all the settings to their defaults
@@ -694,7 +687,7 @@ GridForgetRemoveCommand(
 		}
 		if (contentPtr->containerPtr != NULL) {
 		    contentPtr->in = Tcl_NewStringObj(
-			    Tk_PathName(contentPtr->containerPtr->tkwin), TCL_INDEX_NONE);
+			    Tk_PathName(contentPtr->containerPtr->tkwin), -1);
 		    Tcl_IncrRefCount(contentPtr->in);
 		}
 	    }
@@ -731,7 +724,7 @@ static int
 GridInfoCommand(
     Tk_Window tkwin,		/* Main window of the application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Gridder *contentPtr;
@@ -745,28 +738,30 @@ GridInfoCommand(
     if (TkGetWindowFromObj(interp, tkwin, objv[2], &content) != TCL_OK) {
 	return TCL_ERROR;
     }
-    contentPtr = GetGrid(content);
+    if (!(contentPtr = GetGrid(content))) {
+	return TCL_OK;
+    }
     if (contentPtr->containerPtr == NULL) {
 	Tcl_ResetResult(interp);
 	return TCL_OK;
     }
 
     infoObj = Tcl_NewObj();
-    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-in", TCL_INDEX_NONE),
-	    Tk_NewWindowObj(contentPtr->containerPtr->tkwin));
-    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-column", TCL_INDEX_NONE),
-	    Tcl_NewWideIntObj(contentPtr->column));
-    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-row", TCL_INDEX_NONE),
-	    Tcl_NewWideIntObj(contentPtr->row));
-    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-columnspan", TCL_INDEX_NONE),
-	    Tcl_NewWideIntObj(contentPtr->numCols));
-    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-rowspan", TCL_INDEX_NONE),
-	    Tcl_NewWideIntObj(contentPtr->numRows));
+    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-in", -1),
+	    TkNewWindowObj(contentPtr->containerPtr->tkwin));
+    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-column", -1),
+	    Tcl_NewIntObj(contentPtr->column));
+    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-row", -1),
+	    Tcl_NewIntObj(contentPtr->row));
+    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-columnspan", -1),
+	    Tcl_NewIntObj(contentPtr->numCols));
+    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-rowspan", -1),
+	    Tcl_NewIntObj(contentPtr->numRows));
     TkAppendPadAmount(infoObj, "-ipadx", contentPtr->iPadX/2, contentPtr->iPadX);
     TkAppendPadAmount(infoObj, "-ipady", contentPtr->iPadY/2, contentPtr->iPadY);
     TkAppendPadAmount(infoObj, "-padx", contentPtr->padLeft, contentPtr->padX);
     TkAppendPadAmount(infoObj, "-pady", contentPtr->padTop, contentPtr->padY);
-    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-sticky", TCL_INDEX_NONE),
+    Tcl_DictObjPut(NULL, infoObj, Tcl_NewStringObj("-sticky", -1),
 	    StickyToObj(contentPtr->sticky));
     Tcl_SetObjResult(interp, infoObj);
     return TCL_OK;
@@ -793,7 +788,7 @@ static int
 GridLocationCommand(
     Tk_Window tkwin,		/* Main window of the application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_Window container;
@@ -805,7 +800,7 @@ GridLocationCommand(
     int endX, endY;		/* End of grid. */
 
     if (objc != 5) {
-	Tcl_WrongNumArgs(interp, 2, objv, "window x y");
+	Tcl_WrongNumArgs(interp, 2, objv, "master x y");
 	return TCL_ERROR;
     }
 
@@ -820,9 +815,11 @@ GridLocationCommand(
 	return TCL_ERROR;
     }
 
-    containerPtr = GetGrid(container);
+    if (!(containerPtr = GetGrid(container))) {
+	return TCL_OK;
+    }
     if (containerPtr->containerDataPtr == NULL) {
-	Tcl_SetObjResult(interp, NewPairObj(-1, TCL_INDEX_NONE));
+	Tcl_SetObjResult(interp, NewPairObj(-1, -1));
 	return TCL_OK;
     }
     gridPtr = containerPtr->containerDataPtr;
@@ -886,7 +883,7 @@ static int
 GridPropagateCommand(
     Tk_Window tkwin,		/* Main window of the application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_Window container;
@@ -901,7 +898,9 @@ GridPropagateCommand(
     if (TkGetWindowFromObj(interp, tkwin, objv[2], &container) != TCL_OK) {
 	return TCL_ERROR;
     }
-    containerPtr = GetGrid(container);
+    if (!(containerPtr = GetGrid(container))) {
+	return TCL_OK;
+    }
     if (objc == 3) {
 	Tcl_SetObjResult(interp,
 		Tcl_NewBooleanObj(!(containerPtr->flags & DONT_PROPAGATE)));
@@ -974,7 +973,7 @@ static int
 GridRowColumnConfigureCommand(
     Tk_Window tkwin,		/* Main window of the application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_Window container, content;
@@ -983,10 +982,10 @@ GridRowColumnConfigureCommand(
     int slot;			/* the column or row number */
     int slotType;		/* COLUMN or ROW */
     int size;			/* the configuration value */
-    Tcl_Size lObjc;		/* Number of items in index list */
+    int lObjc;			/* Number of items in index list */
     Tcl_Obj **lObjv;		/* array of indices */
     int ok;			/* temporary TCL result code */
-    Tcl_Size i, j, first, last;
+    int i, j, first, last;
     const char *string;
     static const char *const optionStrings[] = {
 	"-minsize", "-pad", "-uniform", "-weight", NULL
@@ -998,7 +997,7 @@ GridRowColumnConfigureCommand(
     Tcl_Obj *listCopy;
 
     if (((objc % 2 != 0) && (objc > 6)) || (objc < 4)) {
-	Tcl_WrongNumArgs(interp, 2, objv, "window index ?-option value ...?");
+	Tcl_WrongNumArgs(interp, 2, objv, "master index ?-option value ...?");
 	return TCL_ERROR;
     }
 
@@ -1023,14 +1022,16 @@ GridRowColumnConfigureCommand(
 	return TCL_ERROR;
     }
 
-    containerPtr = GetGrid(container);
+    if (!(containerPtr = GetGrid(container))) {
+	return TCL_OK;
+    }
     first = 0;
     last = 0;
 
     if ((objc == 4) || (objc == 5)) {
 	if (lObjc != 1) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "must specify a single element on retrieval", TCL_INDEX_NONE));
+		    "must specify a single element on retrieval", -1));
 	    Tcl_SetErrorCode(interp, "TK", "GRID", "USAGE", NULL);
 	    Tcl_DecrRefCount(listCopy);
 	    return TCL_ERROR;
@@ -1068,18 +1069,18 @@ GridRowColumnConfigureCommand(
 	    }
 
 	    Tcl_ListObjAppendElement(interp, res,
-		    Tcl_NewStringObj("-minsize", TCL_INDEX_NONE));
-	    Tcl_ListObjAppendElement(interp, res, Tcl_NewWideIntObj(minsize));
+		    Tcl_NewStringObj("-minsize", -1));
+	    Tcl_ListObjAppendElement(interp, res, Tcl_NewIntObj(minsize));
 	    Tcl_ListObjAppendElement(interp, res,
-		    Tcl_NewStringObj("-pad", TCL_INDEX_NONE));
-	    Tcl_ListObjAppendElement(interp, res, Tcl_NewWideIntObj(pad));
+		    Tcl_NewStringObj("-pad", -1));
+	    Tcl_ListObjAppendElement(interp, res, Tcl_NewIntObj(pad));
 	    Tcl_ListObjAppendElement(interp, res,
-		    Tcl_NewStringObj("-uniform", TCL_INDEX_NONE));
+		    Tcl_NewStringObj("-uniform", -1));
 	    Tcl_ListObjAppendElement(interp, res,
-		    Tcl_NewStringObj(uniform == NULL ? "" : uniform, TCL_INDEX_NONE));
+		    Tcl_NewStringObj(uniform == NULL ? "" : uniform, -1));
 	    Tcl_ListObjAppendElement(interp, res,
-		    Tcl_NewStringObj("-weight", TCL_INDEX_NONE));
-	    Tcl_ListObjAppendElement(interp, res, Tcl_NewWideIntObj(weight));
+		    Tcl_NewStringObj("-weight", -1));
+	    Tcl_ListObjAppendElement(interp, res, Tcl_NewIntObj(weight));
 	    Tcl_SetObjResult(interp, res);
 	    Tcl_DecrRefCount(listCopy);
 	    return TCL_OK;
@@ -1096,18 +1097,18 @@ GridRowColumnConfigureCommand(
 	    return TCL_ERROR;
 	}
 	if (index == ROWCOL_MINSIZE) {
-	    Tcl_SetObjResult(interp, Tcl_NewWideIntObj(
+	    Tcl_SetObjResult(interp, Tcl_NewIntObj(
 		    (ok == TCL_OK) ? slotPtr[slot].minSize : 0));
 	} else if (index == ROWCOL_WEIGHT) {
-	    Tcl_SetObjResult(interp, Tcl_NewWideIntObj(
+	    Tcl_SetObjResult(interp, Tcl_NewIntObj(
 		    (ok == TCL_OK) ? slotPtr[slot].weight : 0));
 	} else if (index == ROWCOL_UNIFORM) {
 	    Tk_Uid value = (ok == TCL_OK) ? slotPtr[slot].uniform : "";
 
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    (value == NULL) ? "" : value, TCL_INDEX_NONE));
+		    (value == NULL) ? "" : value, -1));
 	} else if (index == ROWCOL_PAD) {
-	    Tcl_SetObjResult(interp, Tcl_NewWideIntObj(
+	    Tcl_SetObjResult(interp, Tcl_NewIntObj(
 		    (ok == TCL_OK) ? slotPtr[slot].pad : 0));
 	}
 	Tcl_DecrRefCount(listCopy);
@@ -1139,12 +1140,14 @@ GridRowColumnConfigureCommand(
 	     * Is it gridded in this container?
 	     */
 
-	    contentPtr = GetGrid(content);
+	    if (!(contentPtr = GetGrid(content))) {
+		continue;
+	    }
 	    if (contentPtr->containerPtr != containerPtr) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"the window \"%s\" is not managed by \"%s\"",
 			Tcl_GetString(lObjv[j]), Tcl_GetString(objv[2])));
-		Tcl_SetErrorCode(interp, "TK", "GRID", "NOT_MANAGED", NULL);
+		Tcl_SetErrorCode(interp, "TK", "GRID", "NOT_MASTER", NULL);
 		Tcl_DecrRefCount(listCopy);
 		return TCL_ERROR;
 	    }
@@ -1307,7 +1310,7 @@ static int
 GridSizeCommand(
     Tk_Window tkwin,		/* Main window of the application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_Window container;
@@ -1322,7 +1325,9 @@ GridSizeCommand(
     if (TkGetWindowFromObj(interp, tkwin, objv[2], &container) != TCL_OK) {
 	return TCL_ERROR;
     }
-    containerPtr = GetGrid(container);
+    if (!(containerPtr = GetGrid(container))) {
+	return TCL_OK;
+    }
 
     if (containerPtr->containerDataPtr != NULL) {
 	SetGridSize(containerPtr);
@@ -1358,7 +1363,7 @@ static int
 GridContentCommand(
     Tk_Window tkwin,		/* Main window of the application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    Tcl_Size objc,			/* Number of arguments. */
+    int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
 {
     Tk_Window container;
@@ -1401,7 +1406,9 @@ GridContentCommand(
     if (TkGetWindowFromObj(interp, tkwin, objv[2], &container) != TCL_OK) {
 	return TCL_ERROR;
     }
-    containerPtr = GetGrid(container);
+    if (!(containerPtr = GetGrid(container))) {
+	return TCL_OK;
+    }
 
     res = Tcl_NewListObj(0, NULL);
     for (contentPtr = containerPtr->contentPtr; contentPtr != NULL;
@@ -1414,7 +1421,7 @@ GridContentCommand(
 		contentPtr->row+contentPtr->numRows-1 < row)) {
 	    continue;
 	}
-	Tcl_ListObjAppendElement(interp,res, Tk_NewWindowObj(contentPtr->tkwin));
+	Tcl_ListObjAppendElement(interp,res, TkNewWindowObj(contentPtr->tkwin));
     }
     Tcl_SetObjResult(interp, res);
     return TCL_OK;
@@ -1440,7 +1447,7 @@ GridContentCommand(
 
 static void
 GridReqProc(
-    void *clientData,	/* Grid's information about window that got
+    ClientData clientData,	/* Grid's information about window that got
 				 * new preferred geometry. */
     TCL_UNUSED(Tk_Window))		/* Other Tk-related information about the
 				 * window. */
@@ -1473,7 +1480,7 @@ GridReqProc(
 
 static void
 GridLostContentProc(
-    void *clientData,	/* Grid structure for content window that was
+    ClientData clientData,	/* Grid structure for content window that was
 				 * stolen away. */
     TCL_UNUSED(Tk_Window))		/* Tk's handle for the content window. */
 {
@@ -1509,10 +1516,10 @@ GridLostContentProc(
 static int
 AdjustOffsets(
     int size,			/* The total layout size (in pixels). */
-    Tcl_Size slots,			/* Number of slots. */
+    int slots,			/* Number of slots. */
     SlotInfo *slotPtr)	/* Pointer to slot array. */
 {
-    Tcl_Size slot;		/* Current slot. */
+    int slot;		/* Current slot. */
     int diff;			/* Extra pixels needed to add to the layout. */
     int totalWeight;		/* Sum of the weights for all the slots. */
     int weight;			/* Sum of the weights so far. */
@@ -1732,7 +1739,7 @@ AdjustForSticky(
 
 static void
 ArrangeGrid(
-    void *clientData)	/* Structure describing container whose content
+    ClientData clientData)	/* Structure describing container whose content
 				 * are to be re-layed out. */
 {
     Gridder *containerPtr = (Gridder *)clientData;
@@ -2417,11 +2424,12 @@ ResolveConstraints(
  * GetGrid --
  *
  *	This internal procedure is used to locate a Grid structure for a given
- *	window, creating one if one doesn't exist already.
+ *	window, creating one if one doesn't exist already, except if the window
+ *	is already dead.
  *
  * Results:
  *	The return value is a pointer to the Grid structure corresponding to
- *	tkwin.
+ *	tkwin, or NULL when tkwin is already dead.
  *
  * Side effects:
  *	A new grid structure may be created. If so, then a callback is set up
@@ -2439,6 +2447,10 @@ GetGrid(
     Tcl_HashEntry *hPtr;
     int isNew;
     TkDisplay *dispPtr = ((TkWindow *) tkwin)->dispPtr;
+
+    if (((TkWindow *) tkwin)->flags & TK_ALREADY_DEAD) {
+	return NULL;
+    }
 
     if (!dispPtr->gridInit) {
 	Tcl_InitHashTable(&dispPtr->gridHashTable, TCL_ONE_WORD_KEYS);
@@ -2479,7 +2491,6 @@ GetGrid(
     gridPtr->sticky = 0;
     gridPtr->size = 0;
     gridPtr->in = NULL;
-    gridPtr->containerDataPtr = NULL;
     Tcl_SetHashValue(hPtr, gridPtr);
     Tk_CreateEventHandler(tkwin, StructureNotifyMask,
 	    GridStructureProc, gridPtr);
@@ -2594,7 +2605,7 @@ SetContentRow(
 
     lastRow = ((newRow >= 0) ? newRow : 0) + newNumRows;
     if (lastRow >= MAX_ELEMENT) {
-	Tcl_SetObjResult(interp, Tcl_NewStringObj("row out of bounds", TCL_INDEX_NONE));
+	Tcl_SetObjResult(interp, Tcl_NewStringObj("row out of bounds", -1));
 	Tcl_SetErrorCode(interp, "TK", "GRID", "BAD_ROW", NULL);
 	return TCL_ERROR;
     }
@@ -2627,11 +2638,11 @@ SetContentRow(
 static int
 CheckSlotData(
     Gridder *containerPtr,		/* The geometry container for this grid. */
-    Tcl_Size slot,			/* Which slot to look at. */
+    int slot,			/* Which slot to look at. */
     int slotType,		/* ROW or COLUMN. */
     int checkOnly)		/* Don't allocate new space if true. */
 {
-    Tcl_Size numSlot;		/* Number of slots already allocated (Space) */
+    int numSlot;		/* Number of slots already allocated (Space) */
     int end;			/* Last used constraint. */
 
     /*
@@ -2790,15 +2801,11 @@ Unlink(
     /*
      * If we have emptied this container from content it means we are no longer
      * handling it and should mark it as free.
-     *
-     * Send the event "NoManagedChild" to the container to inform it about there
-     * being no managed children inside it.
      */
 
     if ((containerPtr->contentPtr == NULL) && (containerPtr->flags & ALLOCED_CONTAINER)) {
 	TkFreeGeometryContainer(containerPtr->tkwin, "grid");
 	containerPtr->flags &= ~ALLOCED_CONTAINER;
-	Tk_SendVirtualEvent(containerPtr->tkwin, "NoManagedChild", NULL);
     }
 }
 
@@ -2824,11 +2831,7 @@ Unlink(
 
 static void
 DestroyGrid(
-#if TCL_MAJOR_VERSION > 8
-    void *memPtr)		/* Info about window that is now dead. */
-#else
-    char *memPtr)
-#endif
+    char *memPtr)		/* Info about window that is now dead. */
 {
     Gridder *gridPtr = (Gridder *)memPtr;
 
@@ -2870,7 +2873,7 @@ DestroyGrid(
 
 static void
 GridStructureProc(
-    void *clientData,	/* Our information about window referred to by
+    ClientData clientData,	/* Our information about window referred to by
 				 * eventPtr. */
     XEvent *eventPtr)		/* Describes what just happened. */
 {
@@ -2906,7 +2909,7 @@ GridStructureProc(
 	    contentPtr->nextPtr = NULL;
 	}
 	Tcl_DeleteHashEntry(Tcl_FindHashEntry(&dispPtr->gridHashTable,
-		gridPtr->tkwin));
+		(char *)gridPtr->tkwin));
 	if (gridPtr->flags & REQUESTED_RELAYOUT) {
 	    Tcl_CancelIdleCall(ArrangeGrid, gridPtr);
 	}
@@ -2953,7 +2956,7 @@ ConfigureContent(
     Tcl_Interp *interp,		/* Interpreter for error reporting. */
     Tk_Window tkwin,		/* Any window in application containing
 				 * content. Used to look up content names. */
-    Tcl_Size objc,			/* Number of elements in argv. */
+    int objc,			/* Number of elements in argv. */
     Tcl_Obj *const objv[])	/* Argument objects: contains one or more
 				 * window names followed by any number of
 				 * "option value" pairs. Caller must make sure
@@ -2990,7 +2993,7 @@ ConfigureContent(
 
     firstChar = 0;
     for (numWindows=0, i=0; i < objc; i++) {
-	Tcl_Size length;
+	int length;
 	char prevChar = firstChar;
 
 	string = Tcl_GetStringFromObj(objv[i], &length);
@@ -3012,11 +3015,15 @@ ConfigureContent(
 		 * If the stored container does not exist, just ignore it.
 		 */
 
-		contentPtr = GetGrid(content);
+		if (!(contentPtr = GetGrid(content))) {
+		    continue;
+		}
 		if (contentPtr->in != NULL) {
 		    if (TkGetWindowFromObj(interp, content, contentPtr->in, &parent)
 			    == TCL_OK) {
-			containerPtr = GetGrid(parent);
+			if (!(containerPtr = GetGrid(parent))) {
+			    continue;
+			}
 			InitContainerData(containerPtr);
 		    }
 		}
@@ -3024,7 +3031,9 @@ ConfigureContent(
 	    if (containerPtr == NULL) {
 		parent = Tk_Parent(content);
 		if (parent != NULL) {
-		    containerPtr = GetGrid(parent);
+		    if (!(containerPtr = GetGrid(parent))) {
+			continue;
+		    }
 		    InitContainerData(containerPtr);
 		}
 	    }
@@ -3051,7 +3060,7 @@ ConfigureContent(
 	if ((firstChar == REL_HORIZ) && ((numWindows == 0) ||
 		(prevChar == REL_SKIP) || (prevChar == REL_VERT))) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "must specify window before shortcut '-'", TCL_INDEX_NONE));
+		    "must specify window before shortcut '-'", -1));
 	    Tcl_SetErrorCode(interp, "TK", "GRID", "SHORTCUT_USAGE", NULL);
 	    return TCL_ERROR;
 	}
@@ -3071,7 +3080,7 @@ ConfigureContent(
 
     if ((objc - numWindows) & 1) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		"extra option or option with no value", TCL_INDEX_NONE));
+		"extra option or option with no value", -1));
 	Tcl_SetErrorCode(interp, "TK", "GRID", "BAD_PARAMETER", NULL);
 	return TCL_ERROR;
     }
@@ -3093,7 +3102,9 @@ ConfigureContent(
 		    TCL_OK) {
 		return TCL_ERROR;
 	    }
-	    containerPtr = GetGrid(other);
+	    if (!(containerPtr = GetGrid(other))) {
+		continue;
+	    }
 	    InitContainerData(containerPtr);
 	} else if (index == CONF_ROW) {
 	    if (Tcl_GetIntFromObj(interp, objv[i+1], &tmp) != TCL_OK
@@ -3170,7 +3181,9 @@ ConfigureContent(
 	    Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "TOPLEVEL", NULL);
 	    return TCL_ERROR;
 	}
-	contentPtr = GetGrid(content);
+	if (!(contentPtr = GetGrid(content))) {
+	    continue;
+	}
 
 	/*
 	 * The following statement is taken from tkPack.c:
@@ -3224,12 +3237,14 @@ ConfigureContent(
 		}
 		if (other == content) {
 		    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-			    "window can't be managed in itself", TCL_INDEX_NONE));
+			    "window can't be managed in itself", -1));
 		    Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "SELF", NULL);
 		    return TCL_ERROR;
 		}
 		positionGiven = 1;
-		containerPtr = GetGrid(other);
+		if (!(containerPtr = GetGrid(other))) {
+		    continue;
+		}
 		InitContainerData(containerPtr);
 		break;
 	    case CONF_STICKY: {
@@ -3336,7 +3351,9 @@ ConfigureContent(
 
 	parent = Tk_Parent(content);
     	if (containerPtr == NULL) {
-	    containerPtr = GetGrid(parent);
+	    if (!(containerPtr = GetGrid(parent))) {
+		continue;
+	    }
 	    InitContainerData(containerPtr);
     	}
 
@@ -3368,7 +3385,7 @@ ConfigureContent(
 	    }
 	    if (Tk_TopWinHierarchy(ancestor)) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-			"can't put \"%s\" inside \"%s\"", Tcl_GetString(objv[j]),
+			"can't put %s inside %s", Tcl_GetString(objv[j]),
 			Tk_PathName(containerPtr->tkwin)));
 		Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "HIERARCHY", NULL);
 		Unlink(contentPtr);
@@ -3384,7 +3401,7 @@ ConfigureContent(
 	     container = (TkWindow *)TkGetContainer(container)) {
 	    if (container == (TkWindow *)content) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		    "can't put \"%s\" inside \"%s\": would cause management loop",
+		    "can't put %s inside %s, would cause management loop",
 	            Tcl_GetString(objv[j]), Tk_PathName(containerPtr->tkwin)));
 		Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "LOOP", NULL);
 		Unlink(contentPtr);
@@ -3469,7 +3486,7 @@ ConfigureContent(
 
 	if (containerPtr == NULL) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "can't use '^', can't find container window", TCL_INDEX_NONE));
+		    "can't use '^', cant find master", -1));
 	    Tcl_SetErrorCode(interp, "TK", "GRID", "SHORTCUT_USAGE", NULL);
 	    return TCL_ERROR;
 	}
@@ -3495,7 +3512,9 @@ ConfigureContent(
 	    lastColumn = 0;
 	} else {
 	    other = Tk_NameToWindow(interp, lastWindow, tkwin);
-	    otherPtr = GetGrid(other);
+	    if (!(otherPtr = GetGrid(other))) {
+		continue;
+	    }
 	    lastRow = otherPtr->row + otherPtr->numRows - 2;
 	    lastColumn = otherPtr->column + otherPtr->numCols;
 	}
@@ -3523,7 +3542,7 @@ ConfigureContent(
 	}
 	if (!match) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		    "can't find content to extend with \"^\"", TCL_INDEX_NONE));
+		    "can't find slave to extend with \"^\"", -1));
 	    Tcl_SetErrorCode(interp, "TK", "GRID", "SHORTCUT_USAGE", NULL);
 	    return TCL_ERROR;
 	}
@@ -3531,7 +3550,7 @@ ConfigureContent(
 
     if (containerPtr == NULL) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
-		"can't determine container window", TCL_INDEX_NONE));
+		"can't determine master window", -1));
 	Tcl_SetErrorCode(interp, "TK", "GRID", "SHORTCUT_USAGE", NULL);
 	return TCL_ERROR;
     }
@@ -3540,15 +3559,11 @@ ConfigureContent(
     /*
      * If we have emptied this container from content it means we are no longer
      * handling it and should mark it as free.
-     *
-     * Send the event "NoManagedChild" to the container to inform it about there
-     * being no managed children inside it.
      */
 
     if (containerPtr->contentPtr == NULL && containerPtr->flags & ALLOCED_CONTAINER) {
 	TkFreeGeometryContainer(containerPtr->tkwin, "grid");
 	containerPtr->flags &= ~ALLOCED_CONTAINER;
-	Tk_SendVirtualEvent(containerPtr->tkwin, "NoManagedChild", NULL);
     }
 
     return TCL_OK;
@@ -3659,12 +3674,12 @@ StringToSticky(
 
 static Tcl_Obj *
 NewPairObj(
-    Tcl_WideInt val1, Tcl_WideInt val2)
+    int val1, int val2)
 {
     Tcl_Obj *ary[2];
 
-    ary[0] = Tcl_NewWideIntObj(val1);
-    ary[1] = Tcl_NewWideIntObj(val2);
+    ary[0] = Tcl_NewIntObj(val1);
+    ary[1] = Tcl_NewIntObj(val2);
     return Tcl_NewListObj(2, ary);
 }
 
@@ -3686,14 +3701,14 @@ NewPairObj(
 
 static Tcl_Obj *
 NewQuadObj(
-    Tcl_WideInt val1, Tcl_WideInt val2, Tcl_WideInt val3, Tcl_WideInt val4)
+    int val1, int val2, int val3, int val4)
 {
     Tcl_Obj *ary[4];
 
-    ary[0] = Tcl_NewWideIntObj(val1);
-    ary[1] = Tcl_NewWideIntObj(val2);
-    ary[2] = Tcl_NewWideIntObj(val3);
-    ary[3] = Tcl_NewWideIntObj(val4);
+    ary[0] = Tcl_NewIntObj(val1);
+    ary[1] = Tcl_NewIntObj(val2);
+    ary[2] = Tcl_NewIntObj(val3);
+    ary[3] = Tcl_NewIntObj(val4);
     return Tcl_NewListObj(4, ary);
 }
 

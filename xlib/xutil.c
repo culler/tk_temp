@@ -3,7 +3,7 @@
  *
  *	This function contains generic X emulation routines.
  *
- * Copyright © 1995-1996 Sun Microsystems, Inc.
+ * Copyright (c) 1995-1996 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.

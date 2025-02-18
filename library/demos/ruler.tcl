@@ -7,7 +7,7 @@ if {![info exists widgetDemo]} {
     error "This script should be run from the \"widget\" demo."
 }
 
-package require tk
+package require Tk
 
 # rulerMkTab --
 # This procedure creates a new triangular polygon in a canvas to

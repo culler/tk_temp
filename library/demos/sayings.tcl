@@ -8,7 +8,7 @@ if {![info exists widgetDemo]} {
     error "This script should be run from the \"widget\" demo."
 }
 
-package require tk
+package require Tk
 
 set w .sayings
 catch {destroy $w}
@@ -24,7 +24,7 @@ pack $w.msg -side top
 set btns [addSeeDismiss $w.buttons $w]
 pack $btns -side bottom -fill x
 
-frame $w.frame -borderwidth 7.5p
+frame $w.frame -borderwidth 10
 pack $w.frame -side top -expand yes -fill both -padx 1c
 
 

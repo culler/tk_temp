@@ -1,10 +1,10 @@
-! /bin/bash -norc
+#! /bin/bash -norc
 dnl	This file is an input file used by the GNU "autoconf" program to
 dnl	generate the file "configure", which is run during Tk installation
 dnl	to configure the system for the local environment.
 
-AC_INIT([tk],[9.0])
-AC_PREREQ([2.69])
+AC_INIT([tk],[8.6])
+AC_PREREQ([2.59])
 
 dnl This is only used when included from macosx/configure.ac
 m4_ifdef([SC_USE_CONFIG_HEADERS], [
@@ -23,10 +23,10 @@ m4_ifdef([SC_USE_CONFIG_HEADERS], [
     #endif /* _TKCONFIG */])
 ])
 
-TK_VERSION=9.0
-TK_MAJOR_VERSION=9
-TK_MINOR_VERSION=0
-TK_PATCH_LEVEL="b3"
+TK_VERSION=8.6
+TK_MAJOR_VERSION=8
+TK_MINOR_VERSION=6
+TK_PATCH_LEVEL=".17"
 VERSION=${TK_VERSION}
 LOCALES="cs da de el en en_gb eo es fr hu it nl pl pt ru sv"
 
@@ -37,11 +37,13 @@ LOCALES="cs da de el en en_gb eo es fr hu it nl pl pt ru sv"
 SC_PATH_TCLCONFIG
 SC_LOAD_TCLCONFIG
 
-if test "${TCL_MAJOR_VERSION}" -lt 9 ; then
-if test "${TCL_MINOR_VERSION}" -lt 7 ; then
-    AC_MSG_ERROR([${PACKAGE_NAME} ${PACKAGE_VERSION} requires Tcl 8.7+
+if test "${TCL_MAJOR_VERSION}" -ne 8 ; then
+    AC_MSG_ERROR([${PACKAGE_NAME} ${PACKAGE_VERSION} requires Tcl 8.6+
 Found config for Tcl ${TCL_VERSION}])
 fi
+if test "${TCL_MINOR_VERSION}" -lt 6 ; then
+    AC_MSG_ERROR([${PACKAGE_NAME} ${PACKAGE_VERSION} requires Tcl 8.6+
+Found config for Tcl ${TCL_VERSION}])
 fi
 
 SC_PROG_TCLSH
@@ -80,6 +82,19 @@ fi
 AC_PROG_CC
 AC_C_INLINE
 
+#--------------------------------------------------------------------
+# Supply a substitute for stdlib.h if it doesn't define strtol,
+# strtoul, or strtod (which it doesn't in some versions of SunOS).
+#--------------------------------------------------------------------
+
+AC_CHECK_HEADER(stdlib.h, tk_ok=1, tk_ok=0)
+AC_EGREP_HEADER(strtol, stdlib.h, , tk_ok=0)
+AC_EGREP_HEADER(strtoul, stdlib.h, , tk_ok=0)
+AC_EGREP_HEADER(strtod, stdlib.h, , tk_ok=0)
+if test $tk_ok = 0; then
+    AC_DEFINE(NO_STDLIB_H, 1, [Do we have <stdlib.h>?])
+fi
+
 #------------------------------------------------------------------------
 # If we're using GCC, see if the compiler understands -pipe.  If so, use it.
 # It makes compiling go faster.  (This is only a performance feature.)
@@ -97,10 +112,13 @@ if test -z "$no_pipe" && test -n "$GCC"; then
 fi
 
 #------------------------------------------------------------------------
-# Embedded configuration information, encoding to use for the values, TIP #59
+# Threads support - this auto-enables if Tcl was compiled threaded
 #------------------------------------------------------------------------
 
-SC_TCL_CFG_ENCODING
+SC_ENABLE_THREADS
+
+# Add the threads support libraries
+LIBS="$LIBS$THREADS_LIBS"
 
 SC_ENABLE_SHARED
 
@@ -141,8 +159,8 @@ fi
 
 if test "$TCL_PREFIX" != "$prefix"; then
     AC_MSG_WARN([
-        Different --prefix selected for Tk and Tcl!
-        [[package require tk]] may not work correctly in tclsh.])
+	Different --prefix selected for Tk and Tcl!
+	[[package require Tk]] may not work correctly in tclsh.])
 fi
 
 #--------------------------------------------------------------------
@@ -175,7 +193,8 @@ fi
 #       Find out all about time handling differences.
 #------------------------------------------------------------------------------
 
-AC_CHECK_HEADERS_ONCE([sys/time.h])
+AC_CHECK_HEADERS(sys/time.h)
+AC_HEADER_TIME
 
 #--------------------------------------------------------------------
 #	Check for various typedefs and provide substitutes if
@@ -185,10 +204,39 @@ AC_CHECK_HEADERS_ONCE([sys/time.h])
 AC_TYPE_MODE_T
 AC_TYPE_PID_T
 AC_TYPE_SIZE_T
+AC_TYPE_UID_T
 
-AC_CHECK_TYPES([intptr_t, uintptr_t],,,[[
-#include <stdint.h>
-]])
+AC_CHECK_TYPE([intptr_t], [
+    AC_DEFINE([HAVE_INTPTR_T], 1, [Do we have the intptr_t type?])], [
+    AC_CACHE_CHECK([for pointer-size signed integer type], tcl_cv_intptr_t, [
+    for tcl_cv_intptr_t in "int" "long" "long long" none; do
+	if test "$tcl_cv_intptr_t" != none; then
+	    AC_COMPILE_IFELSE([AC_LANG_BOOL_COMPILE_TRY([AC_INCLUDES_DEFAULT],
+		    [[sizeof (void *) <= sizeof ($tcl_cv_intptr_t)]])],
+		[tcl_ok=yes], [tcl_ok=no])
+	    test "$tcl_ok" = yes && break; fi
+    done])
+    if test "$tcl_cv_intptr_t" != none; then
+	AC_DEFINE_UNQUOTED([intptr_t], [$tcl_cv_intptr_t], [Signed integer
+	   type wide enough to hold a pointer.])
+    fi
+])
+AC_CHECK_TYPE([uintptr_t], [
+    AC_DEFINE([HAVE_UINTPTR_T], 1, [Do we have the uintptr_t type?])], [
+    AC_CACHE_CHECK([for pointer-size unsigned integer type], tcl_cv_uintptr_t, [
+    for tcl_cv_uintptr_t in "unsigned int" "unsigned long" "unsigned long long" \
+	    none; do
+	if test "$tcl_cv_uintptr_t" != none; then
+	    AC_COMPILE_IFELSE([AC_LANG_BOOL_COMPILE_TRY([AC_INCLUDES_DEFAULT],
+		    [[sizeof (void *) <= sizeof ($tcl_cv_uintptr_t)]])],
+		[tcl_ok=yes], [tcl_ok=no])
+	    test "$tcl_ok" = yes && break; fi
+    done])
+    if test "$tcl_cv_uintptr_t" != none; then
+	AC_DEFINE_UNQUOTED([uintptr_t], [$tcl_cv_uintptr_t], [Unsigned integer
+	   type wide enough to hold a pointer.])
+    fi
+])
 
 #-------------------------------------------
 #     In OS/390 struct pwd has no pw_gecos field
@@ -226,6 +274,29 @@ if test "`uname -s`" = "Darwin" ; then
 	fi
     fi
     AC_MSG_RESULT([$tk_aqua])
+    if test "$fat_32_64" = yes; then
+	if test $tk_aqua = no; then
+	    AC_CACHE_CHECK([for 64-bit X11], tcl_cv_lib_x11_64, [
+		for v in CFLAGS CPPFLAGS LDFLAGS; do
+		    eval 'hold_'$v'="$'$v'";'$v'="`echo "$'$v' "|sed -e "s/-arch ppc / /g" -e "s/-arch i386 / /g"`"'
+		done
+		CPPFLAGS="$CPPFLAGS -I/usr/X11R6/include"
+		LDFLAGS="$LDFLAGS -L/usr/X11R6/lib -lX11"
+		AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <X11/Xlib.h>]], [[XrmInitialize();]])],
+		[tcl_cv_lib_x11_64=yes],[tcl_cv_lib_x11_64=no])
+		for v in CFLAGS CPPFLAGS LDFLAGS; do
+		    eval $v'="$hold_'$v'"'
+		done])
+	fi
+	# remove 64-bit arch flags from CFLAGS et al. for combined 32 & 64 bit
+	# fat builds if configuration does not support 64-bit.
+	if test "$tcl_cv_lib_x11_64" = no; then
+	    AC_MSG_NOTICE([Removing 64-bit architectures from compiler & linker flags])
+	    for v in CFLAGS CPPFLAGS LDFLAGS; do
+		eval $v'="`echo "$'$v' "|sed -e "s/-arch ppc64 / /g" -e "s/-arch x86_64 / /g"`"'
+	    done
+	fi
+    fi
     if test $tk_aqua = no; then
 	# check if weak linking whole libraries is possible.
 	AC_CACHE_CHECK([if ld accepts -weak-l flag], tcl_cv_ld_weak_l, [
@@ -280,17 +351,14 @@ fi
 
 if test $tk_aqua = yes; then
     AC_DEFINE(MAC_OSX_TK, 1, [Are we building TkAqua?])
-    LIBS="$LIBS -framework Cocoa -framework Carbon -framework IOKit -framework QuartzCore -framework Security -framework CoreGraphics"
-    if test -d /System/Library/Frameworks/UserNotifications.framework; then
-        LIBS="$LIBS -framework UserNotifications"
-    fi
+    LIBS="$LIBS -framework Cocoa -framework Carbon -framework IOKit -framework QuartzCore"
     if test -d "/System/Library/Frameworks/UniformTypeIdentifiers.framework"; then
-        LIBS="$LIBS -weak_framework UniformTypeIdentifiers"
+	LIBS="$LIBS -weak_framework UniformTypeIdentifiers"
     fi
-    EXTRA_CC_SWITCHES='-x objective-c'
+    EXTRA_CC_SWITCHES='-std=gnu99 -x objective-c'
     TK_WINDOWINGSYSTEM=AQUA
     if test -n "${enable_symbols}" -a "${enable_symbols}" != no; then
-        AC_DEFINE(TK_MAC_DEBUG, 1, [Are TkAqua debug messages enabled?])
+	AC_DEFINE(TK_MAC_DEBUG, 1, [Are TkAqua debug messages enabled?])
     fi
 else
     #--------------------------------------------------------------------
@@ -452,7 +520,7 @@ if test $tk_aqua = no; then
 	    XFT_CFLAGS=""
 	    XFT_LIBS=""
 	else
-            enable_xft=yes
+	    enable_xft=yes
 	fi
     fi
     if test $enable_xft = "yes" ; then
@@ -467,50 +535,55 @@ if test $tk_aqua = no; then
 fi
 
 #--------------------------------------------------------------------
-#	Check for libcups support
+#	Check for XkbKeycodeToKeysym.
 #--------------------------------------------------------------------
 
 if test $tk_aqua = no; then
-    AC_MSG_CHECKING([whether to use libcups])
-    AC_ARG_ENABLE(libcups,
-	AS_HELP_STRING([--enable-libcups],
-	    [use libcups (default: on)]),
-	[enable_libcups=$enableval], [enable_libcups="default"])
-    CUPS_CFLAGS=""
-    CUPS_LIBS=""
-    if test "$enable_libcups" = "no" ; then
-	AC_MSG_RESULT([$enable_libcups])
+    tk_oldCFlags=$CFLAGS
+    tk_oldLibs=$LIBS
+    CFLAGS="$CFLAGS $XINCLUDES"
+    LIBS="$LIBS $XLIBSW"
+    AC_CHECK_HEADER(X11/XKBlib.h, [
+	xkblib_header_found=yes
+    ], [
+	xkblib_header_found=no
+    ], [#include <X11/Xlib.h>])
+    if test $xkblib_header_found = "yes" ; then
+	AC_CHECK_LIB(X11, XkbKeycodeToKeysym, [
+	    xkbkeycodetokeysym_found=yes
+	], [
+	    xkbkeycodetokeysym_found=no
+	])
     else
-	found_cups=`cups-config 2>/dev/null`
-	dnl make sure package configurator (cups-config)
-	dnl says that libcups is present.
-        if test "$found_cups" = ""; then
-	    found_cups=no
-        else
-	    found_cups=yes
-	    CUPS_CFLAGS="-DHAVE_CUPS"
-	    CUPS_LIBS=`cups-config --libs`
-	fi
-	AC_MSG_RESULT([$found_cups])
-	dnl make sure that compiling against CUPS header file doesn't bomb
-	if test "$found_cups" = "yes" ; then
-	    tk_oldCFlags=$CFLAGS
-	    CFLAGS="$CFLAGS $XINCLUDES $CUPS_CFLAGS"
-	    tk_oldLibs=$LIBS
-	    LIBS="$tk_oldLIBS $CUPS_LIBS $XLIBSW"
-	    AC_CHECK_HEADER(cups/cups.h, [], [
-		found_cups=no
-		CUPS_CFLAGS=""
-		CUPS_LIBS=""
-	    ],[#include <cups/cups.h>])
-	    CFLAGS=$tk_oldCFlags
-	    LIBS=$tk_oldLibs
-	fi
+	xkbkeycodetokeysym_found=no
     fi
-    AC_SUBST(CUPS_CFLAGS)
-    AC_SUBST(CUPS_LIBS)
+    if test $xkbkeycodetokeysym_found = "yes" ; then
+	AC_DEFINE(HAVE_XKBKEYCODETOKEYSYM, 1, [Do we have XkbKeycodeToKeysym?])
+    fi
+    CFLAGS=$tk_oldCFlags
+    LIBS=$tk_oldLibs
 fi
 
+#--------------------------------------------------------------------
+# Check whether XKeycodeToKeysym is deprecated in X11 headers.
+#--------------------------------------------------------------------
+
+if test $tk_aqua = no && test "$GCC" = yes; then
+    AC_MSG_CHECKING([whether XKeycodeToKeysym is deprecated])
+    tk_oldCFlags=$CFLAGS
+    CFLAGS="$CFLAGS -Werror"
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+	#include <X11/Xlib.h>
+    ]], [[
+	XKeycodeToKeysym(0,0,0);
+    ]])],[
+	AC_MSG_RESULT([no])
+    ],[
+    AC_MSG_RESULT([yes])
+	AC_DEFINE(XKEYCODETOKEYSYM_IS_DEPRECATED, 1, [Is XKeycodeToKeysym deprecated?])
+	])
+    CFLAGS=$tk_oldCFlags
+fi
 
 #--------------------------------------------------------------------
 # XXX Do this last.
@@ -579,13 +652,7 @@ AC_C_CHAR_UNSIGNED
 
 eval eval "TK_UNSHARED_LIB_SUFFIX=${UNSHARED_LIB_SUFFIX}"
 eval eval "TK_SHARED_LIB_SUFFIX=${SHARED_LIB_SUFFIX}"
-eval "TK_LIB_FILE_TCL8=libtk${LIB_SUFFIX}"
-if test ${TCL_MAJOR_VERSION} = 8 ; then
 eval "TK_LIB_FILE=libtk${LIB_SUFFIX}"
-else
-eval "TK_LIB_FILE=libtcl9tk${LIB_SUFFIX}"
-fi
-eval "TK_LIB_FILE_TCL9=libtcl9tk${LIB_SUFFIX}"
 
 # tkConfig.sh needs a version of the _LIB_SUFFIX that has been eval'ed
 # since on some platforms TK_LIB_FILE contains shell escapes.
@@ -620,6 +687,7 @@ if test "`uname -s`" = "Darwin" ; then
     if test "${SHARED_BUILD}" = "0"; then
 	EXTRA_WISH_LIBS=${EXTRA_WISH_LIBS}' -ObjC'
     fi
+    EXTRA_APP_CC_SWITCHES="${EXTRA_APP_CC_SWITCHES}"' -mdynamic-no-pic'
     AC_CONFIG_FILES([Tk-Info.plist:../macosx/Tk-Info.plist.in Wish-Info.plist:../macosx/Wish-Info.plist.in Credits.html:../macosx/Credits.html.in])
     for l in ${LOCALES}; do CFBUNDLELOCALIZATIONS="${CFBUNDLELOCALIZATIONS}<string>$l</string>"; done
     TK_YEAR="`date +%Y`"
@@ -630,25 +698,19 @@ if test "$FRAMEWORK_BUILD" = "1" ; then
     # Construct a fake local framework structure to make linking with
     # '-framework Tk' and running of tktest work
     AC_CONFIG_COMMANDS([Tk.framework], [n=Tk &&
-        f=$n.framework && v=Versions/$VERSION &&
-        rm -rf $f && mkdir -p $f/$v/Resources &&
-        ln -s $v/$n $v/Resources $f && ln -s ../../../$n $f/$v &&
-        ln -s ../../../../$n-Info.plist $f/$v/Resources/Info.plist &&
-        if test $tk_aqua = yes; then ln -s ../../../../$n.rsrc $f/$v/Resources; fi &&
-        unset n f v
+	f=$n.framework && v=Versions/$VERSION &&
+	rm -rf $f && mkdir -p $f/$v/Resources &&
+	ln -s $v/$n $v/Resources $f && ln -s ../../../$n $f/$v &&
+	ln -s ../../../../$n-Info.plist $f/$v/Resources/Info.plist &&
+	if test $tk_aqua = yes; then ln -s ../../../../$n.rsrc $f/$v/Resources; fi &&
+	unset n f v
     ], VERSION=${TK_VERSION} && tk_aqua=${tk_aqua})
     LD_LIBRARY_PATH_VAR="DYLD_FRAMEWORK_PATH"
     if test "${libdir}" = '${exec_prefix}/lib'; then
-        # override libdir default
-        libdir="/Library/Frameworks"
+	# override libdir default
+	libdir="/Library/Frameworks"
     fi
-    if test ${TCL_MAJOR_VERSION} = 8 ; then
-	TK_LIB_FILE="Tk"
-    else
-	TK_LIB_FILE="Tk"
-    fi
-    TK_LIB_FILE_TCL8="Tk"
-    TK_LIB_FILE_TCL9="Tk"
+    TK_LIB_FILE="Tk"
     TK_LIB_FLAG="-framework Tk"
     TK_BUILD_LIB_SPEC="-F`pwd | sed -e 's/ /\\\\ /g'` -framework Tk"
     TK_LIB_SPEC="-F${libdir} -framework Tk"
@@ -683,22 +745,18 @@ if test "$FRAMEWORK_BUILD" = "1" ; then
     EXTRA_CC_SWITCHES="$EXTRA_CC_SWITCHES"' -DTK_FRAMEWORK_VERSION=\"$(VERSION)\"'
 else
     if test $tk_aqua = yes; then
-        EXTRA_INSTALL_BINARIES='@echo "Installing Images to $(LIB_INSTALL_DIR)/" && $(INSTALL_DATA_DIR) "$(LIB_INSTALL_DIR)" && for i in Tk.tiff Tk.icns; do $(INSTALL_DATA) "$(MAC_OSX_DIR)/$$i" "$(LIB_INSTALL_DIR)"; done'
+	EXTRA_INSTALL_BINARIES='@echo "Installing Images to $(LIB_INSTALL_DIR)/" && $(INSTALL_DATA_DIR) "$(LIB_INSTALL_DIR)" && for i in Tk.tiff Tk.icns; do $(INSTALL_DATA) "$(MAC_OSX_DIR)/$$i" "$(LIB_INSTALL_DIR)"; done'
     fi
     # libdir must be a fully qualified path and not ${exec_prefix}/lib
     eval libdir="$libdir"
-    TK_LIB_FLAG="-l"
-    if test "${TCL_MAJOR_VERSION}" -gt 8 ; then
-	TK_LIB_FLAG="${TK_LIB_FLAG}tcl9"
-    fi
     if test "${ac_cv_cygwin}" = "yes" -a "$SHARED_BUILD" = "1"; then
-	TK_LIB_FLAG="${TK_LIB_FLAG}tk`echo ${TK_VERSION} | tr -d .`"
+	TK_LIB_FLAG="-ltk`echo ${TK_VERSION} | tr -d .`"
 	TK_BUILD_LIB_SPEC="-L\$(TOP_DIR)/win ${TK_LIB_FLAG}"
     else
 	if test "${TCL_LIB_VERSIONS_OK}" = "ok"; then
-	    TK_LIB_FLAG="${TK_LIB_FLAG}tk${TK_VERSION}"
+	    TK_LIB_FLAG="-ltk${TK_VERSION}"
 	else
-	    TK_LIB_FLAG="${TK_LIB_FLAG}tk`echo ${TK_VERSION} | tr -d .`"
+	    TK_LIB_FLAG="-ltk`echo ${TK_VERSION} | tr -d .`"
 	fi
 	TK_BUILD_LIB_SPEC="-L`pwd | sed -e 's/ /\\\\ /g'` ${TK_LIB_FLAG}"
     fi
@@ -706,59 +764,19 @@ else
 fi
 
 #--------------------------------------------------------------------
-#	Zipfs support - Tip 430
-#--------------------------------------------------------------------
-AC_ARG_ENABLE(zipfs,
-    AS_HELP_STRING([--enable-zipfs],[build with Zipfs support (default: on)]),
-    [tcl_ok=$enableval], [tcl_ok=yes])
-if test "$tcl_ok" = "yes" -a "x$enable_framework" != "xyes"; then
-    #
-    # Find a native compiler
-    #
-    AX_CC_FOR_BUILD
-    #
-    # Find a native zip implementation
-    #
-    SC_ZIPFS_SUPPORT
-	ZIPFS_BUILD=1
-	TK_ZIP_FILE=libtk${TK_MAJOR_VERSION}.${TK_MINOR_VERSION}${TK_PATCH_LEVEL}.zip
-else
-	ZIPFS_BUILD=0
-	TK_ZIP_FILE=
-fi
-# Do checking message here to not mess up interleaved configure output
-AC_MSG_CHECKING([for building with zipfs])
-if test "${ZIPFS_BUILD}" = 1; then
-    if test "${SHARED_BUILD}" = 0; then
-       ZIPFS_BUILD=2;
-       AC_DEFINE(ZIPFS_BUILD, 2, [Are we building with zipfs enabled?])
-       INSTALL_LIBRARIES=install-demos
-       AC_MSG_RESULT([yes])
-     else
-       AC_DEFINE(ZIPFS_BUILD, 1, [Are we building with zipfs enabled?])\
-       INSTALL_LIBRARIES=install-demos
-       AC_MSG_RESULT([yes])
-    fi
-else
-AC_MSG_RESULT([no])
-INSTALL_LIBRARIES=install-libraries
-INSTALL_MSGS=install-msgs
-fi
-AC_SUBST(ZIPFS_BUILD)
-AC_SUBST(TK_ZIP_FILE)
-AC_SUBST(INSTALL_LIBRARIES)
-AC_SUBST(INSTALL_MSGS)
-
-
-#--------------------------------------------------------------------
 #       The statements below define various symbols relating to Tk
 #       stub support.
 #--------------------------------------------------------------------
 
 # Replace ${VERSION} with contents of ${TK_VERSION}
-    TK_STUB_LIB_FILE="libtkstub.a"
-    TK_STUB_LIB_FLAG="-ltkstub"
+eval "TK_STUB_LIB_FILE=libtkstub${TK_UNSHARED_LIB_SUFFIX}"
 eval "TK_STUB_LIB_DIR=\"${libdir}\""
+
+if test "${TCL_LIB_VERSIONS_OK}" = "ok"; then
+    TK_STUB_LIB_FLAG="-ltkstub${TK_VERSION}"
+else
+    TK_STUB_LIB_FLAG="-ltkstub`echo ${TK_VERSION} | tr -d .`"
+fi
 
 TK_BUILD_STUB_LIB_SPEC="-L`pwd | sed -e 's/ /\\\\ /g'` ${TK_STUB_LIB_FLAG}"
 TK_STUB_LIB_SPEC="-L${TK_STUB_LIB_DIR} ${TK_STUB_LIB_FLAG}"
@@ -767,16 +785,6 @@ TK_STUB_LIB_PATH="${TK_STUB_LIB_DIR}/${TK_STUB_LIB_FILE}"
 
 # Install time header dir can be set via --includedir
 eval "TK_INCLUDE_SPEC=\"-I${includedir}\""
-
-#------------------------------------------------------------------------
-# Demo dir
-#------------------------------------------------------------------------
-
-AS_IF([test x"${DEMO_DIR}" = x], [DEMO_DIR='$(TK_LIBRARY)/demos'])
-eval "TK_DEMO_DIR=\"`echo ${DEMO_DIR} | tr '()' '{}'`\""
-eval "TK_DEMO_DIR=\"`echo ${TK_DEMO_DIR} | tr '()' '{}'`\""
-AC_SUBST(DEMO_DIR)
-AC_SUBST(TK_DEMO_DIR)
 
 #------------------------------------------------------------------------
 # tkConfig.sh refers to this by a different name
@@ -791,8 +799,6 @@ AC_SUBST(TK_PATCH_LEVEL)
 AC_SUBST(TK_YEAR)
 
 AC_SUBST(TK_LIB_FILE)
-AC_SUBST(TK_LIB_FILE_TCL8)
-AC_SUBST(TK_LIB_FILE_TCL9)
 AC_SUBST(TK_LIB_FLAG)
 AC_SUBST(TK_LIB_SPEC)
 AC_SUBST(TK_STUB_LIB_FILE)

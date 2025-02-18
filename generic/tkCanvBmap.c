@@ -3,8 +3,8 @@
  *
  *	This file implements bitmap items for canvas widgets.
  *
- * Copyright © 1992-1994 The Regents of the University of California.
- * Copyright © 1994-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1992-1994 The Regents of the University of California.
+ * Copyright (c) 1994-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -50,30 +50,30 @@ static const Tk_CustomOption tagsOption = {
 
 static const Tk_ConfigSpec configSpecs[] = {
     {TK_CONFIG_COLOR, "-activebackground", NULL, NULL,
-	NULL, offsetof(BitmapItem, activeBgColor), TK_CONFIG_NULL_OK, NULL},
+	NULL, Tk_Offset(BitmapItem, activeBgColor), TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_BITMAP, "-activebitmap", NULL, NULL,
-	NULL, offsetof(BitmapItem, activeBitmap), TK_CONFIG_NULL_OK, NULL},
+	NULL, Tk_Offset(BitmapItem, activeBitmap), TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_COLOR, "-activeforeground", NULL, NULL,
-	NULL, offsetof(BitmapItem, activeFgColor), TK_CONFIG_NULL_OK, NULL},
+	NULL, Tk_Offset(BitmapItem, activeFgColor), TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_ANCHOR, "-anchor", NULL, NULL,
-	"center", offsetof(BitmapItem, anchor), TK_CONFIG_DONT_SET_DEFAULT, NULL},
+	"center", Tk_Offset(BitmapItem, anchor), TK_CONFIG_DONT_SET_DEFAULT, NULL},
     {TK_CONFIG_COLOR, "-background", NULL, NULL,
-	NULL, offsetof(BitmapItem, bgColor), TK_CONFIG_NULL_OK, NULL},
+	NULL, Tk_Offset(BitmapItem, bgColor), TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_BITMAP, "-bitmap", NULL, NULL,
-	NULL, offsetof(BitmapItem, bitmap), TK_CONFIG_NULL_OK, NULL},
+	NULL, Tk_Offset(BitmapItem, bitmap), TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_COLOR, "-disabledbackground", NULL, NULL,
-	NULL, offsetof(BitmapItem, disabledBgColor),
+	NULL, Tk_Offset(BitmapItem, disabledBgColor),
 	TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_BITMAP, "-disabledbitmap", NULL, NULL,
-	NULL, offsetof(BitmapItem, disabledBitmap),
+	NULL, Tk_Offset(BitmapItem, disabledBitmap),
 	TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_COLOR, "-disabledforeground", NULL, NULL,
-	NULL, offsetof(BitmapItem, disabledFgColor),
+	NULL, Tk_Offset(BitmapItem, disabledFgColor),
 	TK_CONFIG_NULL_OK, NULL},
     {TK_CONFIG_COLOR, "-foreground", NULL, NULL,
-	DEF_CANVBMAP_FG, offsetof(BitmapItem, fgColor), 0, NULL},
+	DEF_CANVBMAP_FG, Tk_Offset(BitmapItem, fgColor), 0, NULL},
     {TK_CONFIG_CUSTOM, "-state", NULL, NULL,
-	NULL, offsetof(Tk_Item, state), TK_CONFIG_NULL_OK,
+	NULL, Tk_Offset(Tk_Item, state), TK_CONFIG_NULL_OK,
 	&stateOption},
     {TK_CONFIG_CUSTOM, "-tags", NULL, NULL,
 	NULL, 0, TK_CONFIG_NULL_OK, &tagsOption},
@@ -85,7 +85,7 @@ static const Tk_ConfigSpec configSpecs[] = {
  */
 
 static int		BitmapCoords(Tcl_Interp *interp,
-			    Tk_Canvas canvas, Tk_Item *itemPtr, Tcl_Size objc,
+			    Tk_Canvas canvas, Tk_Item *itemPtr, int objc,
 			    Tcl_Obj *const objv[]);
 static int		BitmapToArea(Tk_Canvas canvas,
 			    Tk_Item *itemPtr, double *rectPtr);
@@ -96,18 +96,16 @@ static int		BitmapToPostscript(Tcl_Interp *interp,
 static void		ComputeBitmapBbox(Tk_Canvas canvas,
 			    BitmapItem *bmapPtr);
 static int		ConfigureBitmap(Tcl_Interp *interp,
-			    Tk_Canvas canvas, Tk_Item *itemPtr, Tcl_Size objc,
+			    Tk_Canvas canvas, Tk_Item *itemPtr, int objc,
 			    Tcl_Obj *const objv[], int flags);
 static int		TkcCreateBitmap(Tcl_Interp *interp,
 			    Tk_Canvas canvas, struct Tk_Item *itemPtr,
-			    Tcl_Size objc, Tcl_Obj *const objv[]);
+			    int objc, Tcl_Obj *const objv[]);
 static void		DeleteBitmap(Tk_Canvas canvas,
 			    Tk_Item *itemPtr, Display *display);
 static void		DisplayBitmap(Tk_Canvas canvas,
 			    Tk_Item *itemPtr, Display *display, Drawable dst,
 			    int x, int y, int width, int height);
-static void		RotateBitmap(Tk_Canvas canvas, Tk_Item *itemPtr,
-			    double originX, double originY, double angleRad);
 static void		ScaleBitmap(Tk_Canvas canvas,
 			    Tk_Item *itemPtr, double originX, double originY,
 			    double scaleX, double scaleY);
@@ -128,7 +126,7 @@ Tk_ItemType tkBitmapType = {
     BitmapCoords,		/* coordProc */
     DeleteBitmap,		/* deleteProc */
     DisplayBitmap,		/* displayProc */
-    0,				/* flags */
+    TK_CONFIG_OBJS,		/* flags */
     BitmapToPoint,		/* pointProc */
     BitmapToArea,		/* areaProc */
     BitmapToPostscript,		/* postscriptProc */
@@ -140,8 +138,7 @@ Tk_ItemType tkBitmapType = {
     NULL,			/* insertProc */
     NULL,			/* dTextProc */
     NULL,			/* nextPtr */
-    RotateBitmap,		/* rotateProc */
-    0, NULL, NULL
+    NULL, 0, NULL, NULL
 };
 
 /*
@@ -169,11 +166,11 @@ TkcCreateBitmap(
     Tk_Canvas canvas,		/* Canvas to hold new item. */
     Tk_Item *itemPtr,		/* Record to hold new item; header has been
 				 * initialized by caller. */
-    Tcl_Size objc,			/* Number of arguments in objv. */
+    int objc,			/* Number of arguments in objv. */
     Tcl_Obj *const objv[])	/* Arguments describing rectangle. */
 {
     BitmapItem *bmapPtr = (BitmapItem *) itemPtr;
-    Tcl_Size i;
+    int i;
 
     if (objc == 0) {
 	Tcl_Panic("canvas did not pass any coords");
@@ -245,7 +242,7 @@ BitmapCoords(
     Tk_Canvas canvas,		/* Canvas containing item. */
     Tk_Item *itemPtr,		/* Item whose coordinates are to be read or
 				 * modified. */
-    Tcl_Size objc,			/* Number of coordinates supplied in objv. */
+    int objc,			/* Number of coordinates supplied in objv. */
     Tcl_Obj *const objv[])	/* Array of coordinates: x1, y1, x2, y2, ... */
 {
     BitmapItem *bmapPtr = (BitmapItem *) itemPtr;
@@ -263,9 +260,9 @@ BitmapCoords(
 		return TCL_ERROR;
 	    } else if (objc != 2) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-			"wrong # coordinates: expected 2, got %" TCL_SIZE_MODIFIER "d", objc));
+			"wrong # coordinates: expected 2, got %d", objc));
 		Tcl_SetErrorCode(interp, "TK", "CANVAS", "COORDS", "BITMAP",
-			(char *)NULL);
+			NULL);
 		return TCL_ERROR;
 	    }
 	}
@@ -278,8 +275,8 @@ BitmapCoords(
 	ComputeBitmapBbox(canvas, bmapPtr);
     } else {
 	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		"wrong # coordinates: expected 0 or 2, got %" TCL_SIZE_MODIFIER "d", objc));
-	Tcl_SetErrorCode(interp, "TK", "CANVAS", "COORDS", "BITMAP", (char *)NULL);
+		"wrong # coordinates: expected 0 or 2, got %d", objc));
+	Tcl_SetErrorCode(interp, "TK", "CANVAS", "COORDS", "BITMAP", NULL);
 	return TCL_ERROR;
     }
     return TCL_OK;
@@ -308,7 +305,7 @@ ConfigureBitmap(
     Tcl_Interp *interp,		/* Used for error reporting. */
     Tk_Canvas canvas,		/* Canvas containing itemPtr. */
     Tk_Item *itemPtr,		/* Bitmap item to reconfigure. */
-    Tcl_Size objc,			/* Number of elements in objv.  */
+    int objc,			/* Number of elements in objv.  */
     Tcl_Obj *const objv[],	/* Arguments describing things to configure. */
     int flags)			/* Flags to pass to Tk_ConfigureWidget. */
 {
@@ -324,7 +321,7 @@ ConfigureBitmap(
 
     tkwin = Tk_CanvasTkwin(canvas);
     if (TCL_OK != Tk_ConfigureWidget(interp, tkwin, configSpecs, objc,
-	    objv, bmapPtr, flags)) {
+	    (const char **) objv, (char *) bmapPtr, flags|TK_CONFIG_OBJS)) {
 	return TCL_ERROR;
     }
 
@@ -417,7 +414,7 @@ ConfigureBitmap(
 
 static void
 DeleteBitmap(
-    TCL_UNUSED(Tk_Canvas),		/* Info about overall canvas widget. */
+    Tk_Canvas canvas,		/* Info about overall canvas widget. */
     Tk_Item *itemPtr,		/* Item that is being deleted. */
     Display *display)		/* Display containing window for canvas. */
 {
@@ -473,6 +470,7 @@ DeleteBitmap(
  *--------------------------------------------------------------
  */
 
+	/* ARGSUSED */
 static void
 ComputeBitmapBbox(
     Tk_Canvas canvas,		/* Canvas that contains item. */
@@ -539,7 +537,7 @@ ComputeBitmapBbox(
 	break;
     case TK_ANCHOR_NW:
 	break;
-    default:
+    case TK_ANCHOR_CENTER:
 	x -= width/2;
 	y -= height/2;
 	break;
@@ -670,9 +668,10 @@ DisplayBitmap(
  *--------------------------------------------------------------
  */
 
+	/* ARGSUSED */
 static double
 BitmapToPoint(
-    TCL_UNUSED(Tk_Canvas),		/* Canvas containing item. */
+    Tk_Canvas canvas,		/* Canvas containing item. */
     Tk_Item *itemPtr,		/* Item to check against point. */
     double *coordPtr)		/* Pointer to x and y coordinates. */
 {
@@ -726,9 +725,10 @@ BitmapToPoint(
  *--------------------------------------------------------------
  */
 
+	/* ARGSUSED */
 static int
 BitmapToArea(
-    TCL_UNUSED(Tk_Canvas),		/* Canvas containing item. */
+    Tk_Canvas canvas,		/* Canvas containing item. */
     Tk_Item *itemPtr,		/* Item to check against rectangle. */
     double *rectPtr)		/* Pointer to array of four coordinates
 				 * (x1,y1,x2,y2) describing rectangular
@@ -791,39 +791,6 @@ ScaleBitmap(
 /*
  *--------------------------------------------------------------
  *
- * RotateBitmap --
- *
- *	This function is called to rotate a bitmap's origin by a given amount.
- *
- * Results:
- *	None.
- *
- * Side effects:
- *	The position of the bitmap is rotated by angleRad radians about
- *	(originX, originY), and the bounding box is updated in the generic
- *	part of the item structure.
- *
- *--------------------------------------------------------------
- */
-
-static void
-RotateBitmap(
-    Tk_Canvas canvas,
-    Tk_Item *itemPtr,
-    double originX,
-    double originY,
-    double angleRad)
-{
-    BitmapItem *bmapPtr = (BitmapItem *) itemPtr;
-
-    TkRotatePoint(originX, originY, sin(angleRad), cos(angleRad),
-	    &bmapPtr->x, &bmapPtr->y);
-    ComputeBitmapBbox(canvas, bmapPtr);
-}
-
-/*
- *--------------------------------------------------------------
- *
  * TranslateBitmap --
  *
  *	This function is called to move an item by a given amount.
@@ -876,7 +843,7 @@ BitmapToPostscript(
     Tcl_Interp *interp,		/* Leave Postscript or error message here. */
     Tk_Canvas canvas,		/* Information about overall canvas. */
     Tk_Item *itemPtr,		/* Item for which Postscript is wanted. */
-    TCL_UNUSED(int))		/* 1 means this is a prepass to collect font
+    int prepass)		/* 1 means this is a prepass to collect font
 				 * information; 0 means final Postscript is
 				 * being created. */
 {
@@ -941,7 +908,7 @@ BitmapToPostscript(
     case TK_ANCHOR_S:	   x -= width/2.0;			break;
     case TK_ANCHOR_SW:						break;
     case TK_ANCHOR_W:			   y -= height/2.0;	break;
-    default: x -= width/2.0; y -= height/2.0;	break;
+    case TK_ANCHOR_CENTER: x -= width/2.0; y -= height/2.0;	break;
     }
 
     /*
@@ -962,10 +929,12 @@ BitmapToPostscript(
 		x, y, width, height, -width);
 
 	Tcl_ResetResult(interp);
-	Tk_CanvasPsColor(interp, canvas, bgColor);
+	if (Tk_CanvasPsColor(interp, canvas, bgColor) != TCL_OK) {
+	    goto error;
+	}
 	Tcl_AppendObjToObj(psObj, Tcl_GetObjResult(interp));
 
-	Tcl_AppendToObj(psObj, "fill\n", TCL_INDEX_NONE);
+	Tcl_AppendToObj(psObj, "fill\n", -1);
     }
 
     /*
@@ -977,14 +946,16 @@ BitmapToPostscript(
 
     if (fgColor != NULL) {
 	Tcl_ResetResult(interp);
-	Tk_CanvasPsColor(interp, canvas, fgColor);
+	if (Tk_CanvasPsColor(interp, canvas, fgColor) != TCL_OK) {
+	    goto error;
+	}
 	Tcl_AppendObjToObj(psObj, Tcl_GetObjResult(interp));
 
 	if (width > 60000) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		    "can't generate Postscript for bitmaps more than 60000"
-		    " pixels wide", TCL_INDEX_NONE));
-	    Tcl_SetErrorCode(interp, "TK", "CANVAS", "PS", "MEMLIMIT", (char *)NULL);
+		    " pixels wide", -1));
+	    Tcl_SetErrorCode(interp, "TK", "CANVAS", "PS", "MEMLIMIT", NULL);
 	    goto error;
 	}
 
@@ -1006,11 +977,13 @@ BitmapToPostscript(
 		    (double) rowsThisTime, width, rowsThisTime);
 
 	    Tcl_ResetResult(interp);
-	    Tk_CanvasPsBitmap(interp, canvas, bitmap, 0, curRow, width,
-		    rowsThisTime);
+	    if (Tk_CanvasPsBitmap(interp, canvas, bitmap,
+		    0, curRow, width, rowsThisTime) != TCL_OK) {
+		goto error;
+	    }
 	    Tcl_AppendObjToObj(psObj, Tcl_GetObjResult(interp));
 
-	    Tcl_AppendToObj(psObj, "\n} imagemask\n", TCL_INDEX_NONE);
+	    Tcl_AppendToObj(psObj, "\n} imagemask\n", -1);
 	}
     }
 

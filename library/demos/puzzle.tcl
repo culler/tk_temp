@@ -7,7 +7,7 @@ if {![info exists widgetDemo]} {
     error "This script should be run from the \"widget\" demo."
 }
 
-package require tk
+package require Tk
 
 # puzzleSwitch --
 # This procedure is invoked when the user clicks on a particular button;
@@ -58,12 +58,12 @@ scrollbar $w.s
 # slightly larger frame here...
 
 if {[tk windowingsystem] eq "aqua"} {
-    set frameSize 126p
+    set frameSize 168
 } else {
-    set frameSize 90p
+    set frameSize 120
 }
 
-frame $w.frame -width $frameSize -height $frameSize -borderwidth 2 \
+frame $w.frame -width $frameSize -height $frameSize -borderwidth 2\
 	-relief sunken -bg [$w.s cget -troughcolor]
 pack $w.frame -side top -pady 1c -padx 1c
 destroy $w.s

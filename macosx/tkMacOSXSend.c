@@ -210,7 +210,7 @@ Tk_SetAppName(
     TkWindow *winPtr = (TkWindow *) tkwin;
     Tcl_Interp *interp = winPtr->mainPtr->interp;
     int suffix, result;
-    Tcl_Size i, offset;
+    int i, offset;
     RegisteredInterp *riPtr, *prevPtr;
     const char *actualName;
     Tcl_DString dString;
@@ -261,7 +261,7 @@ Tk_SetAppName(
 	interpName = Tcl_GetString(interpNamePtr);
 	if (strcmp(actualName, interpName) == 0) {
 	    if (suffix == 1) {
-		Tcl_DStringAppend(&dString, name, TCL_INDEX_NONE);
+		Tcl_DStringAppend(&dString, name, -1);
 		Tcl_DStringAppend(&dString, " #", 2);
 		offset = Tcl_DStringLength(&dString);
 		Tcl_DStringSetLength(&dString, offset + TCL_INTEGER_SPACE);
@@ -321,42 +321,33 @@ Tk_SetAppName(
 
 int
 Tk_SendObjCmd(
-    TCL_UNUSED(void *),	/* Not used */
+    TCL_UNUSED(void *),
     Tcl_Interp *interp,		/* The interp we are sending from */
     int objc,			/* Number of arguments */
     Tcl_Obj *const objv[])	/* The arguments */
 {
-    enum {
-	SEND_ASYNC, SEND_DISPLAYOF, SEND_LAST
-    };
-    static const char *const sendOptions[] = {
-	"-async",   "-displayof",   "--",  NULL
-    };
-    const char *stringRep, *destName;
+    const char *const sendOptions[] = {"-async", "-displayof", "--", NULL};
+    char *stringRep, *destName;
     /*int async = 0;*/
-    int i, firstArg, index;
+    int i, index, firstArg;
     RegisteredInterp *riPtr;
     Tcl_Obj *listObjPtr;
     int result = TCL_OK;
 
-    /*
-     * Process the command options.
-     */
-
-    for (i = 1; i < (objc - 1); i++) {
+    for (i = 1; i < (objc - 1); ) {
 	stringRep = Tcl_GetString(objv[i]);
 	if (stringRep[0] == '-') {
 	    if (Tcl_GetIndexFromObjStruct(interp, objv[i], sendOptions,
 		    sizeof(char *), "option", 0, &index) != TCL_OK) {
 		return TCL_ERROR;
 	    }
-	    if (index == SEND_ASYNC) {
+	    if (index == 0) {
 		/*async = 1;*/
-	    } else if (index == SEND_DISPLAYOF) {
 		i++;
-	    } else /* if (index == SEND_LAST) */ {
+	    } else if (index == 1) {
+		i += 2;
+	    } else {
 		i++;
-		break;
 	    }
 	} else {
 	    break;
@@ -481,7 +472,7 @@ TkGetInterpNames(
     riPtr = interpListPtr;
     while (riPtr != NULL) {
 	Tcl_ListObjAppendElement(interp, listObjPtr,
-		Tcl_NewStringObj(riPtr->name, TCL_INDEX_NONE));
+		Tcl_NewStringObj(riPtr->name, -1));
 	riPtr = riPtr->nextPtr;
     }
 
@@ -508,7 +499,7 @@ TkGetInterpNames(
 
 static int
 SendInit(
-    TCL_UNUSED(Tcl_Interp *))		/* Not used */
+    TCL_UNUSED(Tcl_Interp *))
 {
     return TCL_OK;
 }

@@ -17,7 +17,7 @@
 
 #define XLIB_ILLEGAL_ACCESS
 #include "tkMacOSXPrivate.h"
-#include "tkMacOSXInt.h"
+#include "tkMacOSXEvent.h"
 
 #include <IOKit/IOKitLib.h>
 #include <IOKit/hidsystem/IOHIDShared.h>
@@ -94,8 +94,8 @@ TkMacOSXDisplayChanged(
 	DefaultDepthOfScreen(screen) = NSBitsPerPixelFromDepth([s depth]);
 	WidthOfScreen(screen) = bounds.size.width;
 	HeightOfScreen(screen) = bounds.size.height;
-	WidthMMOfScreen(screen) = (bounds.size.width * 381 + 720) / 1440; /* = 3/4 * 254/720 */
-	HeightMMOfScreen(screen) = (bounds.size.height * 381 + 720) / 1440; /* = 3/4 * 254/720 */
+	WidthMMOfScreen(screen) = (bounds.size.width * 254 + 360) / 720;
+	HeightMMOfScreen(screen) = (bounds.size.height * 254 + 360) / 720;
 
 	for (s in nsScreens) {
 	    maxBounds = NSUnionRect(maxBounds, [s visibleFrame]);
@@ -168,7 +168,7 @@ TkMacOSXZeroScreenTop()
 /*
  *----------------------------------------------------------------------
  *
- * TkpOpenDisplay/XkbOpenDisplay --
+ * TkpOpenDisplay --
  *
  *	Create the Display structure and fill it with device specific
  *	information.
@@ -187,6 +187,11 @@ TkpOpenDisplay(
     const char *display_name)
 {
     Display *display;
+    Screen *screen;
+    int fd = 0;
+    static NSRect maxBounds = {{0, 0}, {0, 0}};
+    static char vendor[25] = "";
+    NSArray *cgVers;
 
     if (gMacDisplay != NULL) {
 	if (strcmp(DisplayString(gMacDisplay->display), display_name) == 0) {
@@ -197,79 +202,19 @@ TkpOpenDisplay(
     }
 
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
-
-    display = XkbOpenDisplay(display_name, NULL, NULL, NULL, NULL, NULL);
-
-    /*
-     * Initialize screen bits that may change
-     */
-
-    TkMacOSXDisplayChanged(display);
-
-    gMacDisplay = (TkDisplay *)ckalloc(sizeof(TkDisplay));
-
-    /*
-     * This is the quickest way to make sure that all the *Init flags get
-     * properly initialized
-     */
-
-    bzero(gMacDisplay, sizeof(TkDisplay));
-    gMacDisplay->display = display;
-    [pool drain];
-
-    /*
-     * Key map info must be available immediately, because of "send event".
-     */
-    TkpInitKeymapInfo(gMacDisplay);
-
-    return gMacDisplay;
-}
-
-Display *
-XkbOpenDisplay(
-    TCL_UNUSED(const char *),
-	int *ev_rtrn,
-	int *err_rtrn,
-	int *major_rtrn,
-	int *minor_rtrn,
-	int *reason)
-{
-    _XPrivDisplay display = (_XPrivDisplay)ckalloc(sizeof(Display));
-    Screen *screen = (Screen *)ckalloc(sizeof(Screen));
-    int fd = 0;
-    NSArray *cgVers;
-    static char vendor[25] = "";
-    static NSRect maxBounds = {{0, 0}, {0, 0}};
-
+    display = (Display *)ckalloc(sizeof(Display));
+    screen = (Screen *)ckalloc(sizeof(Screen));
     bzero(display, sizeof(Display));
     bzero(screen, sizeof(Screen));
 
     display->resource_alloc = MacXIdAlloc;
-    LastKnownRequestProcessed(display) = 1;
+    LastKnownRequestProcessed(display) = 0;
     display->qlen	    = 0;
     display->fd		    = fd;
     display->screens	    = screen;
     display->nscreens	    = 1;
     display->default_screen = 0;
     display->display_name   = (char *) macScreenName;
-
-    /*
-     * These screen bits never change
-     */
-    screen->root	= ROOT_ID;
-    screen->display	= display;
-    screen->black_pixel = 0x00000000;
-    screen->white_pixel = 0x00FFFFFF;
-    screen->ext_data	= (XExtData *) &maxBounds;
-
-    screen->root_visual = (Visual *)ckalloc(sizeof(Visual));
-    screen->root_visual->visualid     = 0;
-    screen->root_visual->c_class      = TrueColor;
-    screen->root_visual->red_mask     = 0x00FF0000;
-    screen->root_visual->green_mask   = 0x0000FF00;
-    screen->root_visual->blue_mask    = 0x000000FF;
-    screen->root_visual->bits_per_rgb = 24;
-    screen->root_visual->map_entries  = 256;
 
     cgVers = [[[NSBundle bundleWithIdentifier:@"com.apple.CoreGraphics"]
 	    objectForInfoDictionaryKey:@"CFBundleShortVersionString"]
@@ -301,14 +246,47 @@ XkbOpenDisplay(
 	display->release = major << 16 | minor << 8 | patch;
     }
 
+    /*
+     * These screen bits never change
+     */
+    RootWindowOfScreen(screen)	= ROOT_ID;
+    DisplayOfScreen(screen)	= display;
+    BlackPixelOfScreen(screen) = 0x00000000;
+    WhitePixelOfScreen(screen) = 0x00FFFFFF;
+    screen->ext_data	= (XExtData *) &maxBounds;
 
-    if (ev_rtrn) *ev_rtrn = 0;
-    if (err_rtrn) *err_rtrn = 0;
-    if (major_rtrn) *major_rtrn = 0;
-    if (minor_rtrn) *minor_rtrn = 0;
-    if (reason) *reason = 0;
+    DefaultVisualOfScreen(screen) = (Visual *)ckalloc(sizeof(Visual));
+    DefaultVisualOfScreen(screen)->visualid     = 0;
+    DefaultVisualOfScreen(screen)->c_class      = TrueColor;
+    DefaultVisualOfScreen(screen)->red_mask     = 0x00FF0000;
+    DefaultVisualOfScreen(screen)->green_mask   = 0x0000FF00;
+    DefaultVisualOfScreen(screen)->blue_mask    = 0x000000FF;
+    DefaultVisualOfScreen(screen)->bits_per_rgb = 24;
+    DefaultVisualOfScreen(screen)->map_entries  = 256;
 
-    return display;
+    /*
+     * Initialize screen bits that may change
+     */
+
+    TkMacOSXDisplayChanged(display);
+
+    gMacDisplay = (TkDisplay *)ckalloc(sizeof(TkDisplay));
+
+    /*
+     * This is the quickest way to make sure that all the *Init flags get
+     * properly initialized
+     */
+
+    bzero(gMacDisplay, sizeof(TkDisplay));
+    gMacDisplay->display = display;
+    [pool drain];
+
+    /*
+     * Key map info must be available immediately, because of "send event".
+     */
+    TkpInitKeymapInfo(gMacDisplay);
+
+    return gMacDisplay;
 }
 
 /*
@@ -546,30 +524,6 @@ XBell(
     return Success;
 }
 
-#if 0
-void
-XSetWMNormalHints(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(XSizeHints *))
-{
-    /*
-     * Do nothing. Shouldn't even be called.
-     */
-}
-
-XSizeHints *
-XAllocSizeHints(void)
-{
-    /*
-     * Always return NULL. Tk code checks to see if NULL is returned & does
-     * nothing if it is.
-     */
-
-    return NULL;
-}
-#endif
-
 GContext
 XGContextFromGC(
     TCL_UNUSED(GC))
@@ -600,31 +554,6 @@ XClearWindow(
 {
     return Success;
 }
-
-/*
-int
-XDrawPoint(
-    Display* display,
-    Drawable d,
-    GC gc,
-    int x,
-    int y)
-{
-    return Success;
-}
-
-int
-XDrawPoints(
-    Display* display,
-    Drawable d,
-    GC gc,
-    XPoint* points,
-    int npoints,
-    int mode)
-{
-    return Success;
-}
-*/
 
 int
 XWarpPointer(
@@ -660,94 +589,6 @@ XQueryColor(
     d->blue	= (b << 8) | b;
     d->flags	= DoRed|DoGreen|DoBlue;
     d->pad	= 0;
-    return Success;
-}
-
-Bool
-XTranslateCoordinates(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(int),
-    TCL_UNUSED(int),
-    TCL_UNUSED(int *),
-    TCL_UNUSED(int *),
-    TCL_UNUSED(Window *))
-{
-    return 0;
-}
-
-int
-XSetCommand(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(char **),
-    TCL_UNUSED(int))
-{
-    return Success;
-}
-
-int
-XGetWindowAttributes(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(XWindowAttributes *))
-{
-    return Success;
-}
-
-Status
-XGetWMColormapWindows(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(Window **),
-    TCL_UNUSED(int *))
-{
-    return Success;
-}
-
-int
-XIconifyWindow(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(int))
-{
-    return Success;
-}
-
-XHostAddress *
-XListHosts(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(int *),
-    TCL_UNUSED(Bool *))
-{
-    return NULL;
-}
-
-int
-XLookupColor(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Colormap),
-    TCL_UNUSED(_Xconst char *),
-    TCL_UNUSED(XColor *),
-    TCL_UNUSED(XColor *))
-{
-    return Success;
-}
-
-int
-XNextEvent(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(XEvent *))
-{
-    return Success;
-}
-
-int
-XPutBackEvent(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(XEvent *))
-{
     return Success;
 }
 
@@ -813,37 +654,6 @@ XGetWindowProperty(
 }
 
 int
-XWindowEvent(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(long),
-    TCL_UNUSED(XEvent *))
-{
-    return Success;
-}
-
-int
-XWithdrawWindow(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(int))
-{
-    return Success;
-}
-
-int
-XmbLookupString(
-    TCL_UNUSED(XIC),
-    TCL_UNUSED(XKeyPressedEvent *),
-    TCL_UNUSED(char *),
-    TCL_UNUSED(int),
-    TCL_UNUSED(KeySym *),
-    TCL_UNUSED(Status *))
-{
-    return Success;
-}
-
-int
 XRefreshKeyboardMapping(
     TCL_UNUSED(XMappingEvent *))
 {
@@ -865,14 +675,6 @@ XSetIconName(
     return Success;
 }
 
-Bool
-XFilterEvent(
-    TCL_UNUSED(XEvent *),
-    TCL_UNUSED(Window))
-{
-    return 0;
-}
-
 int
 XForceScreenSaver(
     Display* display,
@@ -886,6 +688,37 @@ XForceScreenSaver(
 
     LastKnownRequestProcessed(display)++;
     return Success;
+}
+
+void
+Tk_FreeXId(
+    TCL_UNUSED(Display *),
+    TCL_UNUSED(XID))
+{
+    /* no-op function needed for stubs implementation. */
+}
+
+int
+XSync(
+    Display *display,
+    TCL_UNUSED(Bool))
+{
+    /*
+     *  The main use of XSync is by the update command, which alternates
+     *  between running an event loop to process all events without waiting and
+     *  calling XSync on all displays until no events are left.  On X11 the
+     *  call to XSync might cause the window manager to generate more events
+     *  which would then get processed. Apparently this process stabilizes on
+     *  X11, leaving the window manager in a state where all events have been
+     *  generated and no additional events can be genereated by updating widgets.
+     *
+     *  It is not clear what the Aqua port should do when XSync is called, but
+     *  currently the best option seems to be to do nothing.  (See ticket
+     *  [da5f2266df].)
+     */
+
+    LastKnownRequestProcessed(display)++;
+    return 0;
 }
 
 /*
@@ -1035,25 +868,7 @@ XCreateIC(TCL_UNUSED(XIM), ...)
     return (XIC) 0;
 }
 
-int
-XDeleteProperty(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Window),
-    TCL_UNUSED(Atom))
-{
-    return Success;
-}
-
-int
-XGetInputFocus(
-    Display *display,
-    TCL_UNUSED(Window *),
-    TCL_UNUSED(int *))
-{
-    LastKnownRequestProcessed(display)++;
-    return Success;
-}
-
+#undef XVisualIDFromVisual
 VisualID
 XVisualIDFromVisual(
     Visual *visual)
@@ -1061,6 +876,7 @@ XVisualIDFromVisual(
     return visual->visualid;
 }
 
+#undef XSynchronize
 XAfterFunction
 XSynchronize(
     Display *display,
@@ -1070,6 +886,7 @@ XSynchronize(
     return NULL;
 }
 
+#undef XUngrabServer
 int
 XUngrabServer(
     TCL_UNUSED(Display *))
@@ -1077,14 +894,7 @@ XUngrabServer(
     return 0;
 }
 
-int
-XFreeCursor(
-    TCL_UNUSED(Display *),
-    TCL_UNUSED(Cursor))
-{
-    return Success;
-}
-
+#undef XNoOp
 int
 XNoOp(
     Display *display)
@@ -1093,6 +903,7 @@ XNoOp(
     return 0;
 }
 
+#undef XGrabServer
 int
 XGrabServer(
     TCL_UNUSED(Display *))
@@ -1100,6 +911,7 @@ XGrabServer(
     return 0;
 }
 
+#undef XFree
 int
 XFree(
     void *data)
@@ -1109,7 +921,7 @@ XFree(
 	}
     return 0;
 }
-
+#undef XFlush
 int
 XFlush(
     TCL_UNUSED(Display *))

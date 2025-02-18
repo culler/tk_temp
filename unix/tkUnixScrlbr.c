@@ -4,7 +4,7 @@
  *	This file implements the Unix specific portion of the scrollbar
  *	widget.
  *
- * Copyright © 1996 Sun Microsystems, Inc.
+ * Copyright (c) 1996 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -95,7 +95,7 @@ TkpCreateScrollbar(
 
 void
 TkpDisplayScrollbar(
-    void *clientData)	/* Information about window. */
+    ClientData clientData)	/* Information about window. */
 {
     TkScrollbar *scrollPtr = (TkScrollbar *)clientData;
     Tk_Window tkwin = scrollPtr->tkwin;
@@ -128,7 +128,7 @@ TkpDisplayScrollbar(
     pixmap = Tk_GetPixmap(scrollPtr->display, Tk_WindowId(tkwin),
 	    Tk_Width(tkwin), Tk_Height(tkwin), Tk_Depth(tkwin));
 
-    if (scrollPtr->highlightWidth > 0) {
+    if (scrollPtr->highlightWidth != 0) {
 	GC gc;
 
 	if (scrollPtr->flags & GOT_FOCUS) {
@@ -283,6 +283,9 @@ TkpComputeScrollbarGeometry(
 {
     int width, fieldLength;
 
+    if (scrollPtr->highlightWidth < 0) {
+	scrollPtr->highlightWidth = 0;
+    }
     scrollPtr->inset = scrollPtr->highlightWidth + scrollPtr->borderWidth;
     width = (scrollPtr->vertical) ? Tk_Width(scrollPtr->tkwin)
 	    : Tk_Height(scrollPtr->tkwin);

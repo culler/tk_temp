@@ -1,5 +1,5 @@
 /*
- * Copyright © 2003 Joe English
+ * Copyright (c) 2003, Joe English
  * Helper routines for widget implementations.
  */
 
@@ -89,32 +89,25 @@ MODULE_SCOPE int TtkCoreConfigure(Tcl_Interp*, void *, int mask);
 
 /* Common widget commands:
  */
-MODULE_SCOPE int TtkWidgetCgetCommand(
-	void *,Tcl_Interp *, Tcl_Size, Tcl_Obj*const[]);
 MODULE_SCOPE int TtkWidgetConfigureCommand(
-	void *,Tcl_Interp *, Tcl_Size, Tcl_Obj*const[]);
-MODULE_SCOPE int TtkWidgetIdentifyCommand(
-	void *,Tcl_Interp *, Tcl_Size, Tcl_Obj*const[]);
+	void *,Tcl_Interp *, int, Tcl_Obj*const[]);
+MODULE_SCOPE int TtkWidgetCgetCommand(
+	void *,Tcl_Interp *, int, Tcl_Obj*const[]);
 MODULE_SCOPE int TtkWidgetInstateCommand(
-	void *,Tcl_Interp *, Tcl_Size, Tcl_Obj*const[]);
+	void *,Tcl_Interp *, int, Tcl_Obj*const[]);
 MODULE_SCOPE int TtkWidgetStateCommand(
-	void *,Tcl_Interp *, Tcl_Size, Tcl_Obj*const[]);
-MODULE_SCOPE int TtkWidgetStyleCommand(
-	void *,Tcl_Interp *, Tcl_Size, Tcl_Obj*const[]);
+	void *,Tcl_Interp *, int, Tcl_Obj*const[]);
+MODULE_SCOPE int TtkWidgetIdentifyCommand(
+	void *,Tcl_Interp *, int, Tcl_Obj*const[]);
 
 /* Widget constructor:
  */
-MODULE_SCOPE Tcl_ObjCmdProc2 TtkWidgetConstructorObjCmd;
+MODULE_SCOPE int TtkWidgetConstructorObjCmd(
+	ClientData, Tcl_Interp*, int, Tcl_Obj*const[]);
 
-#if TCL_MAJOR_VERSION > 8
-#define RegisterWidget(interp, name, specPtr) \
-    Tcl_CreateObjCommand2(interp, name, \
-	TtkWidgetConstructorObjCmd, (void *)specPtr,NULL)
-#else
 #define RegisterWidget(interp, name, specPtr) \
     Tcl_CreateObjCommand(interp, name, \
-	TtkWidgetConstructorObjCmd, (void *)specPtr,NULL)
-#endif
+	TtkWidgetConstructorObjCmd, (ClientData)specPtr,NULL)
 
 /* WIDGET_TAKEFOCUS_TRUE --
  * WIDGET_TAKEFOCUS_FALSE --
@@ -124,21 +117,21 @@ MODULE_SCOPE Tcl_ObjCmdProc2 TtkWidgetConstructorObjCmd;
  */
 #define WIDGET_TAKEFOCUS_TRUE \
     {TK_OPTION_STRING, "-takefocus", "takeFocus", "TakeFocus", \
-	"ttk::takefocus", offsetof(WidgetCore, takeFocusPtr), TCL_INDEX_NONE, 0,0,0 }
+	"ttk::takefocus", Tk_Offset(WidgetCore, takeFocusPtr), -1, 0,0,0 }
 #define WIDGET_TAKEFOCUS_FALSE \
     {TK_OPTION_STRING, "-takefocus", "takeFocus", "TakeFocus", \
-	"", offsetof(WidgetCore, takeFocusPtr), TCL_INDEX_NONE, 0,0,0 }
+	"", Tk_Offset(WidgetCore, takeFocusPtr), -1, 0,0,0 }
 
 /* WIDGET_INHERIT_OPTIONS(baseOptionSpecs) --
  * Add this at the end of an OptionSpecs table to inherit
  * the options from 'baseOptionSpecs'.
  */
 #define WIDGET_INHERIT_OPTIONS(baseOptionSpecs) \
-    {TK_OPTION_END, 0,0,0, NULL, TCL_INDEX_NONE,TCL_INDEX_NONE, 0, baseOptionSpecs, 0}
+    {TK_OPTION_END, 0,0,0, NULL, -1,-1, 0, (ClientData)baseOptionSpecs, 0}
 
 /* All widgets should inherit from ttkCoreOptionSpecs[].
  */
-MODULE_SCOPE const Tk_OptionSpec ttkCoreOptionSpecs[];
+MODULE_SCOPE Tk_OptionSpec ttkCoreOptionSpecs[];
 
 /*
  * Useful routines for use inside widget implementations:
@@ -172,6 +165,11 @@ MODULE_SCOPE void Ttk_UntraceVariable(Ttk_TraceHandle *);
 MODULE_SCOPE int Ttk_FireTrace(Ttk_TraceHandle *);
 
 /*
+ * Virtual events:
+ */
+MODULE_SCOPE void TtkSendVirtualEvent(Tk_Window tgtWin, const char *eventName);
+
+/*
  * Helper routines for data accessor commands:
  */
 MODULE_SCOPE int TtkEnumerateOptions(
@@ -195,7 +193,7 @@ MODULE_SCOPE ScrollHandle TtkCreateScrollHandle(WidgetCore *, Scrollable *);
 MODULE_SCOPE void TtkFreeScrollHandle(ScrollHandle);
 
 MODULE_SCOPE int TtkScrollviewCommand(
-    Tcl_Interp *interp, Tcl_Size objc, Tcl_Obj *const objv[], ScrollHandle);
+    Tcl_Interp *interp, int objc, Tcl_Obj *const objv[], ScrollHandle);
 
 MODULE_SCOPE void TtkUpdateScrollInfo(ScrollHandle h);
 MODULE_SCOPE void TtkScrollTo(ScrollHandle, int newFirst, int updateScrollInfo);
@@ -210,11 +208,11 @@ typedef struct TtkTag *Ttk_Tag;
 typedef struct TtkTagTable *Ttk_TagTable;
 typedef struct TtkTagSet {	/* TODO: make opaque */
     Ttk_Tag	*tags;
-    Tcl_Size 	nTags;
+    int 	nTags;
 } *Ttk_TagSet;
 
 MODULE_SCOPE Ttk_TagTable Ttk_CreateTagTable(
-	Tcl_Interp *, Tk_Window tkwin, const Tk_OptionSpec *, size_t recordSize);
+	Tcl_Interp *, Tk_Window tkwin, Tk_OptionSpec[], int recordSize);
 MODULE_SCOPE void Ttk_DeleteTagTable(Ttk_TagTable);
 
 MODULE_SCOPE Ttk_Tag Ttk_GetTag(Ttk_TagTable, const char *tagName);
@@ -228,11 +226,9 @@ MODULE_SCOPE int Ttk_EnumerateTagOptions(
 
 MODULE_SCOPE int Ttk_EnumerateTags(Tcl_Interp *, Ttk_TagTable);
 
-MODULE_SCOPE void Ttk_DeleteTagFromTable(Ttk_TagTable, Ttk_Tag);
-
 MODULE_SCOPE int Ttk_ConfigureTag(
     Tcl_Interp *interp, Ttk_TagTable tagTable, Ttk_Tag tag,
-    Tcl_Size objc, Tcl_Obj *const objv[]);
+    int objc, Tcl_Obj *const objv[]);
 
 MODULE_SCOPE Ttk_TagSet Ttk_GetTagSetFromObj(
     Tcl_Interp *interp, Ttk_TagTable, Tcl_Obj *objPtr);
@@ -242,10 +238,8 @@ MODULE_SCOPE void Ttk_FreeTagSet(Ttk_TagSet);
 
 MODULE_SCOPE int Ttk_TagSetContains(Ttk_TagSet, Ttk_Tag tag);
 MODULE_SCOPE int Ttk_TagSetAdd(Ttk_TagSet, Ttk_Tag tag);
-MODULE_SCOPE int Ttk_TagSetAddSet(Ttk_TagSet, Ttk_TagSet);
 MODULE_SCOPE int Ttk_TagSetRemove(Ttk_TagSet, Ttk_Tag tag);
 
-MODULE_SCOPE void Ttk_TagSetDefaults(Ttk_TagTable, Ttk_Style, void *);
 MODULE_SCOPE void Ttk_TagSetValues(Ttk_TagTable, Ttk_TagSet, void *record);
 MODULE_SCOPE void Ttk_TagSetApplyStyle(Ttk_TagTable,Ttk_Style,Ttk_State,void*);
 

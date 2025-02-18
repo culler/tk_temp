@@ -37,7 +37,9 @@ static void setAllowedFileTypes(
 	NSMutableArray<UTType *> *allowedTypes = [NSMutableArray array];
 	for (NSString *ext in extensions) {
 	    UTType *uttype = [UTType typeWithFilenameExtension: ext];
-	    [allowedTypes addObject:uttype];
+	    if (uttype) {
+		[allowedTypes addObject:uttype];
+	    }
 	}
 	[panel setAllowedContentTypes:allowedTypes];
     } else {
@@ -85,6 +87,41 @@ static filepanelFilterInfo filterInfo;
 static NSOpenPanel *openpanel;
 static NSSavePanel *savepanel;
 
+/*
+ * A thread which closes the currently running modal dialog after a timeout.
+ */
+
+@interface TKPanelMonitor: NSThread {
+@private
+    NSTimeInterval _timeout;
+}
+
+- (id) initWithTimeout: (NSTimeInterval) timeout;
+
+@end
+
+@implementation TKPanelMonitor: NSThread
+
+- (id) initWithTimeout: (NSTimeInterval) timeout {
+    self = [super init];
+    if (self) {
+	_timeout = timeout;
+	return self;
+    }
+    return self;
+}
+
+- (void) main
+{
+    [NSThread sleepForTimeInterval:_timeout];
+    if ([self isCancelled]) {
+	[NSThread exit];
+    }
+    [NSApp stopModalWithCode:modalCancel];
+}
+@end
+
+
 static const char *const colorOptionStrings[] = {
     "-initialcolor", "-parent", "-title", NULL
 };
@@ -93,32 +130,32 @@ enum colorOptions {
 };
 
 static const char *const openOptionStrings[] = {
-    "-command", "-defaultextension", "-filetypes", "-initialdir",
-    "-initialfile", "-message", "-multiple", "-parent", "-title",
-    "-typevariable", NULL
+    "-defaultextension", "-filetypes", "-initialdir", "-initialfile",
+    "-message", "-multiple", "-parent", "-title", "-typevariable",
+    "-command", NULL
 };
 enum openOptions {
-    OPEN_COMMAND, OPEN_DEFAULT, OPEN_FILETYPES, OPEN_INITDIR,
-    OPEN_INITFILE, OPEN_MESSAGE, OPEN_MULTIPLE, OPEN_PARENT, OPEN_TITLE,
-    OPEN_TYPEVARIABLE
+    OPEN_DEFAULT, OPEN_FILETYPES, OPEN_INITDIR, OPEN_INITFILE,
+    OPEN_MESSAGE, OPEN_MULTIPLE, OPEN_PARENT, OPEN_TITLE,
+    OPEN_TYPEVARIABLE, OPEN_COMMAND,
 };
 static const char *const saveOptionStrings[] = {
-    "-command", "-confirmoverwrite", "-defaultextension", "-filetypes",
-    "-initialdir", "-initialfile", "-message", "-parent", "-title",
-    "-typevariable", NULL
+    "-defaultextension", "-filetypes", "-initialdir", "-initialfile",
+    "-message", "-parent", "-title", "-typevariable", "-command",
+    "-confirmoverwrite", NULL
 };
 enum saveOptions {
-    SAVE_COMMAND, SAVE_CONFIRMOW, SAVE_DEFAULT, SAVE_FILETYPES,
-    SAVE_INITDIR, SAVE_INITFILE, SAVE_MESSAGE, SAVE_PARENT, SAVE_TITLE,
-    SAVE_TYPEVARIABLE
+    SAVE_DEFAULT, SAVE_FILETYPES, SAVE_INITDIR, SAVE_INITFILE,
+    SAVE_MESSAGE, SAVE_PARENT, SAVE_TITLE, SAVE_TYPEVARIABLE, SAVE_COMMAND,
+    SAVE_CONFIRMOW
 };
 static const char *const chooseOptionStrings[] = {
-    "-command", "-initialdir", "-message", "-mustexist", "-parent", "-title",
+    "-initialdir", "-message", "-mustexist", "-parent", "-title", "-command",
     NULL
 };
 enum chooseOptions {
-    CHOOSE_COMMAND, CHOOSE_INITDIR, CHOOSE_MESSAGE, CHOOSE_MUSTEXIST,
-    CHOOSE_PARENT, CHOOSE_TITLE
+    CHOOSE_INITDIR, CHOOSE_MESSAGE, CHOOSE_MUSTEXIST, CHOOSE_PARENT,
+    CHOOSE_TITLE, CHOOSE_COMMAND
 };
 typedef struct {
     Tcl_Interp *interp;
@@ -233,13 +270,11 @@ getFileURL(
 }
 
 - (void)panel:(id)sender didChangeToDirectoryURL:(NSURL *)url {
-    (void)sender;
-    (void)url;
+    (void)sender; (void)url;
 }
 
 - (BOOL)panel:(id)sender validateURL:(NSURL *)url error:(NSError **)outError {
-    (void)sender;
-    (void)url;
+    (void)sender; (void)url;
     *outError = nil;
     return YES;
 }
@@ -257,14 +292,14 @@ getFileURL(
 	    resultObj = Tcl_NewListObj(0, NULL);
 	    for (NSURL *url in [(NSOpenPanel*)panel URLs]) {
 		Tcl_ListObjAppendElement(callbackInfo->interp, resultObj,
-			Tcl_NewStringObj([[url path] UTF8String], TCL_INDEX_NONE));
+			Tcl_NewStringObj([[url path] UTF8String], -1));
 	    }
 	} else {
-	    resultObj = Tcl_NewStringObj([[[panel URL]path] UTF8String], TCL_INDEX_NONE);
+	    resultObj = Tcl_NewStringObj([[[panel URL]path] UTF8String], -1);
 	}
 	if (callbackInfo->cmdObj) {
 	    Tcl_Obj **objv, **tmpv;
-	    Tcl_Size objc;
+	    int objc;
 	    int result = Tcl_ListObjGetElements(callbackInfo->interp,
 		    callbackInfo->cmdObj, &objc, &objv);
 
@@ -293,11 +328,11 @@ getFileURL(
     if (returnCode >= NSAlertFirstButtonReturn) {
 	Tcl_Obj *resultObj = Tcl_NewStringObj(alertButtonStrings[
 		alertNativeButtonIndexAndTypeToButtonIndex[callbackInfo->
-		typeIndex][returnCode - NSAlertFirstButtonReturn]], TCL_INDEX_NONE);
+		typeIndex][returnCode - NSAlertFirstButtonReturn]], -1);
 
 	if (callbackInfo->cmdObj) {
 	    Tcl_Obj **objv, **tmpv;
-	    Tcl_Size objc;
+	    int objc;
 	    int result = Tcl_ListObjGetElements(callbackInfo->interp,
 		    callbackInfo->cmdObj, &objc, &objv);
 
@@ -431,7 +466,7 @@ static NSInteger showOpenSavePanel(
 
 int
 Tk_ChooseColorObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
@@ -464,7 +499,7 @@ Tk_ChooseColorObjCmd(
 	case COLOR_INITIAL: {
 	    XColor *colorPtr;
 
-	    colorPtr = Tk_GetColor(interp, tkwin, value);
+	    colorPtr = Tk_AllocColorFromObj(interp, tkwin, objv[i + 1]);
 	    if (colorPtr == NULL) {
 		goto end;
 	    }
@@ -490,7 +525,7 @@ Tk_ChooseColorObjCmd(
     [colorPanel setShowsAlpha: NO];
     [colorPanel _setUseModalAppearance:YES];
     if (title) {
-	NSString *s = [[TKNSString alloc] initWithTclUtfBytes:title length:TCL_INDEX_NONE];
+	NSString *s = [[TKNSString alloc] initWithTclUtfBytes:title length:-1];
 
 	[colorPanel setTitle:s];
 	[s release];
@@ -562,7 +597,7 @@ parseFileFilters(
     if (filterInfo.doFileTypes) {
 	for (FileFilter *filterPtr = fl.filters; filterPtr;
 		filterPtr = filterPtr->next) {
-	    NSString *name = [[TKNSString alloc] initWithTclUtfBytes: filterPtr->name length:TCL_INDEX_NONE];
+	    NSString *name = [[TKNSString alloc] initWithTclUtfBytes: filterPtr->name length:-1];
 
 	    [filterInfo.fileTypeNames addObject:name];
 	    [name release];
@@ -580,7 +615,7 @@ parseFileFilters(
 		    	str++;
 		    }
 		    if (*str) {
-			NSString *extension = [[TKNSString alloc] initWithTclUtfBytes:str length:TCL_INDEX_NONE];
+			NSString *extension = [[TKNSString alloc] initWithTclUtfBytes:str length:-1];
 			if (![filterInfo.allowedExtensions containsObject:extension]) {
 			    [filterInfo.allowedExtensions addObject:extension];
 			}
@@ -633,7 +668,7 @@ parseFileFilters(
 		const char *selectedFileType =
 			Tcl_GetString(selectedFileTypeObj);
 		NSString *selectedFileTypeStr =
-			[[TKNSString alloc] initWithTclUtfBytes:selectedFileType length:TCL_INDEX_NONE];
+			[[TKNSString alloc] initWithTclUtfBytes:selectedFileType length:-1];
 		NSUInteger index =
 			[filterInfo.fileTypeNames indexOfObject:selectedFileTypeStr];
 
@@ -653,7 +688,7 @@ parseFileFilters(
 static bool
 filterCompatible(
     NSString *extension,
-	NSUInteger filterIndex)
+    int filterIndex)
 {
     NSMutableArray *allowedExtensions =
 	    [filterInfo.fileTypeExtensions objectAtIndex: filterIndex];
@@ -687,7 +722,7 @@ filterCompatible(
 
 int
 Tk_GetOpenFileObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
@@ -696,7 +731,7 @@ Tk_GetOpenFileObjCmd(
     char *str;
     int i, result = TCL_ERROR, haveParentOption = 0;
     int index, multiple = 0;
-    Tcl_Size len;
+    int len;
     Tcl_Obj *cmdObj = NULL, *typeVariablePtr = NULL, *fileTypesPtr = NULL;
     NSString *directory = nil, *filename = nil;
     NSString *message = nil, *title = nil;
@@ -868,7 +903,20 @@ Tk_GetOpenFileObjCmd(
 	parent = nil;
 	parentIsKey = False;
     }
-    modalReturnCode = showOpenSavePanel(openpanel, parent, interp, cmdObj, multiple);
+    TKPanelMonitor *monitor;
+    if (testsAreRunning) {
+	/*
+	 * We need the panel to close by itself when running tests.
+	 */
+
+	monitor = [[TKPanelMonitor alloc] initWithTimeout: 1.0];
+	[monitor start];
+    }
+    modalReturnCode = showOpenSavePanel(openpanel, parent, interp, cmdObj,
+					multiple);
+    if (testsAreRunning) {
+	[monitor cancel];
+    }
     if (cmdObj) {
 	Tcl_DecrRefCount(cmdObj);
     }
@@ -933,7 +981,7 @@ Tk_GetOpenFileObjCmd(
 	    }
 	}
 	Tcl_ObjSetVar2(interp, typeVariablePtr, NULL,
-		Tcl_NewStringObj([selectedFilter UTF8String], TCL_INDEX_NONE),
+		Tcl_NewStringObj([selectedFilter UTF8String], -1),
 		TCL_GLOBAL_ONLY);
     }
  end:
@@ -959,7 +1007,7 @@ Tk_GetOpenFileObjCmd(
 
 int
 Tk_GetSaveFileObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
@@ -969,7 +1017,7 @@ Tk_GetSaveFileObjCmd(
     int i, result = TCL_ERROR, haveParentOption = 0;
     int confirmOverwrite = 1;
     int index;
-    Tcl_Size len;
+    int len;
     Tcl_Obj *cmdObj = NULL, *typeVariablePtr = NULL, *fileTypesPtr = NULL;
     NSString *directory = nil, *filename = nil, *defaultType = nil;
     NSString *message = nil, *title = nil;
@@ -1174,7 +1222,7 @@ Tk_GetSaveFileObjCmd(
 	NSString *selectedFilter =
 	    [filterInfo.fileTypeNames objectAtIndex:filterInfo.fileTypeIndex];
 	Tcl_ObjSetVar2(interp, typeVariablePtr, NULL,
-		Tcl_NewStringObj([selectedFilter UTF8String], TCL_INDEX_NONE),
+		Tcl_NewStringObj([selectedFilter UTF8String], -1),
 		TCL_GLOBAL_ONLY);
     }
 
@@ -1202,7 +1250,7 @@ Tk_GetSaveFileObjCmd(
 
 int
 Tk_ChooseDirectoryObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
@@ -1211,7 +1259,7 @@ Tk_ChooseDirectoryObjCmd(
     char *str;
     int i, result = TCL_ERROR, haveParentOption = 0;
     int index, mustexist = 0;
-    Tcl_Size len;
+    int len;
     Tcl_Obj *cmdObj = NULL;
     NSString *directory = nil;
     NSString *message, *title;
@@ -1383,7 +1431,7 @@ TkMacOSXStandardAboutPanelObjCmd(
 
 int
 Tk_MessageBoxObjCmd(
-    void *clientData,	/* Main window associated with interpreter. */
+    ClientData clientData,	/* Main window associated with interpreter. */
     Tcl_Interp *interp,		/* Current interpreter. */
     int objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument objects. */
@@ -1428,7 +1476,7 @@ Tk_MessageBoxObjCmd(
 	case ALERT_DETAIL:
 	    str = Tcl_GetString(objv[i + 1]);
 	    message = [[TKNSString alloc] initWithTclUtfBytes:
-		    str length:TCL_INDEX_NONE];
+		    str length:-1];
 	    [alert setInformativeText:message];
 	    [message release];
 	    break;
@@ -1443,7 +1491,7 @@ Tk_MessageBoxObjCmd(
 	case ALERT_MESSAGE:
 	    str = Tcl_GetString(objv[i + 1]);
 	    message = [[TKNSString alloc] initWithTclUtfBytes:
-		    str length:TCL_INDEX_NONE];
+		    str length:-1];
 	    [alert setMessageText:message];
 	    [message release];
 	    break;
@@ -1460,7 +1508,7 @@ Tk_MessageBoxObjCmd(
 	case ALERT_TITLE:
 	    str = Tcl_GetString(objv[i + 1]);
 	    title = [[TKNSString alloc] initWithTclUtfBytes:
-		    str length:TCL_INDEX_NONE];
+		    str length:-1];
 	    [[alert window] setTitle:title];
 	    [title release];
 	    break;
@@ -1496,7 +1544,7 @@ Tk_MessageBoxObjCmd(
 		alertButtonIndexAndTypeToNativeButtonIndex[typeIndex][index];
 	if (!defaultNativeButtonIndex) {
 	    Tcl_SetObjResult(interp,
-		    Tcl_NewStringObj("Illegal default option", TCL_INDEX_NONE));
+		    Tcl_NewStringObj("Illegal default option", -1));
 	    Tcl_SetErrorCode(interp, "TK", "MSGBOX", "DEFAULT", NULL);
 	    goto end;
 	}
@@ -1571,7 +1619,7 @@ Tk_MessageBoxObjCmd(
  *----------------------------------------------------------------------
  */
 
-#include "tkMacOSXInt.h"
+#include "tkMacOSXEvent.h"
 #include "tkMacOSXFont.h"
 
 typedef struct FontchooserData {
@@ -1588,12 +1636,18 @@ enum FontchooserEvent {
 static void		FontchooserEvent(int kind);
 static Tcl_Obj *	FontchooserCget(FontchooserData *fcdPtr,
 			    int optionIndex);
-static Tcl_ObjCmdProc2 FontchooserConfigureCmd;
-static Tcl_ObjCmdProc2 FontchooserShowCmd;
-static Tcl_ObjCmdProc2 FontchooserHideCmd;
-static void		FontchooserParentEventHandler(void *clientData,
+static int		FontchooserConfigureCmd(ClientData clientData,
+			    Tcl_Interp *interp, int objc,
+			    Tcl_Obj *const objv[]);
+static int		FontchooserShowCmd(ClientData clientData,
+			    Tcl_Interp *interp, int objc,
+			    Tcl_Obj *const objv[]);
+static int		FontchooserHideCmd(ClientData clientData,
+			    Tcl_Interp *interp, int objc,
+			    Tcl_Obj *const objv[]);
+static void		FontchooserParentEventHandler(ClientData clientData,
 			    XEvent *eventPtr);
-static void		DeleteFontchooserData(void *clientData,
+static void		DeleteFontchooserData(ClientData clientData,
 			    Tcl_Interp *interp);
 
 MODULE_SCOPE const TkEnsemble tkFontchooserEnsemble[];
@@ -1609,11 +1663,11 @@ static NSFont *fontPanelFont = nil;
 static NSMutableDictionary *fontPanelFontAttributes = nil;
 
 static const char *const fontchooserOptionStrings[] = {
-    "-command", "-font", "-parent", "-title",
+    "-parent", "-title", "-font", "-command",
     "-visible", NULL
 };
 enum FontchooserOption {
-    FontchooserCmd, FontchooserFont, FontchooserParent, FontchooserTitle,
+    FontchooserParent, FontchooserTitle, FontchooserFont, FontchooserCmd,
     FontchooserVisible
 };
 
@@ -1698,7 +1752,7 @@ FontchooserEvent(
     switch (kind) {
     case FontchooserClosed:
 	if (fcdPtr->parent != NULL) {
-	    Tk_SendVirtualEvent(fcdPtr->parent, "TkFontchooserVisibility", NULL);
+	    TkSendVirtualEvent(fcdPtr->parent, "TkFontchooserVisibility", NULL);
 	    fontchooserInterp = NULL;
 	}
 	break;
@@ -1707,7 +1761,7 @@ FontchooserEvent(
 		fontPanelFont, fontPanelFontAttributes);
 	if (fontObj) {
 	    if (fcdPtr->cmdObj) {
-		Tcl_Size objc;
+		int objc;
 		int result;
 		Tcl_Obj **objv, **tmpv;
 
@@ -1722,7 +1776,7 @@ FontchooserEvent(
 		    ckfree(tmpv);
 		}
 	    }
-	    Tk_SendVirtualEvent(fcdPtr->parent, "TkFontchooserFontChanged", NULL);
+	    TkSendVirtualEvent(fcdPtr->parent, "TkFontchooserFontChanged", NULL);
 	}
 	break;
     }
@@ -1756,7 +1810,7 @@ FontchooserCget(
     case FontchooserParent:
 	if (fcdPtr->parent != NULL) {
 	    resObj = Tcl_NewStringObj(
-		    ((TkWindow *)fcdPtr->parent)->pathName, TCL_INDEX_NONE);
+		    ((TkWindow *)fcdPtr->parent)->pathName, -1);
 	} else {
 	    resObj = Tcl_NewStringObj(".", 1);
 	}
@@ -1811,15 +1865,15 @@ FontchooserCget(
 
 static int
 FontchooserConfigureCmd(
-    void *clientData,	/* Main window */
+    ClientData clientData,	/* Main window */
     Tcl_Interp *interp,
-    Tcl_Size objc,
+    int objc,
     Tcl_Obj *const objv[])
 {
     Tk_Window tkwin = (Tk_Window)clientData;
     FontchooserData *fcdPtr = (FontchooserData *)Tcl_GetAssocData(interp, "::tk::fontchooser",
 	    NULL);
-    Tcl_Size i;
+    int i;
     int r = TCL_OK;
 
     /*
@@ -1831,8 +1885,8 @@ FontchooserConfigureCmd(
 	Tcl_Obj *dictObj = Tcl_NewDictObj();
 
 	for (i = 0; r == TCL_OK && fontchooserOptionStrings[i] != NULL; ++i) {
-	    keyObj = Tcl_NewStringObj(fontchooserOptionStrings[i], TCL_INDEX_NONE);
-	    valueObj = FontchooserCget(fcdPtr, (int)i);
+	    keyObj = Tcl_NewStringObj(fontchooserOptionStrings[i], -1);
+	    valueObj = FontchooserCget(fcdPtr, i);
 	    r = Tcl_DictObjPut(interp, dictObj, keyObj, valueObj);
 	}
 	if (r == TCL_OK) {
@@ -1843,7 +1897,7 @@ FontchooserConfigureCmd(
 
     for (i = 1; i < objc; i += 2) {
 	int optionIndex;
-	Tcl_Size len;
+	int len;
 
 	if (Tcl_GetIndexFromObjStruct(interp, objv[i], fontchooserOptionStrings,
 		sizeof(char *), "option", 0, &optionIndex) != TCL_OK) {
@@ -1868,7 +1922,7 @@ FontchooserConfigureCmd(
 	    const char *msg = "cannot change read-only option "
 		    "\"-visible\": use the show or hide command";
 
-	    Tcl_SetObjResult(interp, Tcl_NewStringObj(msg, TCL_INDEX_NONE));
+	    Tcl_SetObjResult(interp, Tcl_NewStringObj(msg, -1));
 	    Tcl_SetErrorCode(interp, "TK", "FONTDIALOG", "READONLY", NULL);
 	    return TCL_ERROR;
 	}
@@ -1933,7 +1987,7 @@ FontchooserConfigureCmd(
 	    [fm setSelectedAttributes:fontPanelFontAttributes
 		    isMultiple:NO];
 	    if ([fp isVisible]) {
-		Tk_SendVirtualEvent(fcdPtr->parent,
+		TkSendVirtualEvent(fcdPtr->parent,
 			"TkFontchooserFontChanged", NULL);
 	    }
 	    break;
@@ -1978,9 +2032,9 @@ FontchooserConfigureCmd(
 
 static int
 FontchooserShowCmd(
-    void *clientData,	/* Main window */
+    ClientData clientData,	/* Main window */
     Tcl_Interp *interp,
-    TCL_UNUSED(Tcl_Size),
+    TCL_UNUSED(int),
     TCL_UNUSED(Tcl_Obj *const *))
 {
     FontchooserData *fcdPtr = (FontchooserData *)Tcl_GetAssocData(interp, "::tk::fontchooser",
@@ -2000,7 +2054,7 @@ FontchooserShowCmd(
     }
     if (![fp isVisible]) {
 	[fm orderFrontFontPanel:NSApp];
-	Tk_SendVirtualEvent(fcdPtr->parent, "TkFontchooserVisibility", NULL);
+	TkSendVirtualEvent(fcdPtr->parent, "TkFontchooserVisibility", NULL);
     }
     fontchooserInterp = interp;
 
@@ -2028,7 +2082,7 @@ static int
 FontchooserHideCmd(
     TCL_UNUSED(void *),	/* Main window */
     TCL_UNUSED(Tcl_Interp *),
-    TCL_UNUSED(Tcl_Size),
+    TCL_UNUSED(int),
     TCL_UNUSED(Tcl_Obj *const *))
 {
     NSFontPanel *fp = [[NSFontManager sharedFontManager] fontPanel:NO];
@@ -2058,7 +2112,7 @@ FontchooserHideCmd(
 
 static void
 FontchooserParentEventHandler(
-    void *clientData,
+    ClientData clientData,
     XEvent *eventPtr)
 {
     FontchooserData *fcdPtr = (FontchooserData *)clientData;
@@ -2090,7 +2144,7 @@ FontchooserParentEventHandler(
 
 static void
 DeleteFontchooserData(
-    void *clientData,
+    ClientData clientData,
     Tcl_Interp *interp)
 {
     FontchooserData *fcdPtr = (FontchooserData *)clientData;

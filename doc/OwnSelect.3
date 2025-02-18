@@ -15,7 +15,6 @@ Tk_OwnSelection \- make a window the owner of the primary selection
 \fB#include <tk.h>\fR
 .sp
 \fBTk_OwnSelection\fR(\fItkwin, selection, proc, clientData\fR)
-.fi
 .SH ARGUMENTS
 .AS Tk_LostSelProc clientData
 .AP Tk_Window tkwin in
@@ -24,7 +23,7 @@ Window that is to become new selection owner.
 The name of the selection to be owned, such as XA_PRIMARY.
 .AP Tk_LostSelProc *proc in
 Procedure to invoke when \fItkwin\fR loses selection ownership later.
-.AP void *clientData in
+.AP ClientData clientData in
 Arbitrary one-word value to pass to \fIproc\fR.
 .BE
 .SH DESCRIPTION
@@ -40,7 +39,7 @@ unhighlighting the selection).  \fIProc\fR should have arguments and
 result that match the type \fBTk_LostSelProc\fR:
 .CS
 typedef void \fBTk_LostSelProc\fR(
-        void *\fIclientData\fR);
+        ClientData \fIclientData\fR);
 .CE
 The \fIclientData\fR parameter to \fIproc\fR is a copy of the
 \fIclientData\fR argument given to \fBTk_OwnSelection\fR, and is

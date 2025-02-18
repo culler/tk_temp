@@ -4,7 +4,7 @@
  *	This file implements the Windows specific portion of the scrollbar
  *	widget.
  *
- * Copyright © 1996 Sun Microsystems, Inc.
+ * Copyright (c) 1996 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -61,7 +61,7 @@ TCL_DECLARE_MUTEX(winScrlbrMutex)
  */
 
 static Window		CreateProc(Tk_Window tkwin, Window parent,
-			    void *instanceData);
+			    ClientData instanceData);
 static void		ModalLoop(WinScrollbar *, XEvent *eventPtr);
 static LRESULT CALLBACK	ScrollbarProc(HWND hwnd, UINT message, WPARAM wParam,
 			    LPARAM lParam);
@@ -80,7 +80,7 @@ const Tk_ClassProcs tkpScrollbarProcs = {
 };
 
 static void
-WinScrollbarEventProc(void *clientData, XEvent *eventPtr)
+WinScrollbarEventProc(ClientData clientData, XEvent *eventPtr)
 {
     WinScrollbar *scrollPtr = (WinScrollbar *)clientData;
 
@@ -205,7 +205,7 @@ static Window
 CreateProc(
     Tk_Window tkwin,		/* Token for window. */
     Window parentWin,		/* Parent of new window. */
-    void *instanceData)	/* Scrollbar instance data. */
+    ClientData instanceData)	/* Scrollbar instance data. */
 {
     DWORD style;
     Window window;
@@ -273,7 +273,7 @@ CreateProc(
 
 void
 TkpDisplayScrollbar(
-    void *clientData)	/* Information about window. */
+    ClientData clientData)	/* Information about window. */
 {
     WinScrollbar *scrollPtr = (WinScrollbar *)clientData;
     Tk_Window tkwin = scrollPtr->info.tkwin;
@@ -394,6 +394,10 @@ TkpComputeScrollbarGeometry(
      * basic sanity checks to appease backwards compatibility.
      */
 
+    if (scrollPtr->highlightWidth < 0) {
+	scrollPtr->highlightWidth = 0;
+    }
+
     if (scrollPtr->vertical) {
 	scrollPtr->arrowLength = vArrowHeight;
 	fieldLength = Tk_Height(scrollPtr->tkwin);
@@ -493,7 +497,7 @@ ScrollbarProc(
 	int code;
 
 	GetCursorPos(&point);
-	TkTranslateWinEvent(NULL, WM_MOUSEMOVE, 0,
+	Tk_TranslateWinEvent(NULL, WM_MOUSEMOVE, 0,
 		MAKELPARAM(point.x, point.y), &result);
 
 	if (command == SB_ENDSCROLL) {
@@ -548,7 +552,7 @@ ScrollbarProc(
 	}
 
 	interp = scrollPtr->info.interp;
-	code = Tcl_EvalEx(interp, cmdString.string, TCL_INDEX_NONE, TCL_EVAL_GLOBAL);
+	code = Tcl_EvalEx(interp, cmdString.string, -1, TCL_EVAL_GLOBAL);
 	if (code != TCL_OK && code != TCL_CONTINUE && code != TCL_BREAK) {
 	    Tcl_AddErrorInfo(interp, "\n    (scrollbar command)");
 	    Tcl_BackgroundException(interp, code);
@@ -560,7 +564,7 @@ ScrollbarProc(
     }
 
     default:
-	if (TkTranslateWinEvent(hwnd, message, wParam, lParam, &result)) {
+	if (Tk_TranslateWinEvent(hwnd, message, wParam, lParam, &result)) {
 	    return result;
 	}
     }

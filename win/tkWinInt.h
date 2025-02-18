@@ -4,8 +4,8 @@
  *	This file contains declarations that are shared among the
  *	Windows-specific parts of Tk, but aren't used by the rest of Tk.
  *
- * Copyright © 1995-1997 Sun Microsystems, Inc.
- * Copyright © 1998-2000 Scriptics Corporation.
+ * Copyright (c) 1995-1997 Sun Microsystems, Inc.
+ * Copyright (c) 1998-2000 Scriptics Corporation.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -142,9 +142,6 @@ MODULE_SCOPE const int tkpWinBltModes[];
 
 #include "tkIntPlatDecls.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 /*
  * Special proc needed as tsd accessor function between
  * tkWinX.c:GenerateXEvent and tkWinClipboard.c:UpdateClipboard
@@ -194,48 +191,33 @@ MODULE_SCOPE void		TkWinSetupSystemFonts(TkMainInfo *mainPtr);
  * The following is implemented in tkWinWm and used by tkWinEmbed.c
  */
 
-MODULE_SCOPE void		TkpWinToplevelWithDraw(TkWindow *winPtr);
-MODULE_SCOPE void		TkpWinToplevelIconify(TkWindow *winPtr);
-MODULE_SCOPE void		TkpWinToplevelDeiconify(TkWindow *winPtr);
-MODULE_SCOPE long		TkpWinToplevelIsControlledByWm(TkWindow *winPtr);
-MODULE_SCOPE long		TkpWinToplevelMove(TkWindow *winPtr, int x, int y);
-MODULE_SCOPE long		TkpWinToplevelOverrideRedirect(TkWindow *winPtr,
+MODULE_SCOPE void	TkpWinToplevelWithDraw(TkWindow *winPtr);
+MODULE_SCOPE void	TkpWinToplevelIconify(TkWindow *winPtr);
+MODULE_SCOPE void	TkpWinToplevelDeiconify(TkWindow *winPtr);
+MODULE_SCOPE long	TkpWinToplevelIsControlledByWm(TkWindow *winPtr);
+MODULE_SCOPE long	TkpWinToplevelMove(TkWindow *winPtr, int x, int y);
+MODULE_SCOPE long	TkpWinToplevelOverrideRedirect(TkWindow *winPtr,
 			    int reqValue);
-MODULE_SCOPE void		TkpWinToplevelDetachWindow(TkWindow *winPtr);
-MODULE_SCOPE int		TkpWmGetState(TkWindow *winPtr);
-
-MODULE_SCOPE int		TkTranslateWinEvent(HWND hwnd, UINT message,
-			    WPARAM wParam, LPARAM lParam, LRESULT *result);
-MODULE_SCOPE void		TkWinPointerEvent(HWND hwnd, int x, int y);
+MODULE_SCOPE void	TkpWinToplevelDetachWindow(TkWindow *winPtr);
+MODULE_SCOPE int	TkpWmGetState(TkWindow *winPtr);
 
 /*
  * The following is implemented in tkWinPointer.c and also used in tkWinWindow.c
  */
 
-MODULE_SCOPE void		TkSetCursorPos(int x, int y);
+MODULE_SCOPE void	TkSetCursorPos(int x, int y);
 
 /*
- * The following is implemented in tkWinSysTray.c
+ * The following is implemented in tkWinDraw.c and used in tkUtil.c
  */
 
-MODULE_SCOPE  int       WinIcoInit (Tcl_Interp* interp);
-
-/*
- * The following is implemented in tkWinGDI.c
- */
-
-MODULE_SCOPE  int       Winprint_Init(Tcl_Interp* interp);
-
-/*
- * The following is implemented in tkWinSysTray.c
- */
-
-MODULE_SCOPE  int       WinIcoInit (Tcl_Interp* interp);
+MODULE_SCOPE  void	TkWinDrawDottedRect(Display *disp, Drawable d,
+			    long pixel, int x, int y, int width, int height);
 
 /*
  * Common routines used in Windows implementation
  */
-MODULE_SCOPE Tcl_Obj *	        TkWin32ErrorObj(HRESULT hrError);
+MODULE_SCOPE Tcl_Obj *	TkWin32ErrorObj(HRESULT hrError);
 
 
 /*
@@ -267,8 +249,12 @@ MODULE_SCOPE Tcl_Obj *	        TkWin32ErrorObj(HRESULT hrError);
 #define GWLP_ID			GWL_ID
 #endif /* !GWLP_WNDPROC */
 
-#ifdef __cplusplus
-}
+/*
+ * MSVC versions before 2015 don't know snprintf, but _snprintf is compatible.
+ * Note that sprintf is deprecated.
+ */
+#if defined(_MSC_VER) && _MSC_VER < 1900
+#    define snprintf _snprintf
 #endif
 
 #endif /* _TKWININT */

@@ -2,9 +2,9 @@
 # other procedures in the file tkImage.c.  It is organized in the
 # standard fashion for Tcl tests.
 #
-# Copyright © 1994 The Regents of the University of California.
-# Copyright © 1994 Sun Microsystems, Inc.
-# Copyright © 1998-1999 Scriptics Corporation.
+# Copyright (c) 1994 The Regents of the University of California.
+# Copyright (c) 1994 Sun Microsystems, Inc.
+# Copyright (c) 1998-1999 Scriptics Corporation.
 # All rights reserved.
 
 package require tcltest 2.2
@@ -308,9 +308,7 @@ test image-5.7 {Tk_ImageCmd procedure, "type" option} -constraints {
 } -returnCodes error -result {image "myimage" doesn't exist}
 
 
-test image-6.1 {Tk_ImageCmd procedure, "types" option} -constraints {
-    testImageType
-} -body {
+test image-6.1 {Tk_ImageCmd procedure, "types" option} -body {
     image types x
 } -returnCodes error -result {wrong # args: should be "image types"}
 test image-6.2 {Tk_ImageCmd procedure, "types" option} -body {
@@ -370,6 +368,10 @@ test image-9.1 {Tk_ImageChanged procedure} -constraints testImageType -setup {
     foo changed 5 6 7 8 30 15
     update idletasks
     update
+    # On MacOS we need to wait for the test image display procedure to run.
+    while {"timed out" ni $x && [lindex $x end 1] ne "display"} {
+        vwait x
+    }
     after cancel $timer
     return $x
 } -cleanup {

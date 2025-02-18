@@ -4,7 +4,7 @@
  *	This module implements the Windows system defaults for the
  *	configuration package.
  *
- * Copyright © 1997 Sun Microsystems, Inc.
+ * Copyright (c) 1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -16,7 +16,7 @@
 /*
  *----------------------------------------------------------------------
  *
- * Tk_GetSystemDefault --
+ * TkpGetSystemDefault --
  *
  *	Given a dbName and className for a configuration option, return a
  *	string representation of the option.
@@ -33,7 +33,7 @@
  */
 
 Tcl_Obj *
-Tk_GetSystemDefault(
+TkpGetSystemDefault(
     Tk_Window tkwin,		/* A window to use. */
     const char *dbName,		/* The option database name. */
     const char *className)	/* The name of the option class. */

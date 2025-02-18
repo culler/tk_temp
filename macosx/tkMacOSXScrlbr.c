@@ -95,7 +95,7 @@ static ScrollbarMetrics metrics = {
  * Declarations of static functions defined later in this file:
  */
 
-static void		ScrollbarEventProc(void *clientData,
+static void		ScrollbarEventProc(ClientData clientData,
 			    XEvent *eventPtr);
 static int		ScrollbarEvent(TkScrollbar *scrollPtr,
 			    XEvent *eventPtr);
@@ -244,7 +244,7 @@ static void drawMacScrollbar(
 
 void
 TkpDisplayScrollbar(
-    void *clientData)	/* Information about window. */
+    ClientData clientData)	/* Information about window. */
 {
     TkScrollbar *scrollPtr = (TkScrollbar *)clientData;
     MacScrollbar *msPtr = (MacScrollbar *) scrollPtr;
@@ -284,7 +284,7 @@ TkpDisplayScrollbar(
      * Draw a 3D rectangle to provide a base for the native scrollbar.
      */
 
-    if (scrollPtr->highlightWidth > 0) {
+    if (scrollPtr->highlightWidth != 0) {
     	GC fgGC, bgGC;
 
     	bgGC = Tk_GCForColor(scrollPtr->highlightBgColorPtr, (Pixmap) macWin);
@@ -293,7 +293,7 @@ TkpDisplayScrollbar(
     	} else {
     	    fgGC = bgGC;
     	}
-    	Tk_DrawHighlightBorder(tkwin, fgGC, bgGC, scrollPtr->highlightWidth,
+    	TkpDrawHighlightBorder(tkwin, fgGC, bgGC, scrollPtr->highlightWidth,
     		(Pixmap) macWin);
     }
 
@@ -484,8 +484,9 @@ TkpDestroyScrollbar(
 
 void
 TkpConfigureScrollbar(
-    TCL_UNUSED(TkScrollbar *))
+    TkScrollbar *scrollPtr)
 {
+    (void)scrollPtr;
     /* empty */
 }
 
@@ -649,8 +650,8 @@ UpdateControlValues(
 	    || height <= metrics.minHeight) {
     	msPtr->info.enableState = kThemeTrackHideTrack;
     } else {
-	msPtr->info.enableState = kThemeTrackActive;
-	msPtr->info.attributes =
+        msPtr->info.enableState = kThemeTrackActive;
+    	msPtr->info.attributes =
 		kThemeTrackShowThumb | kThemeTrackThumbRgnIsNotGhost;
     }
 }
@@ -765,7 +766,7 @@ ScrollbarEvent(
 
 static void
 ScrollbarEventProc(
-    void *clientData,	/* Information about window. */
+    ClientData clientData,	/* Information about window. */
     XEvent *eventPtr)		/* Information about event. */
 {
     TkScrollbar *scrollPtr = (TkScrollbar *)clientData;
