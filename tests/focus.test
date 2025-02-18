@@ -47,9 +47,12 @@ proc focusClear {} {
     after 200 {set x 1}
     tkwait variable x
     dobg {focus -force .; update}
-    while {[focus] != ""} {
-        after 100 {set y 1}
-    	tkwait variable y
+    if {[tk windowingsystem] eq "aqua"} {
+	# In Aqua we need to explicitly wait until focus is cleared. 
+	while {[focus] != ""} {
+	    after 100 {set y 1}
+	    tkwait variable y
+	}
     }
         
     update
