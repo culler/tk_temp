@@ -4,8 +4,8 @@
  *	This module implements the Windows platform-specific features of
  *	menus.
  *
- * Copyright (c) 1996-1998 Sun Microsystems, Inc.
- * Copyright (c) 1998-1999 Scriptics Corporation.
+ * Copyright © 1996-1998 Sun Microsystems, Inc.
+ * Copyright © 1998-1999 Scriptics Corporation.
  *
  * See the file "license.terms" for information on usage and redistribution of
  * this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -332,7 +332,7 @@ TkpNewMenu(
     winMenuHdl = CreatePopupMenu();
     if (winMenuHdl == NULL) {
 	Tcl_SetObjResult(menuPtr->interp, Tcl_NewStringObj(
-		"No more menus can be allocated.", -1));
+		"No more menus can be allocated.", TCL_INDEX_NONE));
 	Tcl_SetErrorCode(menuPtr->interp, "TK", "MENU", "SYSTEM_RESOURCES", NULL);
 	return TCL_ERROR;
     }
@@ -567,7 +567,7 @@ GetEntryText(
 
 static void
 ReconfigureWindowsMenu(
-    ClientData clientData)	/* The menu we are rebuilding */
+    void *clientData)	/* The menu we are rebuilding */
 {
     TkMenu *menuPtr = (TkMenu *)clientData;
     TkMenuEntry *mePtr;
@@ -610,7 +610,7 @@ ReconfigureWindowsMenu(
 	if ((menuPtr->menuType == MENUBAR)
 		|| (menuPtr->menuFlags & MENU_SYSTEM_MENU)) {
 		Tcl_DStringInit(&translatedText);
-		Tcl_UtfToWCharDString(itemText, -1, &translatedText);
+		Tcl_UtfToWCharDString(itemText, TCL_INDEX_NONE, &translatedText);
 	    lpNewItem = (LPCWSTR) Tcl_DStringValue(&translatedText);
 	    flags |= MF_STRING;
 	} else {
@@ -684,7 +684,7 @@ ReconfigureWindowsMenu(
 
 		Tcl_DStringInit(&ds);
 		Tcl_DStringAppend(&ds,
-			Tk_PathName(menuPtr->masterMenuPtr->tkwin), -1);
+			Tk_PathName(menuPtr->mainMenuPtr->tkwin), TCL_INDEX_NONE);
 		Tcl_DStringAppend(&ds, ".system", 7);
 
 		menuRefPtr = TkFindMenuReferences(menuPtr->interp,
@@ -695,7 +695,7 @@ ReconfigureWindowsMenu(
 		if ((menuRefPtr != NULL)
 			&& (menuRefPtr->menuPtr != NULL)
 			&& (menuPtr->parentTopLevelPtr != NULL)
-			&& (systemMenuPtr->masterMenuPtr
+			&& (systemMenuPtr->mainMenuPtr
 				== menuRefPtr->menuPtr)) {
 		    HMENU systemMenuHdl = (HMENU) systemMenuPtr->platformData;
 		    HWND wrapper = TkWinGetWrapperWindow(menuPtr
@@ -762,7 +762,7 @@ int
 TkpPostMenu(
     TCL_UNUSED(Tcl_Interp *),
     TkMenu *menuPtr,
-    int x, int y, int index)
+    int x, int y, Tcl_Size index)
 {
     HMENU winMenuHdl = (HMENU) menuPtr->platformData;
     int result, flags;
@@ -840,7 +840,7 @@ TkpPostMenu(
     Tcl_SetServiceMode(oldServiceMode);
 
     GetCursorPos(&point);
-    Tk_PointerEvent(NULL, point.x, point.y);
+    TkWinPointerEvent(NULL, point.x, point.y);
 
     if (tsdPtr->inPostMenu) {
 	tsdPtr->inPostMenu = 0;
@@ -872,13 +872,13 @@ int
 TkpPostTearoffMenu(
     TCL_UNUSED(Tcl_Interp *),		/* The interpreter of the menu */
     TkMenu *menuPtr,		/* The menu we are posting */
-    int x, int y, int index)	/* The root X,Y coordinates where we are
+    int x, int y, Tcl_Size index)	/* The root X,Y coordinates where we are
 				 * posting */
 {
     int vRootX, vRootY, vRootWidth, vRootHeight;
     int result;
 
-    TkActivateMenuEntry(menuPtr, -1);
+    TkActivateMenuEntry(menuPtr, TCL_INDEX_NONE);
     TkRecomputeMenu(menuPtr);
     result = TkPostCommand(menuPtr);
     if (result != TCL_OK) {
@@ -1034,7 +1034,7 @@ TkWinMenuProc(
 
 static void
 UpdateEmbeddedMenu(
-    ClientData clientData)
+    void *clientData)
 {
     RECT rc;
     HWND hMenuWnd = (HWND)clientData;
@@ -1078,7 +1078,7 @@ TkWinEmbeddedMenuProc(
 	if ((wParam == MSGF_MENU) && (nIdles < 1)
 		&& (hwnd == tsdPtr->embeddedMenuHWND)) {
 	    Tcl_CreateTimerHandler(200, UpdateEmbeddedMenu,
-		    (ClientData) lParam);
+		    (void *) lParam);
 	    nIdles++;
 	}
 	break;
@@ -1186,7 +1186,7 @@ TkWinHandleMenuEvent(
 		}
 		Tcl_Release(interp);
 	    }
-	    TkActivateMenuEntry(menuPtr, -1);
+	    TkActivateMenuEntry(menuPtr, TCL_INDEX_NONE);
 	    *plResult = 0;
 	    returnResult = 1;
 	} else {
@@ -1255,7 +1255,7 @@ TkWinHandleMenuEvent(
 	hashEntryPtr = Tcl_FindHashEntry(&tsdPtr->winMenuTable,
 		*plParam);
 	if (hashEntryPtr != NULL) {
-	    int i, len;
+	    Tcl_Size i, len;
 	    int underline;
 	    Tcl_Obj *labelPtr;
 	    WCHAR *wlabel;
@@ -1343,7 +1343,7 @@ TkWinHandleMenuEvent(
 		if (itemPtr->itemState & ODS_SELECTED) {
 		    TkActivateMenuEntry(menuPtr, mePtr->index);
 		} else {
-		    TkActivateMenuEntry(menuPtr, -1);
+		    TkActivateMenuEntry(menuPtr, TCL_INDEX_NONE);
 		}
 	    } else {
 		/*
@@ -1406,7 +1406,7 @@ TkWinHandleMenuEvent(
 	    }
 
 	    if (menuPtr != NULL) {
-		long entryIndex = LOWORD(*pwParam);
+		Tcl_Size entryIndex = LOWORD(*pwParam);
 
 		if ((menuPtr->menuType == MENUBAR) && menuPtr->tearoff) {
 		    /*
@@ -1416,7 +1416,7 @@ TkWinHandleMenuEvent(
 		     * which is ignored for MENUBAR menues on Windows.
 		     */
 
-		    entryIndex++;
+			entryIndex++;
 		}
 		mePtr = NULL;
 		if (flags != 0xFFFF) {
@@ -1432,10 +1432,10 @@ TkWinHandleMenuEvent(
 		}
 
 		if ((mePtr == NULL) || (mePtr->state == ENTRY_DISABLED)) {
-		    TkActivateMenuEntry(menuPtr, -1);
+		    TkActivateMenuEntry(menuPtr, TCL_INDEX_NONE);
 		} else {
-		    if (mePtr->index >= menuPtr->numEntries) {
-			Tcl_Panic("Trying to activate an entry which doesn't exist");
+		    if (mePtr->index >= (int)menuPtr->numEntries) {
+			Tcl_Panic("Trying to activate an entry which does not exist");
 		    }
 		    TkActivateMenuEntry(menuPtr, mePtr->index);
 		}
@@ -1471,10 +1471,10 @@ void
 RecursivelyClearActiveMenu(
     TkMenu *menuPtr)		/* The menu to reset. */
 {
-    int i;
+    Tcl_Size i;
     TkMenuEntry *mePtr;
 
-    TkActivateMenuEntry(menuPtr, -1);
+    TkActivateMenuEntry(menuPtr, TCL_INDEX_NONE);
     MenuSelectEvent(menuPtr);
     for (i = 0; i < menuPtr->numEntries; i++) {
 	mePtr = menuPtr->entries[i];
@@ -1542,7 +1542,7 @@ TkpSetWindowMenuBar(
 /*
  *----------------------------------------------------------------------
  *
- * TkpSetMainMenubar --
+ * Tk_SetMainMenubar --
  *
  *	Puts the menu associated with a window into the menubar. Should only
  *	be called when the window is in front.
@@ -1557,7 +1557,7 @@ TkpSetWindowMenuBar(
  */
 
 void
-TkpSetMainMenubar(
+Tk_SetMainMenubar(
     TCL_UNUSED(Tcl_Interp *),		/* The interpreter of the application */
     TCL_UNUSED(Tk_Window),		/* The frame we are setting up */
     TCL_UNUSED(const char *))	/* The name of the menu to put in front. If
@@ -1600,7 +1600,7 @@ GetMenuIndicatorGeometry(
 	int borderWidth;
 
 	Tk_GetPixelsFromObj(menuPtr->interp, menuPtr->tkwin,
-		menuPtr->borderWidthPtr, &borderWidth);
+		menuPtr->borderWidthObj, &borderWidth);
 	*widthPtr = indicatorDimensions[1] - borderWidth;
 
 	/*
@@ -1844,7 +1844,7 @@ DrawMenuEntryIndicator(
 	    rect.top = y;
 	    rect.bottom = y + mePtr->height;
 	    Tk_GetPixelsFromObj(menuPtr->interp, menuPtr->tkwin,
-		    menuPtr->borderWidthPtr, &borderWidth);
+		    menuPtr->borderWidthObj, &borderWidth);
 	    Tk_GetPixelsFromObj(menuPtr->interp, menuPtr->tkwin,
 		    menuPtr->activeBorderWidthPtr, &activeBorderWidth);
 	    rect.left = borderWidth + activeBorderWidth + x;
@@ -2110,8 +2110,8 @@ DrawMenuUnderline(
 	    int activeBorderWidth, ch;
 
 	    label = Tcl_GetString(mePtr->labelPtr);
-	    start = TkUtfAtIndex(label, mePtr->underline);
-	    end = start + TkUtfToUniChar(start, &ch);
+	    start = Tcl_UtfAtIndex(label, mePtr->underline);
+	    end = start + Tcl_UtfToUniChar(start, &ch);
 	    Tk_GetPixelsFromObj(NULL, menuPtr->tkwin,
 		    menuPtr->activeBorderWidthPtr, &activeBorderWidth);
 	    Tk_UnderlineChars(menuPtr->display, d,
@@ -2288,28 +2288,28 @@ TkpInitializeMenuBindings(
     (void) Tcl_CreateObjCommand(interp, "tk::WinMenuKey",
 	    TkWinMenuKeyObjCmd, Tk_MainWindow(interp), NULL);
 
-    (void) Tk_CreateBinding(interp, bindingTable, (ClientData) uid,
+    (void) Tk_CreateBinding(interp, bindingTable, (void *)uid,
 	    "<Alt_L>", "tk::WinMenuKey %W %N", 0);
 
-    (void) Tk_CreateBinding(interp, bindingTable, (ClientData) uid,
+    (void) Tk_CreateBinding(interp, bindingTable, (void *)uid,
 	    "<KeyRelease-Alt_L>", "tk::WinMenuKey %W %N", 0);
 
-    (void) Tk_CreateBinding(interp, bindingTable, (ClientData) uid,
+    (void) Tk_CreateBinding(interp, bindingTable, (void *)uid,
 	    "<Alt_R>", "tk::WinMenuKey %W %N", 0);
 
-    (void) Tk_CreateBinding(interp, bindingTable, (ClientData) uid,
+    (void) Tk_CreateBinding(interp, bindingTable, (void *)uid,
 	    "<KeyRelease-Alt_R>", "tk::WinMenuKey %W %N", 0);
 
-    (void) Tk_CreateBinding(interp, bindingTable, (ClientData) uid,
-	    "<Alt-KeyPress>", "tk::WinMenuKey %W %N", 0);
+    (void) Tk_CreateBinding(interp, bindingTable, (void *)uid,
+	    "<Alt-Key>", "tk::WinMenuKey %W %N", 0);
 
-    (void) Tk_CreateBinding(interp, bindingTable, (ClientData) uid,
+    (void) Tk_CreateBinding(interp, bindingTable, (void *)uid,
 	    "<Alt-KeyRelease>", "tk::WinMenuKey %W %N", 0);
 
-    (void) Tk_CreateBinding(interp, bindingTable, (ClientData) uid,
-	    "<KeyPress-F10>", "tk::WinMenuKey %W %N", 0);
+    (void) Tk_CreateBinding(interp, bindingTable, (void *)uid,
+	    "<Key-F10>", "tk::WinMenuKey %W %N", 0);
 
-    (void) Tk_CreateBinding(interp, bindingTable, (ClientData) uid,
+    (void) Tk_CreateBinding(interp, bindingTable, (void *)uid,
 	    "<KeyRelease-F10>", "tk::WinMenuKey %W %N", 0);
 }
 
@@ -2936,10 +2936,26 @@ DrawMenuEntryBackground(
 {
     if (mePtr->state == ENTRY_ACTIVE
 		|| (mePtr->entryFlags & ENTRY_PLATFORM_FLAG1)!=0 ) {
+	int relief;
+	int activeBorderWidth;
+
 	bgBorder = activeBorder;
+
+	if ((menuPtr->menuType == MENUBAR)
+		&& ((menuPtr->postedCascade == NULL)
+		|| (menuPtr->postedCascade != mePtr))) {
+	    relief = TK_RELIEF_FLAT;
+	} else {
+	    relief = menuPtr->activeRelief;
+	}
+	Tk_GetPixelsFromObj(NULL, menuPtr->tkwin,
+		menuPtr->activeBorderWidthPtr, &activeBorderWidth);
+	Tk_Fill3DRectangle(menuPtr->tkwin, d, bgBorder, x, y, width, height,
+		activeBorderWidth, relief);
+    } else {
+	Tk_Fill3DRectangle(menuPtr->tkwin, d, bgBorder, x, y, width, height, 0,
+		TK_RELIEF_FLAT);
     }
-    Tk_Fill3DRectangle(menuPtr->tkwin, d, bgBorder, x, y, width, height, 0,
-	    TK_RELIEF_FLAT);
 }
 
 /*
@@ -2968,7 +2984,7 @@ TkpComputeStandardMenuGeometry(
     Tk_FontMetrics menuMetrics, entryMetrics, *fmPtr;
     int x, y, height, width, indicatorSpace, labelWidth, accelWidth;
     int windowWidth, windowHeight, accelSpace;
-    int i, j, lastColumnBreak = 0;
+    Tcl_Size i, j, lastColumnBreak = 0;
     int activeBorderWidth, borderWidth;
 
     if (menuPtr->tkwin == NULL) {
@@ -2976,7 +2992,7 @@ TkpComputeStandardMenuGeometry(
     }
 
     Tk_GetPixelsFromObj(menuPtr->interp, menuPtr->tkwin,
-	    menuPtr->borderWidthPtr, &borderWidth);
+	    menuPtr->borderWidthObj, &borderWidth);
     x = y = borderWidth;
     indicatorSpace = labelWidth = accelWidth = 0;
     windowHeight = 0;
@@ -2997,7 +3013,7 @@ TkpComputeStandardMenuGeometry(
     Tk_GetPixelsFromObj(menuPtr->interp, menuPtr->tkwin,
 	    menuPtr->activeBorderWidthPtr, &activeBorderWidth);
 
-    for (i = 0; i < menuPtr->numEntries; i++) {
+    for (i = 0; i < (int)menuPtr->numEntries; i++) {
 	if (menuPtr->entries[i]->fontPtr == NULL) {
 	    tkfont = menuFont;
 	    fmPtr = &menuMetrics;
@@ -3081,7 +3097,7 @@ TkpComputeStandardMenuGeometry(
     if (accelWidth != 0) {
 	labelWidth += accelSpace;
     }
-    for (j = lastColumnBreak; j < menuPtr->numEntries; j++) {
+    for (j = lastColumnBreak; j < (int)menuPtr->numEntries; j++) {
 	menuPtr->entries[j]->indicatorSpace = indicatorSpace;
 	menuPtr->entries[j]->labelWidth = labelWidth;
 	menuPtr->entries[j]->width = indicatorSpace + labelWidth
@@ -3182,7 +3198,7 @@ TkpMenuNotifyToplevelCreate(
     if ((menuName != NULL) && (menuName[0] != '\0')) {
 	menuRefPtr = TkFindMenuReferences(interp, menuName);
 	if ((menuRefPtr != NULL) && (menuRefPtr->menuPtr != NULL)) {
-	    for (menuPtr = menuRefPtr->menuPtr->masterMenuPtr; menuPtr != NULL;
+	    for (menuPtr = menuRefPtr->menuPtr->mainMenuPtr; menuPtr != NULL;
 		    menuPtr = menuPtr->nextInstancePtr) {
 		if (menuPtr->menuType == MENUBAR) {
 		    ScheduleMenuReconfigure(menuPtr);
@@ -3308,9 +3324,9 @@ TkWinGetMenuSystemDefault(
 
     if ((strcmp(dbName, "activeBorderWidth") == 0) ||
 	    (strcmp(dbName, "borderWidth") == 0)) {
-	valuePtr = Tcl_NewIntObj(defaultBorderWidth);
+	valuePtr = Tcl_NewWideIntObj(defaultBorderWidth);
     } else if (strcmp(dbName, "font") == 0) {
-	valuePtr = Tcl_NewStringObj(Tcl_DStringValue(&menuFontDString), -1);
+	valuePtr = Tcl_NewStringObj(Tcl_DStringValue(&menuFontDString), TCL_INDEX_NONE);
     }
 
     return valuePtr;
@@ -3347,12 +3363,7 @@ SetDefaults(
     int pointSize;
     HFONT menuFont;
     /* See: [Bug #3239768] tk8.4.19 (and later) WIN32 menu font support */
-    struct {
-	NONCLIENTMETRICSW metrics;
-#if (WINVER < 0x0600)
-	int padding;
-#endif
-    } nc;
+    NONCLIENTMETRICSW metrics;
 
     /*
      * Set all of the default options. The loop will terminate when we run out
@@ -3370,15 +3381,15 @@ SetDefaults(
     }
     Tcl_DStringInit(&menuFontDString);
 
-    nc.metrics.cbSize = sizeof(nc);
+    metrics.cbSize = sizeof(metrics);
 
     if (TkWinGetPlatformTheme() != TK_THEME_WIN_VISTA) {
-	nc.metrics.cbSize -= sizeof(int);
+	metrics.cbSize -= sizeof(int);
     }
 
-    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, nc.metrics.cbSize,
-	    &nc.metrics, 0);
-    menuFont = CreateFontIndirectW(&nc.metrics.lfMenuFont);
+    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, metrics.cbSize,
+	    &metrics, 0);
+    menuFont = CreateFontIndirectW(&metrics.lfMenuFont);
     SelectObject(scratchDC, menuFont);
     GetTextMetricsW(scratchDC, &tm);
     GetTextFaceA(scratchDC, LF_FACESIZE, faceName);

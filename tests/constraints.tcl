@@ -5,7 +5,7 @@ if {[namespace exists tk::test]} {
     return
 }
 
-package require Tk
+package require tk
 tk appname tktest
 wm title . tktest
 # If the main window isn't already mapped (e.g. because the tests are
@@ -132,50 +132,51 @@ namespace eval tk {
 
 	namespace export fixfocus
 	proc fixfocus {} {
-            catch {destroy .focus}
-            toplevel .focus
-            wm geometry .focus +0+0
-            entry .focus.e
-            .focus.e insert 0 "fixfocus"
-            pack .focus.e
-            update
-            focus -force .focus.e
-            destroy .focus
+	    catch {destroy .focus}
+	    toplevel .focus
+	    wm geometry .focus +0+0
+	    entry .focus.e
+	    .focus.e insert 0 "fixfocus"
+	    pack .focus.e
+	    update
+	    focus -force .focus.e
+	    destroy .focus
 	}
 
-        namespace export imageInit imageFinish imageCleanup imageNames
-        variable ImageNames
-        proc imageInit {} {
-            variable ImageNames
-            if {![info exists ImageNames]} {
-                set ImageNames [lsort [image names]]
-            }
-            imageCleanup
-            if {[lsort [image names]] ne $ImageNames} {
-                return -code error "IMAGE NAMES mismatch: [image names] != $ImageNames"
-            }
-        }
-        proc imageFinish {} {
-            variable ImageNames
-            if {[lsort [image names]] ne $ImageNames} {
-                return -code error "images remaining: [image names] != $ImageNames"
-            }
-            imageCleanup
-        }
-        proc imageCleanup {} {
-            variable ImageNames
-            foreach img [image names] {
-                if {$img ni $ImageNames} {image delete $img}
-            }
-        }
-        proc imageNames {} {
-            variable ImageNames
-            set r {}
-            foreach img [image names] {
-                if {$img ni $ImageNames} {lappend r $img}
-            }
-            return $r
-        }
+	namespace export imageInit imageFinish imageCleanup imageNames
+	variable ImageNames
+	proc imageInit {} {
+	    variable ImageNames
+	    if {![info exists ImageNames]} {
+		set ImageNames [lsearch -all -inline -glob -not [lsort [image names]] ::tk::icons::indicator*]
+	    }
+	    imageCleanup
+	    if {[lsort [image names]] ne $ImageNames} {
+		return -code error "IMAGE NAMES mismatch: [image names] != $ImageNames"
+	    }
+	}
+	proc imageFinish {} {
+	    variable ImageNames
+	    set imgs [lsearch -all -inline -glob -not [lsort [image names]] ::tk::icons::indicator*]
+	    if {$imgs ne $ImageNames} {
+		return -code error "images remaining: [image names] != $ImageNames"
+	    }
+	    imageCleanup
+	}
+	proc imageCleanup {} {
+	    variable ImageNames
+	    foreach img [image names] {
+		if {$img ni $ImageNames} {image delete $img}
+	    }
+	}
+	proc imageNames {} {
+	    variable ImageNames
+	    set r {}
+	    foreach img [image names] {
+		if {$img ni $ImageNames} {lappend r $img}
+	    }
+	    return $r
+	}
 
 	#
 	#  CONTROL TIMING ASPECTS OF POINTER WARPING
@@ -188,13 +189,8 @@ namespace eval tk {
 	# It takes care of the following timing details of pointer warping:
 	#
 	# a. Allow pointer warping to happen if it was scheduled for execution at
-	#    idle time.
-	#    - In Tk releases 8.6 and older, pointer warping is scheduled for
-	#      execution at idle time
-	#    - In release 8.7 and newer this happens synchronously if $w refers to the
-	#      whole screen or if the -when option to [event generate] is "now".
-	#    The namespace variable idle_pointer_warping records which of these is
-	#    the case.
+	#    idle time. This happens synchronously if $w refers to the
+	#    whole screen or if the -when option to [event generate] is "now".
 	#
 	# b. Work around a race condition associated with OS notification of
 	#    mouse motion on Windows.
@@ -237,18 +233,35 @@ namespace eval tk {
 	# to [event generate $w] is not "now", and $w refers to a Tk window, i.e. not
 	# the whole screen.
 	#
-	variable idle_pointer_warping [expr {![package vsatisfies [package provide Tk] 8.7-]}]
 	proc controlPointerWarpTiming {{duration 50}} {
-		variable idle_pointer_warping
-		if {$idle_pointer_warping} {
-			update idletasks ;# see a. above
-		}
+		update idletasks ;# see a. above
 		if {[tk windowingsystem] eq "win32"} {
 			after $duration ;# see b. above
 		}
 	}
 	namespace export controlPointerWarpTiming
 
+	# On macOS windows are not allowed to overlap the menubar at the top of the
+	# screen or the dock.  So tests which move a window and then check whether it
+	# got moved to the requested location should use a y coordinate larger than the
+	# height of the menubar (normally 23 pixels) and an x coordinate larger than the
+	# width of the dock, if it happens to be on the left.
+	# testmenubarheight deals with this issue but may not be available from the test
+	# environment, therefore provide a fallback here
+	if {[llength [info procs testmenubarheight]] == 0} {
+	    if {[tk windowingsystem] ne "aqua"} {
+		# Windows may overlap the menubar
+		proc testmenubarheight {} {
+		    return 0
+		}
+	    } else {
+		# Windows may not overlap the menubar
+		proc testmenubarheight {} {
+		    return 30 ;  # arbitrary value known to be larger than the menubar height
+		}
+	    }
+	    namespace export testmenubarheight
+	}
     }
 }
 
@@ -269,32 +282,33 @@ testConstraint nonUnixUserInteraction [expr {
 }]
 testConstraint haveDISPLAY [expr {[info exists env(DISPLAY)] && [testConstraint x11]}]
 testConstraint altDisplay  [info exists env(TK_ALT_DISPLAY)]
-testConstraint noExceed [expr {
-    ![testConstraint unix] || [catch {font actual "\{xyz"}]
-}]
+
+testConstraint deprecated [expr {![::tk::build-info no-deprecate]}]
+
 # constraint for running a test on all windowing system except aqua
 # where the test fails due to a known bug
 testConstraint aquaKnownBug [expr {[testConstraint notAqua] || [testConstraint knownBug]}]
 
 # constraints for testing facilities defined in the tktest executable...
-testConstraint testImageType [expr {"test" in [image types]}]
-testConstraint testOldImageType [expr {"oldtest" in [image types]}]
-testConstraint testbitmap    [llength [info commands testbitmap]]
-testConstraint testborder    [llength [info commands testborder]]
-testConstraint testcbind     [llength [info commands testcbind]]
-testConstraint testclipboard [llength [info commands testclipboard]]
-testConstraint testcolor     [llength [info commands testcolor]]
-testConstraint testcursor    [llength [info commands testcursor]]
-testConstraint testembed     [llength [info commands testembed]]
-testConstraint testfont      [llength [info commands testfont]]
-testConstraint testmakeexist [llength [info commands testmakeexist]]
-testConstraint testmenubar   [llength [info commands testmenubar]]
-testConstraint testmetrics   [llength [info commands testmetrics]]
-testConstraint testobjconfig [llength [info commands testobjconfig]]
-testConstraint testsend      [llength [info commands testsend]]
-testConstraint testtext      [llength [info commands testtext]]
-testConstraint testwinevent  [llength [info commands testwinevent]]
-testConstraint testwrapper   [llength [info commands testwrapper]]
+testConstraint testbitmap      [llength [info commands testbitmap]]
+testConstraint testborder      [llength [info commands testborder]]
+testConstraint testcbind       [llength [info commands testcbind]]
+testConstraint testclipboard   [llength [info commands testclipboard]]
+testConstraint testcolor       [llength [info commands testcolor]]
+testConstraint testcursor      [llength [info commands testcursor]]
+testConstraint testembed       [llength [info commands testembed]]
+testConstraint testfont        [llength [info commands testfont]]
+testConstraint testImageType   [expr {"test" in [image types]}]
+testConstraint testmakeexist   [llength [info commands testmakeexist]]
+testConstraint testmenubar     [llength [info commands testmenubar]]
+testConstraint testmetrics     [llength [info commands testmetrics]]
+testConstraint testmovemouse   [llength [info commands testmovemouse]]
+testConstraint testobjconfig   [llength [info commands testobjconfig]]
+testConstraint testpressbutton [llength [info commands testpressbutton]]
+testConstraint testsend        [llength [info commands testsend]]
+testConstraint testtext        [llength [info commands testtext]]
+testConstraint testwinevent    [llength [info commands testwinevent]]
+testConstraint testwrapper     [llength [info commands testwrapper]]
 
 # constraints about what sort of fonts are available
 testConstraint fonts 1
@@ -315,6 +329,31 @@ destroy .t
 if {![string match {{22 3 6 15} {31 18 [34] 15}} $x]} {
     testConstraint fonts 0
 }
+
+testConstraint withXft [expr {![catch {tk::pkgconfig get fontsystem} fs] && ($fs eq "xft")}]
+testConstraint withoutXft [expr {![testConstraint withXft]}]
+unset fs
+
+# Expected results of some tests on Linux rely on availability of the "times"
+# font. This font is generally provided when Tk uses the old X font system,
+# but not when using Xft on top of fontconfig. Specifically (old system):
+#    xlsfonts | grep times
+# may return quite some output while (new system):
+#    fc-list | grep times
+# return value is empty. That's not surprising since the two font systems are
+# separate (availability of a font in one of them does not mean it's available
+# in the other one). The following constraints are useful in this kind of
+# situation.
+testConstraint haveTimesFamilyFont [expr {
+    [string tolower [font actual {-family times} -family]] == "times"
+}]
+testConstraint haveFixedFamilyFont [expr {
+    [string tolower [font actual {-family fixed} -family]] == "fixed"
+}]
+testConstraint haveCourierFamilyFont [expr {
+    [string tolower [font actual {-family courier} -family]] == "courier"
+}]
+
 # Although unexpected, some systems may have a very limited set of fonts available.
 # The following constraints happen to evaluate to false at least on one system: the
 # Github CI runner for Linux with --disable-xft, which has exactly ONE single font
@@ -327,17 +366,14 @@ if {![string match {{22 3 6 15} {31 18 [34] 15}} $x]} {
 # tests they constrain (that is: availability of any font having the given font
 # attributes), so that these constrained tests will in fact run on all systems having
 # reasonable font dotation.
-testConstraint haveTimes12Font [expr {
-    [font actual {times 12} -size] == 12
-}]
-testConstraint haveCourier37Font [expr {
+testConstraint havePointsize37Font [expr {
     [font actual {-family courier -size 37} -size] == 37
 }]
-testConstraint haveTimes14BoldFont [expr {
+testConstraint havePointsize14BoldFont [expr {
     ([font actual {times 14 bold} -size] == 14) &&
     ([font actual {times 14 bold} -weight] eq "bold")
 }]
-testConstraint haveTimes12BoldItalicUnderlineOverstrikeFont [expr {
+testConstraint haveBoldItalicUnderlineOverstrikeFont [expr {
     ([font actual {times 12 bold italic overstrike underline} -weight] eq "bold") &&
     ([font actual {times 12 bold italic overstrike underline} -slant] eq "italic") &&
     ([font actual {times 12 bold italic overstrike underline} -underline] eq "1") &&
@@ -374,8 +410,8 @@ testConstraint secureserver 0
 if {[llength [info commands send]]} {
     testConstraint secureserver 1
     if {[catch {send $app set a 0} msg] == 1} {
-        if {[string match "X server insecure *" $msg]} {
-            testConstraint secureserver 0
+	if {[string match "X server insecure *" $msg]} {
+	    testConstraint secureserver 0
 	}
     }
 }
@@ -394,4 +430,3 @@ namespace import -force tcltest::cleanupTests
 deleteWindows
 wm geometry . {}
 raise .
-
