@@ -136,7 +136,7 @@ extern NSString *NSWindowDidOrderOffScreenNotification;
     if (winPtr && winPtr->wmInfoPtr->hints.initial_state == IconicState) {
 	winPtr->wmInfoPtr->hints.initial_state =
 		TkMacOSXIsWindowZoomed(winPtr) ? ZoomState : NormalState;
-	TkWmMapWindow((Tk_Window)winPtr);
+	TkWmUnmapWindow(winPtr);
 
 	/*
 	 * NSWindowDidDeminiaturizeNotification is received after
@@ -212,7 +212,7 @@ extern NSString *NSWindowDidOrderOffScreenNotification;
 
     if (winPtr && winPtr->wmInfoPtr->hints.initial_state != IconicState) {
 	winPtr->wmInfoPtr->hints.initial_state = IconicState;
-	TkWmUnmapWindow((Tk_Window)winPtr);
+	TkWmUnmapWindow(winPtr);
     }
 }
 
