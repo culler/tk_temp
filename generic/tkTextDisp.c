@@ -79,7 +79,7 @@
  *	always performed with maximum context.
  *
  *	This is necessary for text rendering engines that provide ligatures
- *	and sub-pixel layout, like ATSU on Mac. If we don't do this, the
+ *	and sub-pixel layout, like ATSU on macOS. If we don't do this, the
  *	measuring will change all the time, leading to an ugly "tremble and
  *	shiver" effect. This is because of the continuous splitting and
  *	re-merging of chunks that goes on in a text widget, when the cursor or
@@ -4349,8 +4349,8 @@ DisplayText(
 	if (TkScrollWindow(textPtr->tkwin, dInfoPtr->scrollGC, dInfoPtr->x,
 		oldY, dInfoPtr->maxX-dInfoPtr->x, height, 0, y-oldY,
 		damageRgn)) {
-#if !MACOSX_TK
-	    /* No point in doing this on macOS. The lines get redrawn anyway.*/
+#ifndef MACOSX_TK
+	    /* No point in doing this on macOS. The DLines get redrawn anyway.*/
 	    TextInvalidateRegion(textPtr, damageRgn);
 #endif
 	}
@@ -4506,7 +4506,7 @@ DisplayText(
 		}
 		dlPtr->oldY = dlPtr->y;
 		dlPtr->flags &= ~(NEW_LAYOUT | OLD_Y_INVALID);
-#if MAC_OSX_TK
+#ifdef MAC_OSX_TK
 	    } else if (dlPtr->chunkPtr != NULL) {
 		/*
 		 * On macOS we need to redisplay all embedded windows which
@@ -4533,7 +4533,7 @@ DisplayText(
 	    } else if (dlPtr->chunkPtr != NULL && ((dlPtr->y < 0)
 		    || (dlPtr->y + dlPtr->height > dInfoPtr->maxY))) {
 		/*
-		 * On platforms other than MacOS ...
+		 * On platforms other than macOS ...
 		 *
 		 * It's the first or last DLine which are also overlapping the
 		 * top or bottom of the window, but we decided above it wasn't
@@ -4578,7 +4578,7 @@ DisplayText(
 			TkTextPrintIndex(textPtr, &dlPtr->index, string);
 			LOG("tk_textEmbWinDisplay", string);
 		    }
-#if MAC_OSX_TK
+#ifdef MAC_OSX_TK
 		    /* We need to redisplay the entire DLine so that the
 		     * background of the line will not contain artifacts left
 		     * by the scrolling.
@@ -4588,11 +4588,11 @@ DisplayText(
 #else		   
 		    TkTextEmbWinDisplayProc(textPtr, chunkPtr, x,
 			    0,
-			    dlPtr->height-dlPtr->spaceAbove-dlPtr->spaceBelow, //height
-			    dlPtr->baseline - dlPtr->spaceAbove,  //baseline
+			    dlPtr->height-dlPtr->spaceAbove-dlPtr->spaceBelow,
+			    dlPtr->baseline - dlPtr->spaceAbove,
 			    NULL,
 			    None,
-			    dlPtr->y + dlPtr->spaceAbove);  //screenY
+			    dlPtr->y + dlPtr->spaceAbove);
 #endif
 		}
 	    }
