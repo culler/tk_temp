@@ -1521,6 +1521,7 @@ test textTag-18.1 {TkTextPickCurrent tag bindings} -setup {
     bind .t <Enter> {lappend res Enter}
     bind .t <Leave> {lappend res Leave}
 
+    update idletasks
     set res {}
     # Bindings must not trigger on the widget border, only over
     # the actual tagged characters themselves.
