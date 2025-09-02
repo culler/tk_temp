@@ -1,4 +1,4 @@
-name: Linux
+name: Linux (with Tcl 9.1)
 on:
   push:
     branches:
@@ -30,20 +30,15 @@ jobs:
           - "--disable-xss"
           - "--enable-symbols"
     steps:
-      - name: Checkout Tk
-        uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           path: tk
-<<<<<<< HEAD
       - name: Checkout Tcl 9.1
-        uses: actions/checkout@v5
-=======
-      - name: Checkout Tcl 9.0
         uses: actions/checkout@v4
->>>>>>> 251464703d3dda8000c7bcc37a15710633e5fe4c
         with:
           repository: tcltk/tcl
-          ref: core-9-0-branch
+          ref: main
           path: tcl
       - name: Setup Environment (compiler=${{ matrix.compiler }})
         run: |
@@ -109,25 +104,6 @@ jobs:
             echo "::error::Failure during Distribute"
             exit 1
           }
-      - name: Discover Version ID
-        if: ${{ env.BUILD_CONFIG_ID == 'gcc' }}
-        run: |
-          cd /tmp/dist
-          echo "VERSION=`ls -d tk* | sed 's/tk//'`" >> $GITHUB_ENV
-      - name: Upload Source Distribution
-        if: ${{ env.BUILD_CONFIG_ID == 'gcc' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: Tk ${{ env.VERSION }} Source distribution (snapshot)
-          path: |
-            /tmp/dist/tk*
-            !/tmp/dist/tk*/html/**
-      - name: Upload Documentation Distribution
-        if: ${{ env.BUILD_CONFIG_ID == 'gcc' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: Tk ${{ env.VERSION }} HTML documentation (snapshot)
-          path: /tmp/dist/tk*/html
   test:
     runs-on: ubuntu-22.04
     strategy:
@@ -139,20 +115,15 @@ jobs:
           - "--disable-xft"
           - "--enable-symbols"
     steps:
-      - name: Checkout Tk
-        uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           path: tk
-<<<<<<< HEAD
       - name: Checkout Tcl 9.1
-        uses: actions/checkout@v5
-=======
-      - name: Checkout Tcl 9.0
         uses: actions/checkout@v4
->>>>>>> 251464703d3dda8000c7bcc37a15710633e5fe4c
         with:
           repository: tcltk/tcl
-          ref: core-9-0-branch
+          ref: main
           path: tcl
       - name: Setup Environment (compiler=${{ matrix.compiler }})
         run: |
@@ -203,4 +174,4 @@ jobs:
             echo "::error::Failure during Test"
             exit 1
           }
-        timeout-minutes: 10
+        timeout-minutes: 15
