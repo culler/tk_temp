@@ -47,7 +47,7 @@ jobs:
           }
       - name: Run Tests
         run: |
-          toucn ~/Library/Caches/com.tcltk.appnames
+          touch ~/Library/Caches/com.tcltk.appnames
           ls -l ~/Library/Caches
           make TK_NO_STDERR=1 test | tee out.txt
           nmatches=$( grep -c "Failed	0" out.txt )
