@@ -135,6 +135,12 @@
     }
 
 /*
+ *  This is set to 1 if tests are being run. Defined in tkMacOSXInit.c.
+ */
+
+extern int testsAreRunning;
+
+/*
  *  The structure of a 32-bit XEvent keycode on macOS. It may be viewed as
  *  an unsigned int or as having either two or three bitfields.
  */
@@ -248,6 +254,7 @@ MODULE_SCOPE void	TkMacOSXRestoreDrawingContext(
 MODULE_SCOPE void	TkMacOSXSetColorInContext(GC gc, unsigned long pixel,
 			    CGContextRef context);
 MODULE_SCOPE void       TkMacOSXRedrawViewIdleTask(void *clientData);
+MODULE_SCOPE void       TkMacOSXUpdateViewIdleTask(void *clientData);
 #define TkMacOSXGetTkWindow(window) ((TkWindow *)Tk_MacOSXGetTkWindow(window))
 #define TkMacOSXGetNSWindowForDrawable(drawable) ((NSWindow *)Tk_MacOSXGetNSWindowForDrawable(drawable))
 #define TkMacOSXGetNSViewForDrawable(macWin) ((NSView *)Tk_MacOSXGetNSViewForDrawable((Drawable)(macWin)))
@@ -267,15 +274,15 @@ MODULE_SCOPE NSModalSession TkMacOSXGetModalSession(void);
 MODULE_SCOPE void	TkMacOSXSelDeadWindow(TkWindow *winPtr);
 MODULE_SCOPE void	TkMacOSXApplyWindowAttributes(TkWindow *winPtr,
 			    NSWindow *macWindow);
-MODULE_SCOPE Tcl_ObjCmdProc TkMacOSXStandardAboutPanelObjCmd;
-MODULE_SCOPE Tcl_ObjCmdProc TkMacOSXIconBitmapObjCmd;
-MODULE_SCOPE Tcl_ObjCmdProc TkMacOSXNSImageObjCmd;
+MODULE_SCOPE Tcl_ObjCmdProc2 TkMacOSXStandardAboutPanelObjCmd;
+MODULE_SCOPE Tcl_ObjCmdProc2 TkMacOSXIconBitmapObjCmd;
+MODULE_SCOPE Tcl_ObjCmdProc2 TkMacOSXNSImageObjCmd;
 MODULE_SCOPE void       TkMacOSXDrawSolidBorder(Tk_Window tkwin, GC gc,
 			    int inset, int thickness);
-MODULE_SCOPE int 	TkMacOSXServices_Init(Tcl_Interp *interp);
+MODULE_SCOPE int	TkMacOSXServices_Init(Tcl_Interp *interp);
 MODULE_SCOPE Tcl_ObjCmdProc TkMacOSXRegisterServiceWidgetObjCmd;
 MODULE_SCOPE unsigned   TkMacOSXAddVirtual(unsigned int keycode);
-MODULE_SCOPE int 	TkMacOSXNSImage_Init(Tcl_Interp *interp);
+MODULE_SCOPE int	TkMacOSXNSImage_Init(Tcl_Interp *interp);
 MODULE_SCOPE void       TkMacOSXWinNSBounds(TkWindow *winPtr, NSView *view,
 					    NSRect *bounds);
 MODULE_SCOPE Bool       TkMacOSXInDarkMode(Tk_Window tkwin);
@@ -287,6 +294,8 @@ MODULE_SCOPE int MacSystrayInit(Tcl_Interp *);
 MODULE_SCOPE int MacPrint_Init(Tcl_Interp *);
 MODULE_SCOPE NSString*  TkMacOSXOSTypeToUTI(OSType ostype);
 MODULE_SCOPE NSImage*   TkMacOSXIconForFileType(NSString *filetype);
+MODULE_SCOPE void TkMacOSXAssignNewKeyWindow(Tcl_Interp *interp,
+					     NSWindow *ignore);
 
 #pragma mark Private Objective-C Classes
 
@@ -321,6 +330,7 @@ VISIBILITY_HIDDEN
 @property int poolLock;
 @property int macOSVersion;
 @property Bool tkLiveResizeEnded;
+@property Bool tkWillExit;
 
 /*
  * Persistent state variables used by processMouseEvent.
@@ -402,12 +412,8 @@ VISIBILITY_HIDDEN
 {
 @private
     NSString *privateWorkingText;
-    Bool _tkNeedsDisplay;
-    NSRect _tkDirtyRect;
     NSTrackingArea *trackingArea;
 }
-@property Bool tkNeedsDisplay;
-@property NSRect tkDirtyRect;
 @property CGContextRef tkLayerBitmapContext;
 @end
 
@@ -417,8 +423,6 @@ VISIBILITY_HIDDEN
 @end
 
 @interface TKContentView(TKWindowEvent)
-- (void) addTkDirtyRect: (NSRect) rect;
-- (void) clearTkDirtyRect;
 - (void) generateExposeEvents: (NSRect) rect;
 - (void) tkToolbarButton: (id) sender;
 - (void) resetTkLayerBitmapContext;

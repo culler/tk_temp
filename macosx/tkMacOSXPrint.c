@@ -29,9 +29,9 @@ NSString * fileName = nil;
 CFStringRef urlFile = NULL;
 
 /*Forward declaration of functions.*/
-static Tcl_ObjCmdProc StartPrint;
+static Tcl_ObjCmdProc2 StartPrint;
 static OSStatus	FinishPrint(NSString *file, int buttonValue);
-static Tcl_ObjCmdProc MakePDF;
+static Tcl_ObjCmdProc2 MakePDF;
 int			MacPrint_Init(Tcl_Interp * interp);
 
 /* Delegate class for print dialogs. */
@@ -68,7 +68,7 @@ int			MacPrint_Init(Tcl_Interp * interp);
  *
  * StartPrint --
  *
- * 	Launch native print dialog.
+ *	Launch native print dialog.
  *
  * Results:
  *	Configures values and starts print process.
@@ -80,7 +80,7 @@ int
 StartPrint(
     TCL_UNUSED(void *),
     Tcl_Interp * interp,
-    int objc,
+    Tcl_Size objc,
     Tcl_Obj *const objv[])
 {
     NSPrintInfo * printInfo = [NSPrintInfo sharedPrintInfo];
@@ -138,7 +138,7 @@ StartPrint(
  *
  * FinishPrint --
  *
- * 	Handles print process based on input from dialog.
+ *	Handles print process based on input from dialog.
  *
  * Results:
  *	Completes print process.
@@ -275,7 +275,7 @@ FinishPrint(
 		     *  Fork and start new process with command string. Thanks to Peter da Silva
 		     *  for assistance.
 		     */
-  		    pid_t pid;
+		    pid_t pid;
 		    if ((pid = fork()) == -1) {
 		      return -1;
 		    } else if (pid == 0) {
@@ -334,7 +334,7 @@ FinishPrint(
  *
  * MakePDF--
  *
- * 	Converts a Tk canvas to PDF data.
+ *	Converts a Tk canvas to PDF data.
  *
  * Results:
  *	Outputs PDF file.
@@ -343,10 +343,10 @@ FinishPrint(
  */
 
 int MakePDF(
- TCL_UNUSED(void *),
- Tcl_Interp *ip,
- int objc,
- Tcl_Obj *const objv[])
+    TCL_UNUSED(void *),
+    Tcl_Interp *ip,
+    Tcl_Size objc,
+    Tcl_Obj *const objv[])
 {
     Tk_Window path;
     Drawable d;
@@ -384,7 +384,7 @@ int MakePDF(
  *
  * MacPrint_Init--
  *
- * 	Initializes the printing module.
+ *	Initializes the printing module.
  *
  * Results:
  *	Printing module initialized.
@@ -394,8 +394,8 @@ int MakePDF(
 
 int MacPrint_Init(Tcl_Interp * interp) {
     NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
-    Tcl_CreateObjCommand(interp, "::tk::print::_print", StartPrint, NULL, NULL);
-    Tcl_CreateObjCommand(interp, "::tk::print::_printcanvas", MakePDF, NULL, NULL);
+    Tcl_CreateObjCommand2(interp, "::tk::print::_print", StartPrint, NULL, NULL);
+    Tcl_CreateObjCommand2(interp, "::tk::print::_printcanvas", MakePDF, NULL, NULL);
     [pool release];
     return TCL_OK;
 }

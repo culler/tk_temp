@@ -333,11 +333,7 @@ RefWinEventProc(
 
 static void
 DestroyBusy(
-#if TCL_MAJOR_VERSION > 8
     void *data)			/* Busy window structure record */
-#else
-    char *data)
-#endif
 {
     Busy *busyPtr = (Busy *)data;
 
@@ -697,7 +693,7 @@ GetBusy(
     hPtr = Tcl_FindHashEntry(busyTablePtr, tkwin);
     if (hPtr == NULL) {
 	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		"can't find busy window \"%s\"", Tcl_GetString(windowObj)));
+		"cannot find busy window \"%s\"", Tcl_GetString(windowObj)));
 	Tcl_SetErrorCode(interp, "TK", "LOOKUP", "BUSY",
 		Tcl_GetString(windowObj), (char *)NULL);
 	return NULL;

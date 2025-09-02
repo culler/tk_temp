@@ -14,16 +14,18 @@
 #ifndef _TKWININT
 #define _TKWININT
 
-#ifndef _TKINT
-#include "tkInt.h"
-#endif
-
 /*
- * Include platform specific public interfaces.
+ * Include platform specific public interfaces as the very first step. This is
+ * necessary because definitions provided by subsequent header files depend on
+ * the interface versions defined in tkWin.h
  */
 
 #ifndef _TKWIN
 #include "tkWin.h"
+#endif
+
+#ifndef _TKINT
+#include "tkInt.h"
 #endif
 
 /*
@@ -194,48 +196,49 @@ MODULE_SCOPE void		TkWinSetupSystemFonts(TkMainInfo *mainPtr);
  * The following is implemented in tkWinWm and used by tkWinEmbed.c
  */
 
-MODULE_SCOPE void		TkpWinToplevelWithDraw(TkWindow *winPtr);
-MODULE_SCOPE void		TkpWinToplevelIconify(TkWindow *winPtr);
-MODULE_SCOPE void		TkpWinToplevelDeiconify(TkWindow *winPtr);
-MODULE_SCOPE long		TkpWinToplevelIsControlledByWm(TkWindow *winPtr);
-MODULE_SCOPE long		TkpWinToplevelMove(TkWindow *winPtr, int x, int y);
-MODULE_SCOPE long		TkpWinToplevelOverrideRedirect(TkWindow *winPtr,
+MODULE_SCOPE void	TkpWinToplevelWithDraw(TkWindow *winPtr);
+MODULE_SCOPE void	TkpWinToplevelIconify(TkWindow *winPtr);
+MODULE_SCOPE void	TkpWinToplevelDeiconify(TkWindow *winPtr);
+MODULE_SCOPE long	TkpWinToplevelIsControlledByWm(TkWindow *winPtr);
+MODULE_SCOPE long	TkpWinToplevelMove(TkWindow *winPtr, int x, int y);
+MODULE_SCOPE long	TkpWinToplevelOverrideRedirect(TkWindow *winPtr,
 			    int reqValue);
-MODULE_SCOPE void		TkpWinToplevelDetachWindow(TkWindow *winPtr);
-MODULE_SCOPE int		TkpWmGetState(TkWindow *winPtr);
+MODULE_SCOPE void	TkpWinToplevelDetachWindow(TkWindow *winPtr);
+MODULE_SCOPE int	TkpWmGetState(TkWindow *winPtr);
 
-MODULE_SCOPE int		TkTranslateWinEvent(HWND hwnd, UINT message,
+MODULE_SCOPE int	TkTranslateWinEvent(HWND hwnd, UINT message,
 			    WPARAM wParam, LPARAM lParam, LRESULT *result);
-MODULE_SCOPE void		TkWinPointerEvent(HWND hwnd, int x, int y);
+MODULE_SCOPE void	TkWinPointerEvent(HWND hwnd, int x, int y);
 
 /*
  * The following is implemented in tkWinPointer.c and also used in tkWinWindow.c
  */
 
-MODULE_SCOPE void		TkSetCursorPos(int x, int y);
+MODULE_SCOPE void	TkSetCursorPos(int x, int y);
 
 /*
  * The following is implemented in tkWinSysTray.c
  */
 
-MODULE_SCOPE  int       WinIcoInit (Tcl_Interp* interp);
+MODULE_SCOPE  int	WinIcoInit (Tcl_Interp* interp);
 
 /*
  * The following is implemented in tkWinGDI.c
  */
 
-MODULE_SCOPE  int       Winprint_Init(Tcl_Interp* interp);
+MODULE_SCOPE  int	Winprint_Init(Tcl_Interp* interp);
 
 /*
- * The following is implemented in tkWinSysTray.c
+ * The following is implemented in tkWinDraw.c and used in tkUtil.c
  */
 
-MODULE_SCOPE  int       WinIcoInit (Tcl_Interp* interp);
+MODULE_SCOPE  void	TkWinDrawDottedRect(Display *disp, Drawable d,
+			    long pixel, int x, int y, int width, int height);
 
 /*
  * Common routines used in Windows implementation
  */
-MODULE_SCOPE Tcl_Obj *	        TkWin32ErrorObj(HRESULT hrError);
+MODULE_SCOPE Tcl_Obj *	TkWin32ErrorObj(HRESULT hrError);
 
 
 /*

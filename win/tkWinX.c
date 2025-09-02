@@ -117,7 +117,7 @@ static Tcl_ThreadDataKey dataKey;
 static void		GenerateXEvent(HWND hwnd, UINT message,
 			    WPARAM wParam, LPARAM lParam);
 static unsigned int	GetState(UINT message, WPARAM wParam, LPARAM lParam);
-static void 		GetTranslatedKey(TkKeyEvent *xkey, UINT type);
+static void		GetTranslatedKey(TkKeyEvent *xkey, UINT type);
 static void		UpdateInputLanguage(int charset);
 static int		HandleIMEComposition(HWND hwnd, LPARAM lParam);
 
@@ -1165,7 +1165,7 @@ GenerateXEvent(
 		event.key.nbytes = 0;
 		event.x.xkey.state = state;
 		event.x.xany.serial = scrollCounter++;
-		event.x.xkey.keycode = (unsigned int) delta;
+		event.x.xkey.keycode = (unsigned int) (delta & 0xffff);
 	    } else {
 		event.x.type = MouseWheelEvent;
 		event.x.xany.send_event = -1;
@@ -1196,7 +1196,7 @@ GenerateXEvent(
 		event.key.nbytes = 0;
 		event.x.xkey.state = state;
 		event.x.xany.serial = scrollCounter++;
-		event.x.xkey.keycode = (unsigned int)(-(delta << 16));
+		event.x.xkey.keycode = -((unsigned int)delta << 16);
 	    } else {
 		event.x.type = MouseWheelEvent;
 		event.x.xany.send_event = -1;

@@ -446,17 +446,17 @@ TkFreeBindingTags(
     TkWindow *winPtr)		/* Window whose tags are to be released. */
 {
     Tcl_Size i;
-    const char *p;
+    char *p;
 
     for (i = 0; i < winPtr->numTags; i++) {
-	p = (const char *)winPtr->tagPtr[i];
+	p = (char *)winPtr->tagPtr[i];
 	if (*p == '.') {
 	    /*
 	     * Names starting with "." are malloced rather than Uids, so they
 	     * have to be freed.
 	     */
 
-	    ckfree((void *)p);
+	    ckfree(p);
 	}
     }
     ckfree(winPtr->tagPtr);
@@ -1678,7 +1678,7 @@ Tk_WinfoObjCmd(
 	if ((winPtr == NULL) ||
 		(winPtr->mainPtr != ((TkWindow *) tkwin)->mainPtr)) {
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		    "window id \"%s\" doesn't exist in this application",
+		    "window id \"%s\" does not exist in this application",
 		    string));
 	    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "WINDOW", string, (char *)NULL);
 	    return TCL_ERROR;
@@ -1776,11 +1776,11 @@ Tk_WinfoObjCmd(
 	{
 	    Colormap temp = Tk_Colormap(tkwin);
 	    Tk_Colormap(tkwin) = TK_DYNAMIC_COLORMAP;
-	    colorPtr = Tk_GetColor(interp, tkwin, Tcl_GetString(objv[3]));
+	    colorPtr = Tk_AllocColorFromObj(interp, tkwin, objv[3]);
 	    Tk_Colormap(tkwin) = temp;
 	}
 #else
-	colorPtr = Tk_GetColor(interp, tkwin, Tcl_GetString(objv[3]));
+	colorPtr = Tk_AllocColorFromObj(interp, tkwin, objv[3]);
 #endif
 	if (colorPtr == NULL) {
 	    return TCL_ERROR;
@@ -1936,7 +1936,7 @@ TkDeadAppObjCmd(
     Tcl_Obj *const objv[])	/* Argument strings. */
 {
     Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-	    "can't invoke \"%s\" command: application has been destroyed",
+	    "cannot invoke \"%s\" command: application has been destroyed",
 	    Tcl_GetString(objv[0])));
     return TCL_ERROR;
 }

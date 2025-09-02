@@ -345,13 +345,13 @@ static Bool runMenuCommand = true;
 {
     if (!runMenuCommand) {
 
-    	/*
-    	 * We are being called for a menu accelerator.  Tk will handle it.
-    	 * Just update the runMenuCommand flag.
-    	 */
+	/*
+	 * We are being called for a menu accelerator.  Tk will handle it.
+	 * Just update the runMenuCommand flag.
+	 */
 
-    	runMenuCommand = true;
-    	return;
+	runMenuCommand = true;
+	return;
     }
 
     /*
@@ -721,7 +721,7 @@ TkpMenuNewEntry(
 
 int
 TkpConfigureMenuEntry(
-    TkMenuEntry *mePtr) 	/* Information about menu entry; may or may
+    TkMenuEntry *mePtr)	/* Information about menu entry; may or may
 				 * not already have values for some fields. */
 {
     NSMenuItem *menuItem = (NSMenuItem *) mePtr->platformEntryData;
@@ -745,7 +745,7 @@ TkpConfigureMenuEntry(
     }
 
     if (mePtr->image) {
-    	Tk_SizeOfImage(mePtr->image, &imageWidth, &imageHeight);
+	Tk_SizeOfImage(mePtr->image, &imageWidth, &imageHeight);
 	image = TkMacOSXGetNSImageFromTkImage(mePtr->menuPtr->display,
 		mePtr->image, imageWidth, imageHeight);
     } else if (mePtr->bitmapPtr != NULL) {
@@ -801,7 +801,7 @@ TkpConfigureMenuEntry(
     if (gc->background != defaultBg) {
 	NSColor *bgcolor = TkMacOSXGetNSColor(gc, gc->background);
 	[attributes setObject:bgcolor
-	 	       forKey:NSBackgroundColorAttributeName];
+		       forKey:NSBackgroundColorAttributeName];
     }
 
 #else
@@ -845,7 +845,7 @@ TkpConfigureMenuEntry(
 	    } else {
 		[submenu setTitle:title];
 
-    		if ([menuItem isEnabled]) {
+		if ([menuItem isEnabled]) {
 
 		    /*
 		     * This menuItem might have been previously disabled which
@@ -973,7 +973,7 @@ TkpPostMenu(
 	return result;
     }
     if (itemIndex >= numItems) {
-    	itemIndex = numItems - 1;
+	itemIndex = numItems - 1;
     }
     if (itemIndex >= 0) {
 	item = [menu itemAtIndex:itemIndex];
@@ -985,7 +985,7 @@ TkpPostMenu(
      */
 
     if (menuPtr->tkwin == NULL) {
-    	return TCL_OK;
+	return TCL_OK;
     }
 
     [menu popUpMenuPositioningItem:item
@@ -1039,7 +1039,7 @@ TkpPostTearoffMenu(
     TkRecomputeMenu(menuPtr);
     result = TkPostCommand(menuPtr);
     if (result != TCL_OK) {
-    	return result;
+	return result;
     }
 
     /*
@@ -1048,7 +1048,7 @@ TkpPostTearoffMenu(
      */
 
     if (menuPtr->tkwin == NULL) {
-    	return TCL_OK;
+	return TCL_OK;
     }
 
     /*
@@ -1141,10 +1141,9 @@ TkpSetWindowMenuBar(
  *	Puts the menu associated with a window into the menubar. Should only be
  *	called when the window is in front.
  *
- *      This is a no-op on all other platforms.  On OS X it is a no-op when
- *      passed a NULL menuName or a nonexistent menuName, with an exception for
- *      the first call in a new interpreter.  In that special case, passing a
- *      NULL menuName installs the default menu.
+ *      This is a no-op on all other platforms.  On OS X it installs the
+ *      menubar with the specified menuName, if possible.  If the name is NULL
+ *      it installs the default menu.
  *
  * Results:
  *	None.
@@ -1161,7 +1160,6 @@ Tk_SetMainMenubar(
     Tk_Window tkwin,		/* The frame we are setting up */
     const char *menuName)	/* The name of the menu to put in front. */
 {
-    static Tcl_Interp *currentInterp = NULL;
     TKMenu *menu = nil;
     TkWindow *winPtr = (TkWindow *) tkwin;
 
@@ -1202,14 +1200,10 @@ Tk_SetMainMenubar(
     }
 
     /*
-     * If we couldn't find a menu, do nothing unless the window belongs to a
-     * different application.  In that case, install the default menubar.
+     * If we couldn't find a menu this will install the default menubar.
      */
 
-    if (menu || interp != currentInterp) {
-	[NSApp tkSetMainMenu:menu];
-    }
-    currentInterp = interp;
+    [NSApp tkSetMainMenu:menu];
 }
 
 /*
@@ -1416,7 +1410,7 @@ TkpComputeStandardMenuGeometry(
     }
 
     menuSize = [(NSMenu *) menuPtr->platformData size];
-    Tk_GetPixelsFromObj(NULL, menuPtr->tkwin, menuPtr->borderWidthPtr,
+    Tk_GetPixelsFromObj(NULL, menuPtr->tkwin, menuPtr->borderWidthObj,
 	    &borderWidth);
     Tk_GetPixelsFromObj(NULL, menuPtr->tkwin, menuPtr->activeBorderWidthPtr,
 	    &activeBorderWidth);

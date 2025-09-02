@@ -39,7 +39,7 @@ typedef struct RegisteredInterp {
  * "InterpRegistry" on the root window of the display. It is organized as a
  * series of zero or more concatenated strings (in no particular order), each
  * of the form
- * 	window space name '\0'
+ *	window space name '\0'
  * where "window" is the hex id of the comm. window to use to talk to an
  * interpreter named "name".
  *
@@ -837,7 +837,7 @@ Tk_SetAppName(
 	    riPtr->nextPtr = tsdPtr->interpListPtr;
 	    tsdPtr->interpListPtr = riPtr;
 	    riPtr->name = NULL;
-	    Tcl_CreateObjCommand(interp, "send", Tk_SendObjCmd, riPtr, DeleteProc);
+	    Tcl_CreateObjCommand2(interp, "send", Tk_SendObjCmd, riPtr, DeleteProc);
 	    if (Tcl_IsSafe(interp)) {
 		Tcl_HideCommand(interp, "send", "send");
 	    }
@@ -947,7 +947,7 @@ Tk_SendObjCmd(
     TCL_UNUSED(void *),	/* Information about sender (only dispPtr
 				 * field is used). */
     Tcl_Interp *interp,		/* Current interpreter. */
-    int objc,			/* Number of arguments. */
+    Tcl_Size objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument strings. */
 {
     enum {
@@ -1380,7 +1380,7 @@ SendInit(
      */
 
     dispPtr->commTkwin = (Tk_Window) TkAllocWindow(dispPtr,
-    	DefaultScreen(dispPtr->display), NULL);
+	DefaultScreen(dispPtr->display), NULL);
     Tcl_Preserve(dispPtr->commTkwin);
     ((TkWindow *) dispPtr->commTkwin)->flags |=
 	    TK_TOP_HIERARCHY|TK_TOP_LEVEL|TK_HAS_WRAPPER|TK_WIN_MANAGED;

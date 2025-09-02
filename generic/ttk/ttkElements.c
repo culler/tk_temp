@@ -85,7 +85,7 @@ static void FillElementDraw(
     TCL_UNUSED(Ttk_State))
 {
     BackgroundElement *bg = (BackgroundElement *)elementRecord;
-    Tk_3DBorder backgroundPtr = Tk_Get3DBorderFromObj(tkwin,bg->backgroundObj);
+    Tk_3DBorder backgroundPtr = Tk_Get3DBorderFromObj(tkwin, bg->backgroundObj);
 
     XFillRectangle(Tk_Display(tkwin), d,
 	Tk_3DBorderGC(tkwin, backgroundPtr, TK_3D_FLAT_GC),
@@ -186,7 +186,7 @@ static const Ttk_ElementSpec BorderElementSpec = {
 
 /*----------------------------------------------------------------------
  * +++ Field element.
- * 	Used for editable fields.
+ *	Used for editable fields.
  */
 typedef struct {
     Tcl_Obj	*borderObj;
@@ -247,6 +247,7 @@ static void FieldElementDraw(
 	    int x1 = b.x, x2 = b.x + b.width - 1;
 	    int y1 = b.y, y2 = b.y + b.height - 1;
 	    int w = WIN32_XDRAWLINE_HACK;
+	    GC bgGC;
 
 	    /*
 	     * Draw the outer rounded rectangle
@@ -265,7 +266,7 @@ static void FieldElementDraw(
 	    /*
 	     * Fill the inner rectangle
 	     */
-	    GC bgGC = Tk_3DBorderGC(tkwin, border, TK_3D_FLAT_GC);
+	    bgGC = Tk_3DBorderGC(tkwin, border, TK_3D_FLAT_GC);
 	    XFillRectangle(disp, d, bgGC, b.x+1, b.y+1, b.width-2, b.height-2);
 	} else {
 	    /*
@@ -340,7 +341,7 @@ static void PaddingElementSize(
 
     Tk_GetReliefFromObj(NULL, padding->reliefObj, &relief);
     Tk_GetPixelsFromObj(NULL, tkwin, padding->shiftreliefObj, &shiftRelief);
-    Ttk_GetPaddingFromObj(NULL,tkwin,padding->paddingObj,&pad);
+    Ttk_GetPaddingFromObj(NULL, tkwin, padding->paddingObj, &pad);
     *paddingPtr = Ttk_RelievePadding(pad, relief, shiftRelief);
 }
 
@@ -354,7 +355,7 @@ static const Ttk_ElementSpec PaddingElementSpec = {
 
 /*----------------------------------------------------------------------
  * +++ Focus ring element.
- * 	Draws a dashed focus ring, if the widget has keyboard focus.
+ *	Draws a dashed focus ring, if the widget has keyboard focus.
  */
 typedef struct {
     Tcl_Obj	*focusColorObj;
@@ -364,40 +365,47 @@ typedef struct {
 
 /*
  * DrawFocusRing --
- * 	Draw a dotted rectangle to indicate focus.
+ *	Draw a dotted rectangle to indicate focus.
  */
 static void DrawFocusRing(
     Tk_Window tkwin, Drawable d, Tcl_Obj *colorObj, int thickness, int solid,
     Ttk_Box b)
 {
     XColor *color = Tk_GetColorFromObj(tkwin, colorObj);
-    unsigned long mask = 0UL;
-    XGCValues gcvalues;
+    XGCValues gcValues;
     GC gc;
+    Display *disp = Tk_Display(tkwin);
 
-    gcvalues.foreground = color->pixel;
-    gcvalues.line_width = thickness < 1 ? 1 : thickness;
-    if (solid) {
-	gcvalues.line_style = LineSolid;
-	mask = GCForeground | GCLineStyle | GCLineWidth;
-    } else {
-	gcvalues.line_style = LineOnOffDash;
-	gcvalues.dashes = 1;
-	gcvalues.dash_offset = 1;
-	mask = GCForeground | GCLineStyle | GCDashList | GCDashOffset | GCLineWidth;
+    if (thickness < 1 && solid) {
+	thickness = 1;
     }
 
-    gc = Tk_GetGC(tkwin, mask, &gcvalues);
-    XDrawRectangle(Tk_Display(tkwin), d, gc, b.x, b.y, b.width-1, b.height-1);
+    gcValues.foreground = color->pixel;
+    gc = Tk_GetGC(tkwin, GCForeground, &gcValues);
+
+    if (solid) {
+	XRectangle rects[4] = {
+	    {(short)b.x, (short)b.y, (unsigned short)b.width, (unsigned short)thickness},				/* N */
+	    {(short)b.x, (short)(b.y + b.height - thickness), (unsigned short)b.width, (unsigned short)thickness},	/* S */
+	    {(short)b.x, (short)(b.y + thickness), (unsigned short)thickness, (unsigned short)(b.height - 2*thickness)},	/* W */
+	    {(short)(b.x + b.width - thickness), (short)(b.y + thickness),		/* E */
+	    (unsigned short)thickness, (unsigned short)(b.height - 2*thickness)}
+	};
+
+	XFillRectangles(disp, d, gc, rects, 4);
+    } else {
+	TkDrawDottedRect(disp, d, gc, b.x, b.y, b.width, b.height);
+    }
+
     Tk_FreeGC(Tk_Display(tkwin), gc);
 }
 
 static const Ttk_ElementOptionSpec FocusElementOptions[] = {
-    { "-focuscolor",TK_OPTION_COLOR,
+    { "-focuscolor", TK_OPTION_COLOR,
 	offsetof(FocusElement,focusColorObj), "black" },
-    { "-focusthickness",TK_OPTION_PIXELS,
+    { "-focusthickness", TK_OPTION_PIXELS,
 	offsetof(FocusElement,focusThicknessObj), "1" },
-    { "-focussolid",TK_OPTION_BOOLEAN,
+    { "-focussolid", TK_OPTION_BOOLEAN,
 	offsetof(FocusElement,focusSolidObj), "0" },
     { NULL, TK_OPTION_BOOLEAN, 0, NULL }
 };
@@ -447,8 +455,8 @@ static const Ttk_ElementSpec FocusElementSpec = {
 
 /*----------------------------------------------------------------------
  * +++ Separator element.
- * 	Just draws a horizontal or vertical bar.
- * 	Three elements are defined: horizontal, vertical, and general;
+ *	Just draws a horizontal or vertical bar.
+ *	Three elements are defined: horizontal, vertical, and general;
  *	the general separator checks the "-orient" option.
  */
 
@@ -568,7 +576,7 @@ static const Ttk_ElementOptionSpec SizegripOptions[] = {
 	offsetof(SizegripElement,backgroundObj), DEFAULT_BACKGROUND },
     { "-gripsize", TK_OPTION_PIXELS,
 	offsetof(SizegripElement,gripSizeObj), "11.25p" },
-    {0,TK_OPTION_BOOLEAN,0,0}
+    {0, TK_OPTION_BOOLEAN, 0, 0}
 };
 
 static void SizegripSize(
@@ -608,9 +616,9 @@ static void SizegripDraw(
     while (gripCount--) {
 	x1 -= gripSpace; y2 -= gripSpace;
 	for (int i = 1; i < gripThickness; i++) {
-	    XDrawLine(Tk_Display(tkwin), d, darkGC,  x1,y1, x2,y2); --x1; --y2;
+	    XDrawLine(Tk_Display(tkwin), d, darkGC, x1,y1, x2,y2); --x1; --y2;
 	}
-	XDrawLine(Tk_Display(tkwin), d, lightGC,  x1,y1, x2,y2); --x1; --y2;
+	XDrawLine(Tk_Display(tkwin), d, lightGC, x1,y1, x2,y2); --x1; --y2;
     }
 }
 
@@ -641,18 +649,18 @@ typedef struct {
 
 static const char checkbtnOffData[] = "\
     <svg width='16' height='16' version='1.1' xmlns='http://www.w3.org/2000/svg'>\n\
-     <rect x='.5' y='.5' width='15' height='15' rx='1.5' fill='#ffffff' stroke='#888888'/>\n\
+     <rect x='.5' y='.5' width='15' height='15' rx='3.5' fill='#ffffff' stroke='#888888'/>\n\
     </svg>";
 
 static const char checkbtnOnData[] = "\
     <svg width='16' height='16' version='1.1' xmlns='http://www.w3.org/2000/svg'>\n\
-     <rect x='0' y='0' width='16' height='16' fill='#4a6984' rx='2'/>\n\
+     <rect x='0' y='0' width='16' height='16' fill='#4a6984' rx='4'/>\n\
      <path d='m4.5 8 3 3 4-6' fill='none' stroke='#ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2'/>\n\
     </svg>";
 
 static const char checkbtnTriData[] = "\
     <svg width='16' height='16' version='1.1' xmlns='http://www.w3.org/2000/svg'>\n\
-     <rect x='0' y='0' width='16' height='16' fill='#4a6984' rx='2'/>\n\
+     <rect x='0' y='0' width='16' height='16' fill='#4a6984' rx='4'/>\n\
      <path d='m4 8h8' fill='none' stroke='#ffffff' stroke-width='2'/>\n\
     </svg>";
 
@@ -704,7 +712,7 @@ static const Ttk_ElementOptionSpec IndicatorElementOptions[] = {
     { "-indicatorbackground", TK_OPTION_COLOR,
 	offsetof(IndicatorElement,backgroundObj), "#ffffff" },
     { "-indicatorforeground", TK_OPTION_COLOR,
-        offsetof(IndicatorElement,foregroundObj), "#ffffff" },
+	offsetof(IndicatorElement,foregroundObj), "#ffffff" },
     { "-bordercolor", TK_OPTION_COLOR,
 	offsetof(IndicatorElement,borderColorObj), "#888888" },
     { "-indicatormargin", TK_OPTION_STRING,
@@ -731,7 +739,7 @@ static void ColorToStr(
     const XColor *colorPtr, char *colorStr)     /* in the format "RRGGBB" */
 {
     snprintf(colorStr, 7, "%02x%02x%02x",
-             colorPtr->red >> 8, colorPtr->green >> 8, colorPtr->blue >> 8);
+	     colorPtr->red >> 8, colorPtr->green >> 8, colorPtr->blue >> 8);
 }
 
 static void ImageChanged(               /* to be passed to Tk_GetImage() */
@@ -894,8 +902,8 @@ static const Ttk_ElementSpec IndicatorElementSpec = {
 /*----------------------------------------------------------------------
  * +++ Arrow element(s).
  *
- * 	Draws a solid triangle inside a box.
- * 	clientData is an enum ArrowDirection pointer.
+ *	Draws a solid triangle inside a box.
+ *	clientData is an enum ArrowDirection pointer.
  */
 
 typedef struct {
@@ -920,7 +928,7 @@ static const Ttk_ElementOptionSpec ArrowElementOptions[] = {
     { NULL, TK_OPTION_BOOLEAN, 0, NULL }
 };
 
-static const Ttk_Padding ArrowPadding = { 3,3,3,3 };
+static const Ttk_Padding ArrowPadding = { 3, 3, 3, 3 };
 
 static void ArrowElementSize(
     void *clientData, void *elementRecord, Tk_Window tkwin,
@@ -1010,7 +1018,7 @@ static const Ttk_ElementSpec ArrowElementSpec = {
 
 /*
  * Modified arrow element for comboboxes and spinboxes:
- * 	The width and height are different, and the left edge is drawn in the
+ *	The width and height are different, and the left edge is drawn in the
  *	same color as the right one.
  */
 
@@ -1236,7 +1244,7 @@ static void TroughElementDraw(
 	} else {
 	    b.x += (b.width - grooveWidth) / 2;
 	    b.width = grooveWidth;
-        }
+	}
 
 	/*
 	 * Save the data of the trough's inner box for later
@@ -1437,12 +1445,14 @@ static void SliderElementDraw(
 	    case TTK_ORIENT_HORIZONTAL:
 		XFillRectangle(disp, d, gc,
 			mainInfoPtr->troughInnerX, mainInfoPtr->troughInnerY,
-			b.x + dim/2 - 1, mainInfoPtr->troughInnerHeight);
+			b.x + dim/2 - mainInfoPtr->troughInnerX,
+			mainInfoPtr->troughInnerHeight);
 		break;
 	    case TTK_ORIENT_VERTICAL:
 		XFillRectangle(disp, d, gc,
 			mainInfoPtr->troughInnerX, mainInfoPtr->troughInnerY,
-			mainInfoPtr->troughInnerWidth, b.y + dim/2 - 1);
+			mainInfoPtr->troughInnerWidth,
+			b.y + dim/2 - mainInfoPtr->troughInnerY);
 		break;
 	}
     }
@@ -1537,12 +1547,12 @@ static const Ttk_ElementSpec SliderElementSpec = {
 #define DEFAULT_PBAR_LENGTH "30"
 
 typedef struct {
-    Tcl_Obj *orientObj; 	/* widget orientation */
+    Tcl_Obj *orientObj;	/* widget orientation */
     Tcl_Obj *thicknessObj;	/* the height/width of the bar */
     Tcl_Obj *lengthObj;		/* default width/height of the bar */
-    Tcl_Obj *reliefObj; 	/* border relief for this object */
-    Tcl_Obj *borderObj; 	/* background color */
-    Tcl_Obj *borderWidthObj; 	/* thickness of the border */
+    Tcl_Obj *reliefObj;	/* border relief for this object */
+    Tcl_Obj *borderObj;	/* background color */
+    Tcl_Obj *borderWidthObj;	/* thickness of the border */
 } PbarElement;
 
 static const Ttk_ElementOptionSpec PbarElementOptions[] = {
@@ -1634,7 +1644,7 @@ static const Ttk_ElementOptionSpec TabElementOptions[] = {
 	offsetof(TabElement,highlightObj), "0" },
     { "-highlightcolor", TK_OPTION_COLOR,
 	offsetof(TabElement,highlightColorObj), "#4a6984" },
-    {0,TK_OPTION_BOOLEAN,0,0}
+    {0, TK_OPTION_BOOLEAN, 0, 0}
 };
 
 static void TabElementSize(
@@ -1869,7 +1879,7 @@ static void ClientElementDraw(
     Tk_GetPixelsFromObj(NULL, tkwin, ce->borderWidthObj, &borderWidth);
 
     Tk_Fill3DRectangle(tkwin, d, border,
-	b.x, b.y, b.width, b.height, borderWidth,TK_RELIEF_RAISED);
+	b.x, b.y, b.width, b.height, borderWidth, TK_RELIEF_RAISED);
 }
 
 static const Ttk_ElementSpec ClientElementSpec = {
@@ -1894,7 +1904,7 @@ TtkElements_Init(Tcl_Interp *interp)
      * Elements:
      */
     Ttk_RegisterElement(interp, theme, "background",
-	    &BackgroundElementSpec,NULL);
+	    &BackgroundElementSpec, NULL);
 
     Ttk_RegisterElement(interp, theme, "fill", &FillElementSpec, NULL);
     Ttk_RegisterElement(interp, theme, "border", &BorderElementSpec, NULL);

@@ -41,6 +41,7 @@ MODULE_SCOPE const TkStubs tkStubs;
 
 #undef TkPutImage
 #undef XPutImage
+#define TkUnusedStubEntry 0
 
 #if !defined(MAC_OSX_TK)
 static int
@@ -58,7 +59,7 @@ doNothing(void)
 #   define TkpRedrawWidget ((void (*)(Tk_Window))(void *)doNothing)
 #   define TkpDefineNativeBitmaps ((void (*)(void))(void *)doNothing)
 #   define TkpCreateNativeBitmap ((Pixmap (*)(Display *, const void *))(void *)doNothing)
-#   define TkpGetNativeAppBitmap ((Pixmap (*)(Display *, const char*, int *, int *))(void *)doNothing)
+#   define TkpGetNativeAppBitmap ((Pixmap (*)(Display *, const char *, int *, int *))(void *)doNothing)
 #endif
 
 #ifdef _WIN32
@@ -532,7 +533,6 @@ static const TkIntPlatStubs tkIntPlatStubs = {
     TkMacOSXGetContainer, /* 49 */
     TkGenerateButtonEvent, /* 50 */
     TkGenWMDestroyEvent, /* 51 */
-    TkMacOSXSetDrawingEnabled, /* 52 */
 #endif /* AQUA */
 #if !(defined(_WIN32) || defined(__CYGWIN__) || defined(MAC_OSX_TK)) /* X11 */
     TkCreateXEventSource, /* 0 */
@@ -1242,6 +1242,10 @@ const TkStubs tkStubs = {
     Tk_GetOtherWindow, /* 288 */
     Tk_Get3DBorderColors, /* 289 */
     Tk_MakeWindow, /* 290 */
+    Tk_UnderlineCharsInContext, /* 291 */
+    Tk_DrawCharsInContext, /* 292 */
+    Tk_MeasureCharsInContext, /* 293 */
+    TkUnusedStubEntry, /* 294 */
 };
 
 /* !END!: Do not edit above this line. */

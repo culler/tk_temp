@@ -180,7 +180,7 @@ static const char getSdefProc[] = "::tk::mac::GetDynamicSdef";
 
     fileSpecDesc = [event aeDesc];
     if (fileSpecDesc == nil ) {
-    	return;
+	return;
     }
 
     /*
@@ -195,12 +195,12 @@ static const char getSdefProc[] = "::tk::mac::GetDynamicSdef";
     /* Get a copy of the AppleEvent's descriptor. */
     AEGetParamDesc(fileSpecDesc, keyDirectObject, typeWildCard, &contents);
     if (contents.descriptorType == typeAEList) {
-    	fileSpecDesc = &contents;
+	fileSpecDesc = &contents;
     }
 
     if (AECountItems(fileSpecDesc, &count) != noErr) {
 	AEDisposeDesc(&contents);
-    	return;
+	return;
     }
 
     /*
@@ -296,10 +296,10 @@ static const char getSdefProc[] = "::tk::mac::GetDynamicSdef";
     }
 
     if (MissedAnyParameters((AppleEvent*)theDesc)) {
-    	snprintf(errString, sizeof(errString), "AEDoScriptHandler: extra parameters");
-    	AEPutParamPtr((AppleEvent*)[replyEvent aeDesc], keyErrorString,
+	snprintf(errString, sizeof(errString), "AEDoScriptHandler: extra parameters");
+	AEPutParamPtr((AppleEvent*)[replyEvent aeDesc], keyErrorString,
 		      typeChar,errString, strlen(errString));
-    	return;
+	return;
     }
 
     if (initialType == typeFileURL || initialType == typeAlias) {
@@ -461,12 +461,14 @@ static void ProcessAppleEvent(
 						  &reslen);
 	if (code == TCL_OK) {
 	    AEPutParamPtr((AppleEvent*)[AEInfo->replyEvent aeDesc],
+			  keyErrorNumber, typeSInt32, &code, 4);
+	    AEPutParamPtr((AppleEvent*)[AEInfo->replyEvent aeDesc],
 			  keyDirectObject, typeChar, result, reslen);
 	} else {
 	    AEPutParamPtr((AppleEvent*)[AEInfo->replyEvent aeDesc],
-			  keyErrorString, typeChar, result, reslen);
+			  keyErrorNumber, typeSInt32, &code, 4);
 	    AEPutParamPtr((AppleEvent*)[AEInfo->replyEvent aeDesc],
-			  keyErrorNumber, typeSInt32, (Ptr) &code, sizeof(int));
+	    			  keyErrorString, typeUTF8Text, result, reslen);
 	}
     } else if (code != TCL_OK) {
 	Tcl_BackgroundException(AEInfo->interp, code);

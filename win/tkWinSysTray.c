@@ -1,9 +1,9 @@
 /*
  * tkWinSysTray.c --
  *
- * 	tkWinSysTray.c implements a "systray" Tcl command which permits to
- * 	change the system tray/taskbar icon of a Tk toplevel window and
- * 	a "sysnotify" command to post system notifications.
+ *	tkWinSysTray.c implements a "systray" Tcl command which permits to
+ *	change the system tray/taskbar icon of a Tk toplevel window and
+ *	a "sysnotify" command to post system notifications.
  *
  * Copyright © 1995-1996 Microsoft Corp.
  * Copyright © 1998 Brueckner & Jarosch Ing.GmbH, Erfurt, Germany
@@ -81,7 +81,7 @@ static Tk_EventProc WinIcoDestroy;
  *
  * DrawXORMask --
  *
- * 	Using DIB functions, draw XOR mask on hDC in Rect.
+ *	Using DIB functions, draw XOR mask on hDC in Rect.
  *
  * Results:
  *	Icon is rendered.
@@ -131,7 +131,7 @@ DrawXORMask(
  *
  * DrawANDMask --
  *
- * 	Using DIB functions, draw AND mask on hDC in Rect.
+ *	Using DIB functions, draw AND mask on hDC in Rect.
  *
  * Results:
  *	Icon is rendered.
@@ -202,7 +202,7 @@ DrawANDMask(
  *
  * TaskbarOperation --
  *
- * 	Management of icon display.
+ *	Management of icon display.
  *
  * Results:
  *	Icon is displayed or deleted.
@@ -256,7 +256,7 @@ TaskbarOperation(
  *
  * NewIcon --
  *
- * 	Create icon for display in system tray.
+ *	Create icon for display in system tray.
  *
  * Results:
  *	Icon is created for display.
@@ -294,7 +294,7 @@ NewIcon(
  *
  * FreeIcoPtr --
  *
- * 	Delete icon and free memory.
+ *	Delete icon and free memory.
  *
  * Results:
  *	Icon is removed from display.
@@ -337,7 +337,7 @@ FreeIcoPtr(
  *
  * GetIcoPtr --
  *
- * 	Get pointer to icon for display.
+ *	Get pointer to icon for display.
  *
  * Results:
  *	Icon is obtained for display.
@@ -375,7 +375,7 @@ GetIcoPtr(
 
 notfound:
     Tcl_AppendResult(interp, "icon \"", string,
-	"\" doesn't exist", NULL);
+	"\" does not exist", NULL);
     return NULL;
 }
 
@@ -701,8 +701,8 @@ TaskbarEval(
  *
  * TaskbarHandlerProc --
  *
- * 	Windows callback procedure, if ICON_MESSAGE arrives, try to execute
- * 	the taskbar_command.
+ *	Windows callback procedure, if ICON_MESSAGE arrives, try to execute
+ *	the taskbar_command.
  *
  * Results:
  *	Command execution.
@@ -772,7 +772,7 @@ TaskbarHandlerProc(
  *
  * RegisterHandlerClass --
  *
- * 	Registers the handler window class.
+ *	Registers the handler window class.
  *
  * Results:
  *	Handler class registered.
@@ -807,7 +807,7 @@ RegisterHandlerClass(
  *
  * CreateTaskbarHandlerWindow --
  *
- * 	Creates a hidden window to handle taskbar messages.
+ *	Creates a hidden window to handle taskbar messages.
  *
  * Results:
  *	Hidden window created.
@@ -886,7 +886,7 @@ WinIcoDestroy(
  *
  * WinSystrayCmd --
  *
- * 	Main command for creating, displaying, and removing icons from taskbar.
+ *	Main command for creating, displaying, and removing icons from taskbar.
  *
  * Results:
  *	Management of icon display in taskbar/system tray.
@@ -901,7 +901,7 @@ static int
 WinSystrayCmd(
     void *clientData,
     Tcl_Interp *interp,
-    int objc,
+    Tcl_Size objc,
     Tcl_Obj *const objv[])
 {
     static const char *const cmdStrings[] = {
@@ -983,7 +983,7 @@ WinSystrayCmd(
 		photo = Tk_FindPhoto(interp, Tcl_GetString(imageObj));
 		if (photo == NULL) {
 		    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-			    "image \"%s\" doesn't exist", Tcl_GetString(imageObj)));
+			    "image \"%s\" does not exist", Tcl_GetString(imageObj)));
 		    return TCL_ERROR;
 		}
 		Tk_PhotoGetSize(photo, &width, &height);
@@ -1047,7 +1047,7 @@ WinSystrayCmd(
  *
  * WinSysNotifyCmd --
  *
- * 	Main command for creating and displaying notifications/balloons from system tray.
+ *	Main command for creating and displaying notifications/balloons from system tray.
  *
  * Results:
  *	Display of notifications.
@@ -1062,7 +1062,7 @@ static int
 WinSysNotifyCmd(
     void *clientData,
     Tcl_Interp *interp,
-    int objc,
+    Tcl_Size objc,
     Tcl_Obj *const objv[])
 {
     IcoInterpInfo *icoInterpPtr = (IcoInterpInfo*) clientData;
@@ -1128,7 +1128,7 @@ WinSysNotifyCmd(
  *
  * WinIcoInit --
  *
- * 	Initialize this package and create script-level commands.
+ *	Initialize this package and create script-level commands.
  *
  * Results:
  *	Initialization of code.
@@ -1158,9 +1158,9 @@ WinIcoInit(
     icoInterpPtr->hwnd = CreateTaskbarHandlerWindow();
     icoInterpPtr->nextPtr = firstIcoInterpPtr;
     firstIcoInterpPtr = icoInterpPtr;
-    Tcl_CreateObjCommand(interp, "::tk::systray::_systray", WinSystrayCmd,
+    Tcl_CreateObjCommand2(interp, "::tk::systray::_systray", WinSystrayCmd,
 	    icoInterpPtr, NULL);
-    Tcl_CreateObjCommand(interp, "::tk::sysnotify::_sysnotify", WinSysNotifyCmd,
+    Tcl_CreateObjCommand2(interp, "::tk::sysnotify::_sysnotify", WinSysNotifyCmd,
 	    icoInterpPtr, NULL);
 
     Tk_CreateEventHandler(mainWindow, StructureNotifyMask,

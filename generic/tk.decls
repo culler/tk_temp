@@ -334,7 +334,7 @@ declare 79 {
 }
 declare 80 {
     Tk_3DBorder	Tk_Get3DBorder(Tcl_Interp *interp, Tk_Window tkwin,
-	    Tk_Uid colorName)
+	    const char *colorName)
 }
 declare 81 {
     void Tk_GetAllBindings(Tcl_Interp *interp,
@@ -363,7 +363,7 @@ declare 87 {
     int Tk_GetCapStyle(Tcl_Interp *interp, const char *str, int *capPtr)
 }
 declare 88 {
-    XColor *Tk_GetColor(Tcl_Interp *interp, Tk_Window tkwin, Tk_Uid name)
+    XColor *Tk_GetColor(Tcl_Interp *interp, Tk_Window tkwin, const char *name)
 }
 declare 89 {
     XColor *Tk_GetColorByValue(Tk_Window tkwin, XColor *colorPtr)
@@ -374,13 +374,13 @@ declare 90 {
 }
 declare 91 {
     Tk_Cursor Tk_GetCursor(Tcl_Interp *interp, Tk_Window tkwin,
-	    Tk_Uid str)
+	    const char *str)
 }
 declare 92 {
     Tk_Cursor Tk_GetCursorFromData(Tcl_Interp *interp,
 	    Tk_Window tkwin, const char *source, const char *mask,
 	    int width, int height, int xHot, int yHot,
-	    Tk_Uid fg, Tk_Uid bg)
+	    const char *fg, const char *bg)
 }
 declare 93 {
     Tk_Font Tk_GetFont(Tcl_Interp *interp,
@@ -1002,6 +1002,10 @@ declare 271 {
     Tcl_Interp *Tk_Interp(Tk_Window tkwin)
 }
 
+
+# ----- BASELINE -- FOR -- 8.6.0 ----- #
+
+
 # TIP#580
 declare 274 {
     int Tk_AlwaysShowSelection(Tk_Window tkwin)
@@ -1067,6 +1071,33 @@ declare 290 {
     Window Tk_MakeWindow(Tk_Window tkwin, Window parent)
 }
 
+# ----- BASELINE -- FOR -- 9.0.0 ----- #
+
+# TIP#706
+declare 291 {
+    void Tk_UnderlineCharsInContext(Display *display,
+	   Drawable drawable, GC gc, Tk_Font tkfont,
+	   const char *string, Tcl_Size numBytes, int x, int y,
+	   Tcl_Size firstByte, Tcl_Size lastByte)
+}
+declare 292 {
+    void Tk_DrawCharsInContext(Display * display,
+	   Drawable drawable, GC gc, Tk_Font tkfont,
+	   const char *string, Tcl_Size numBytes, Tcl_Size rangeStart,
+	   Tcl_Size rangeLength, int x, int y)
+}
+declare 293 {
+    int Tk_MeasureCharsInContext(Tk_Font tkfont,
+	   const char *string, Tcl_Size numBytes, Tcl_Size rangeStart,
+	   Tcl_Size rangeLength, int maxPixels, int flags,
+	   int *lengthPtr)
+}
+
+# ----- BASELINE -- FOR -- 9.0.1 ----- #
+
+declare 294 {
+    void TkUnusedStubEntry(void)
+}
 
 # Define the platform specific public Tk interface.  These functions are
 # only available on the designated platform.

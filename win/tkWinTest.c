@@ -26,11 +26,11 @@ HWND tkWinCurrentDialog;
  * Forward declarations of functions defined later in this file:
  */
 
-static Tcl_ObjCmdProc TestclipboardObjCmd;
-static Tcl_ObjCmdProc TestwineventObjCmd;
-static Tcl_ObjCmdProc TestfindwindowObjCmd;
-static Tcl_ObjCmdProc TestgetwindowinfoObjCmd;
-static Tcl_ObjCmdProc TestwinlocaleObjCmd;
+static Tcl_ObjCmdProc2 TestclipboardObjCmd;
+static Tcl_ObjCmdProc2 TestwineventObjCmd;
+static Tcl_ObjCmdProc2 TestfindwindowObjCmd;
+static Tcl_ObjCmdProc2 TestgetwindowinfoObjCmd;
+static Tcl_ObjCmdProc2 TestwinlocaleObjCmd;
 static Tk_GetSelProc SetSelectionResult;
 
 /*
@@ -58,15 +58,15 @@ TkplatformtestInit(
      * Add commands for platform specific tests on MacOS here.
      */
 
-    Tcl_CreateObjCommand(interp, "testclipboard", TestclipboardObjCmd,
+    Tcl_CreateObjCommand2(interp, "testclipboard", TestclipboardObjCmd,
 	    Tk_MainWindow(interp), NULL);
-    Tcl_CreateObjCommand(interp, "testwinevent", TestwineventObjCmd,
+    Tcl_CreateObjCommand2(interp, "testwinevent", TestwineventObjCmd,
 	    Tk_MainWindow(interp), NULL);
-    Tcl_CreateObjCommand(interp, "testfindwindow", TestfindwindowObjCmd,
+    Tcl_CreateObjCommand2(interp, "testfindwindow", TestfindwindowObjCmd,
 	    Tk_MainWindow(interp), NULL);
-    Tcl_CreateObjCommand(interp, "testgetwindowinfo", TestgetwindowinfoObjCmd,
+    Tcl_CreateObjCommand2(interp, "testgetwindowinfo", TestgetwindowinfoObjCmd,
 	    Tk_MainWindow(interp), NULL);
-    Tcl_CreateObjCommand(interp, "testwinlocale", TestwinlocaleObjCmd,
+    Tcl_CreateObjCommand2(interp, "testwinlocale", TestwinlocaleObjCmd,
 	    Tk_MainWindow(interp), NULL);
     return TCL_OK;
 }
@@ -191,7 +191,7 @@ AppendSystemError(
     }
 
     snprintf(id, sizeof(id), "%ld", error);
-    Tcl_SetErrorCode(interp, "WINDOWS", id, msg, NULL);
+    Tcl_SetErrorCode(interp, "WINDOWS", id, msg, (char *)NULL);
     Tcl_AppendToObj(resultPtr, msg, length);
     Tcl_SetObjResult(interp, resultPtr);
 
@@ -231,7 +231,7 @@ static int
 TestclipboardObjCmd(
     void *clientData,	/* Main window for application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    int objc,			/* Number of arguments. */
+    Tcl_Size objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument values. */
 {
     Tk_Window tkwin = (Tk_Window)clientData;
@@ -265,7 +265,7 @@ static int
 TestwineventObjCmd(
     TCL_UNUSED(void *),
     Tcl_Interp *interp,		/* Current interpreter. */
-    int objc,			/* Number of arguments. */
+    Tcl_Size objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])		/* Argument strings. */
 {
     HWND hwnd = 0;
@@ -430,10 +430,10 @@ static int
 TestfindwindowObjCmd(
     TCL_UNUSED(void *),
     Tcl_Interp *interp,		/* Current interpreter. */
-    int objc,			/* Number of arguments. */
+    Tcl_Size objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument values. */
 {
-	LPCWSTR title = NULL, windowClass = NULL;
+    LPCWSTR title = NULL, windowClass = NULL;
     Tcl_DString titleString, classString;
     HWND hwnd = NULL;
     int r = TCL_OK;
@@ -502,7 +502,7 @@ static int
 TestgetwindowinfoObjCmd(
     TCL_UNUSED(void *),
     Tcl_Interp *interp,
-    int objc,
+    Tcl_Size objc,
     Tcl_Obj *const objv[])
 {
     Tcl_WideInt hwnd;
@@ -522,9 +522,9 @@ TestgetwindowinfoObjCmd(
 
     cch = GetClassNameW((HWND)INT2PTR(hwnd), buf, cchBuf);
     if (cch == 0) {
-    	Tcl_SetObjResult(interp, Tcl_NewStringObj("failed to get class name: ", TCL_INDEX_NONE));
-    	AppendSystemError(interp, GetLastError());
-    	return TCL_ERROR;
+	Tcl_SetObjResult(interp, Tcl_NewStringObj("failed to get class name: ", TCL_INDEX_NONE));
+	AppendSystemError(interp, GetLastError());
+	return TCL_ERROR;
     } else {
 	Tcl_DStringInit(&ds);
 	Tcl_WCharToUtfDString(buf, wcslen(buf), &ds);
@@ -559,7 +559,7 @@ static int
 TestwinlocaleObjCmd(
     TCL_UNUSED(void *),	/* Main window for application. */
     Tcl_Interp *interp,		/* Current interpreter. */
-    int objc,			/* Number of arguments. */
+    Tcl_Size objc,			/* Number of arguments. */
     Tcl_Obj *const objv[])	/* Argument values. */
 {
     if (objc != 1) {

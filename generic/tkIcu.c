@@ -1,8 +1,8 @@
 /*
  * tkIcu.c --
  *
- * 	tkIcu.c implements various Tk commands which can find
- * 	grapheme cluster and workchar bounderies in Unicode strings.
+ *	tkIcu.c implements various Tk commands which can find
+ *	grapheme cluster and workchar bounderies in Unicode strings.
  *
  * Copyright © 2021 Jan Nijtmans
  *
@@ -65,7 +65,7 @@ static int
 startEndOfCmd(
     void *clientData,
     Tcl_Interp *interp,
-    int objc,
+    Tcl_Size objc,
     Tcl_Obj *const objv[])
 {
     Tcl_DString ds;
@@ -100,19 +100,21 @@ startEndOfCmd(
 	return TCL_ERROR;
     }
     it = icu_open((UBreakIteratorTypex)(flags&3), locale,
-    		NULL, -1, &errorCode);
+		NULL, -1, &errorCode);
     if (it != NULL) {
 	errorCode = U_ZERO_ERRORZ;
 	ustr = (const uint16_t *)Tcl_DStringValue(&ds);
 	icu_setText(it, ustr, len, &errorCode);
     }
     if (it == NULL || errorCode != U_ZERO_ERRORZ) {
-    	Tcl_DStringFree(&ds);
-    	Tcl_SetObjResult(interp, Tcl_ObjPrintf("cannot open ICU iterator, errorcode: %d", (int)errorCode));
-    	Tcl_SetErrorCode(interp, "TK", "ICU", "CANNOTOPEN", (char *)NULL);
-    	return TCL_ERROR;
+	Tcl_DStringFree(&ds);
+	Tcl_SetObjResult(interp, Tcl_ObjPrintf("cannot open ICU iterator, errorcode: %d", (int)errorCode));
+	Tcl_SetErrorCode(interp, "TK", "ICU", "CANNOTOPEN", (char *)NULL);
+	return TCL_ERROR;
     }
-    if (idx > 0 && len != ulen) {
+    if (idx >= ulen) {
+	idx = len;
+    } else if (idx > 0 && len != ulen) {
 	/* The string contains codepoints > \uFFFF. Determine UTF-16 index */
 	Tcl_Size newIdx = 0;
 	for (Tcl_Size i = 0; i < idx; i++) {
@@ -158,7 +160,7 @@ startEndOfCmd(
 	    /* The string contains codepoints > \uFFFF. Determine UTF-32 index */
 	    Tcl_Size newIdx = 1;
 	    for (Tcl_Size i = 1; i < idx; i++) {
-    	if (((ustr[i-1]&0xFC00) != 0xD800) || ((ustr[i]&0xFC00) != 0xDC00)) newIdx++;
+	if (((ustr[i-1]&0xFC00) != 0xD800) || ((ustr[i]&0xFC00) != 0xDC00)) newIdx++;
 	    }
 	    idx = newIdx;
 	}
@@ -285,6 +287,11 @@ Icu_Init(
 	    icu_fns.name = (fn_icu_ ## name)				\
 		Tcl_FindSymbol(NULL, icu_fns.lib, symbol)
 	    ICU_SYM(open);
+	    if (!icu_fns.open && *icuversion) {
+		/* FreeBSD doesn't append the ICU version to the symbol name, see [1da19a69f8] */
+		*icuversion = 0;
+		ICU_SYM(open); /* try again without version suffix */
+	    }
 	    ICU_SYM(close);
 	    ICU_SYM(preceding);
 	    ICU_SYM(following);
@@ -297,15 +304,15 @@ Icu_Init(
     Tcl_MutexUnlock(&icu_mutex);
 
     if (icu_fns.lib != NULL) {
-	Tcl_CreateObjCommand(interp, "::tk::startOfCluster", startEndOfCmd,
+	Tcl_CreateObjCommand2(interp, "::tk::startOfCluster", startEndOfCmd,
 		INT2PTR(0), icuCleanup);
-	Tcl_CreateObjCommand(interp, "::tk::startOfNextWord", startEndOfCmd,
+	Tcl_CreateObjCommand2(interp, "::tk::startOfNextWord", startEndOfCmd,
 		INT2PTR(FLAG_WORD|FLAG_FOLLOWING), icuCleanup);
-	Tcl_CreateObjCommand(interp, "::tk::startOfPreviousWord", startEndOfCmd,
+	Tcl_CreateObjCommand2(interp, "::tk::startOfPreviousWord", startEndOfCmd,
 		INT2PTR(FLAG_WORD), icuCleanup);
-	Tcl_CreateObjCommand(interp, "::tk::endOfCluster", startEndOfCmd,
+	Tcl_CreateObjCommand2(interp, "::tk::endOfCluster", startEndOfCmd,
 		INT2PTR(FLAG_FOLLOWING), icuCleanup);
-	Tcl_CreateObjCommand(interp, "::tk::endOfWord", startEndOfCmd,
+	Tcl_CreateObjCommand2(interp, "::tk::endOfWord", startEndOfCmd,
 		INT2PTR(FLAG_WORD|FLAG_FOLLOWING|FLAG_SPACE), icuCleanup);
     icu_fns.nopen += 5;
     }

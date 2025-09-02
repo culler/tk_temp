@@ -374,12 +374,12 @@ enum {
 	}
     }
     else {
-    	if (winPtr && winPtr->wmInfoPtr) {
-    	    local.x -= winPtr->wmInfoPtr->xInParent;
-    	    local.y -= winPtr->wmInfoPtr->yInParent;
-    	} else {
-    	    return theEvent;
-    	}
+	if (winPtr && winPtr->wmInfoPtr) {
+	    local.x -= winPtr->wmInfoPtr->xInParent;
+	    local.y -= winPtr->wmInfoPtr->yInParent;
+	} else {
+	    return theEvent;
+	}
     }
 
     /*
@@ -509,8 +509,8 @@ enum {
 	    Tk_UpdatePointer(new_win, global.x, global.y, state);
 	} else if (eventType == NSMouseExited) {
 	    if ([NSApp tkDragTarget]) {
-	    	Tk_UpdatePointer((Tk_Window) [NSApp tkDragTarget],
-	    			 global.x, global.y, state);
+		Tk_UpdatePointer((Tk_Window) [NSApp tkDragTarget],
+				 global.x, global.y, state);
 	    } else {
 	    Tk_UpdatePointer(NULL, global.x, global.y, state);
 	    }
@@ -545,7 +545,7 @@ enum {
 	}
     } else {
 	static unsigned long scrollCounter = 0;
-	int delta;
+	unsigned delta;
 	CGFloat Delta;
 	Bool deltaIsPrecise = [theEvent hasPreciseScrollingDeltas];
 	XEvent xEvent = {0};
@@ -557,15 +557,15 @@ enum {
 	xEvent.xany.display = Tk_Display(target);
 	xEvent.xany.window = Tk_WindowId(target);
 	if (deltaIsPrecise) {
-	    int deltaX = [theEvent scrollingDeltaX];
-	    int deltaY = [theEvent scrollingDeltaY];
+	    unsigned deltaX = (unsigned)(int)[theEvent scrollingDeltaX];
+	    unsigned deltaY = (unsigned)(int)[theEvent scrollingDeltaY];
 	    delta = (deltaX << 16) | (deltaY & 0xffff);
 	    if (delta != 0) {
-	     	xEvent.type = TouchpadScroll;
-	     	xEvent.xbutton.state = state;
-	     	xEvent.xkey.keycode = delta;
-	     	xEvent.xany.serial = scrollCounter++;
-	     	Tk_QueueWindowEvent(&xEvent, TCL_QUEUE_TAIL);
+		xEvent.type = TouchpadScroll;
+		xEvent.xbutton.state = state;
+		xEvent.xkey.keycode = delta;
+		xEvent.xany.serial = scrollCounter++;
+		Tk_QueueWindowEvent(&xEvent, TCL_QUEUE_TAIL);
 	    }
 	} else {
 	    /*

@@ -73,9 +73,9 @@
  * Event(state)		Enter/Leave From -> To
  * ------------		----------------------
  * LastRelease(B | GB): restrict window -> anc(grab window, event window)
- * Grab(U | B): 	event window -> anc(grab window, event window)
+ * Grab(U | B):	event window -> anc(grab window, event window)
  * Grab(G):		anc(old grab window, event window) ->
- * 				anc(new grab window, event window)
+ *				anc(new grab window, event window)
  * Grab(GB):		restrict window -> anc(new grab window, event window)
  * Ungrab(G):		anc(grab window, event window) -> event window
  * Ungrab(GB):		restrict window -> event window
@@ -524,24 +524,24 @@ Tk_Grab(
     if (grabResult == GrabNotViewable) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		"grab failed: window not viewable", TCL_INDEX_NONE));
-	Tcl_SetErrorCode(interp, "TK", "GRAB", "UNVIEWABLE", NULL);
+	Tcl_SetErrorCode(interp, "TK", "GRAB", "UNVIEWABLE", (char *)NULL);
     } else if (grabResult == AlreadyGrabbed) {
     alreadyGrabbed:
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		"grab failed: another application has grab", TCL_INDEX_NONE));
-	Tcl_SetErrorCode(interp, "TK", "GRAB", "GRABBED", NULL);
+	Tcl_SetErrorCode(interp, "TK", "GRAB", "GRABBED", (char *)NULL);
     } else if (grabResult == GrabFrozen) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		"grab failed: keyboard or pointer frozen", TCL_INDEX_NONE));
-	Tcl_SetErrorCode(interp, "TK", "GRAB", "FROZEN", NULL);
+	Tcl_SetErrorCode(interp, "TK", "GRAB", "FROZEN", (char *)NULL);
     } else if (grabResult == GrabInvalidTime) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		"grab failed: invalid time", TCL_INDEX_NONE));
-	Tcl_SetErrorCode(interp, "TK", "GRAB", "BAD_TIME", NULL);
+	Tcl_SetErrorCode(interp, "TK", "GRAB", "BAD_TIME", (char *)NULL);
     } else {
 	Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		"grab failed for unknown reason (code %d)", grabResult));
-	Tcl_SetErrorCode(interp, "TK", "GRAB", "UNKNOWN", NULL);
+	Tcl_SetErrorCode(interp, "TK", "GRAB", "UNKNOWN", (char *)NULL);
     }
     return TCL_ERROR;
 }
@@ -781,12 +781,12 @@ TkPointerEvent(
 
     if ((eventPtr->type == MotionNotify) && !appGrabbed) {
 
-        /*
-         * Warp the mouse pointer with respect to window dispPtr->warpWindow
-         * if such a window was set in HandleEventGenerate.
-         */
+	/*
+	 * Warp the mouse pointer with respect to window dispPtr->warpWindow
+	 * if such a window was set in HandleEventGenerate.
+	 */
 
-        TkDoWarpWrtWin(dispPtr);
+	TkDoWarpWrtWin(dispPtr);
     }
 
     if (!appGrabbed) {
@@ -820,12 +820,12 @@ TkPointerEvent(
 	    return 0;
 	}
 
-        /*
-         * Warp the mouse pointer with respect to window dispPtr->warpWindow
-         * if such a window was set in HandleEventGenerate.
-         */
+	/*
+	 * Warp the mouse pointer with respect to window dispPtr->warpWindow
+	 * if such a window was set in HandleEventGenerate.
+	 */
 
-        TkDoWarpWrtWin(dispPtr);
+	TkDoWarpWrtWin(dispPtr);
 	return 1;
     }
 

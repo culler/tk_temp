@@ -16,12 +16,16 @@ static const struct {
     int value;
 } stateNames[] = {
     {"active", TTK_STATE_ACTIVE},		/* Mouse cursor is over widget or element */
-    {"alternate", TTK_STATE_ALTERNATE},	/* Widget-specific alternate display style */
+    {"alternate", TTK_STATE_ALTERNATE},		/* Widget-specific alternate display style */
     {"background", TTK_STATE_BACKGROUND},	/* Top-level window lost focus (Mac,Win "inactive") */
     {"disabled", TTK_STATE_DISABLED},		/* Widget is disabled */
-    {"focus", TTK_STATE_FOCUS},		/* Widget has keyboard focus */
-    {"hover", TTK_STATE_HOVER},		/* Mouse cursor is over widget */
+    {"first", TTK_STATE_FIRST},			/* First */
+    {"focus", TTK_STATE_FOCUS},			/* Widget has keyboard focus */
+    {"hover", TTK_STATE_HOVER},			/* Mouse cursor is over widget */
     {"invalid", TTK_STATE_INVALID},		/* Bad value */
+    {"last", TTK_STATE_LAST},			/* Last */
+    {"leaf", TTK_STATE_LEAF},			/* Leaf */
+    {"open", TTK_STATE_OPEN},			/* Open */
     {"pressed", TTK_STATE_PRESSED},		/* Pressed or "armed" */
     {"readonly", TTK_STATE_READONLY},		/* Editing/modification disabled */
     {"selected", TTK_STATE_SELECTED},		/* "on", "true", "current", etc. */
@@ -94,11 +98,11 @@ static int StateSpecSetFromAny(Tcl_Interp *interp, Tcl_Obj *objPtr)
 		break;
 	}
 
-    	if (stateNames[j].value == 0) {
+	if (stateNames[j].value == 0) {
 	    if (interp) {
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"Invalid state name %s", stateName));
-		Tcl_SetErrorCode(interp, "TTK", "VALUE", "STATE", NULL);
+		Tcl_SetErrorCode(interp, "TTK", "VALUE", "STATE", (char *)NULL);
 	    }
 	    return TCL_ERROR;
 	}
@@ -110,10 +114,13 @@ static int StateSpecSetFromAny(Tcl_Interp *interp, Tcl_Obj *objPtr)
 	}
     }
 
-    /* Invalidate old intrep:
+    /* Invalidate old intrep, but make sure there's a string rep, see [7231bf9941].
      */
-    if (objPtr->typePtr && objPtr->typePtr->freeIntRepProc) {
-	objPtr->typePtr->freeIntRepProc(objPtr);
+    if (objPtr->typePtr) {
+	(void)Tcl_GetString(objPtr);
+	if (objPtr->typePtr->freeIntRepProc) {
+	    objPtr->typePtr->freeIntRepProc(objPtr);
+	}
     }
 
     objPtr->typePtr = &StateSpecObjType.objType;
@@ -191,14 +198,14 @@ int Ttk_GetStateSpecFromObj(
 /*
  * Tk_StateMapLookup --
  *
- * 	A state map is a paired list of StateSpec / value pairs.
+ *	A state map is a paired list of StateSpec / value pairs.
  *	Returns the value corresponding to the first matching state
  *	specification, or NULL if not found or an error occurs.
  */
 Tcl_Obj *Ttk_StateMapLookup(
     Tcl_Interp *interp,		/* Where to leave error messages; may be NULL */
     Ttk_StateMap map,		/* State map */
-    Ttk_State state)    	/* State to look up */
+    Ttk_State state)	/* State to look up */
 {
     Tcl_Obj **specs;
     Tcl_Size j, nSpecs;
@@ -218,15 +225,15 @@ Tcl_Obj *Ttk_StateMapLookup(
     }
     if (interp) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj("No match in state map", -1));
-	Tcl_SetErrorCode(interp, "TTK", "STATE", "UNMATCHED", NULL);
+	Tcl_SetErrorCode(interp, "TTK", "STATE", "UNMATCHED", (char *)NULL);
     }
     return NULL;
 }
 
 /* Ttk_GetStateMapFromObj --
- * 	Returns a Ttk_StateMap from a Tcl_Obj*.
- * 	Since a Ttk_StateMap is just a specially-formatted Tcl_Obj,
- * 	this basically just checks for errors.
+ *	Returns a Ttk_StateMap from a Tcl_Obj*.
+ *	Since a Ttk_StateMap is just a specially-formatted Tcl_Obj,
+ *	this basically just checks for errors.
  */
 Ttk_StateMap Ttk_GetStateMapFromObj(
     Tcl_Interp *interp,		/* Where to leave error messages; may be NULL */
@@ -244,7 +251,7 @@ Ttk_StateMap Ttk_GetStateMapFromObj(
 	if (interp) {
 	    Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		    "State map must have an even number of elements", -1));
-	    Tcl_SetErrorCode(interp, "TTK", "VALUE", "STATEMAP", NULL);
+	    Tcl_SetErrorCode(interp, "TTK", "VALUE", "STATEMAP", (char *)NULL);
 	}
 	return 0;
     }
@@ -260,7 +267,7 @@ Ttk_StateMap Ttk_GetStateMapFromObj(
 
 /*
  * Ttk_StateTableLooup --
- * 	Look up an index from a statically allocated state table.
+ *	Look up an index from a statically allocated state table.
  */
 int Ttk_StateTableLookup(const Ttk_StateTable *map, Ttk_State state)
 {

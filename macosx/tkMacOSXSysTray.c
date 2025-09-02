@@ -149,7 +149,7 @@ typedef TkStatusItem** StatusItemInfo;
  *
  * MacSystrayDestroy --
  *
- * 	Removes an intepreters icon from the status bar.
+ *	Removes an intepreters icon from the status bar.
  *
  * Results:
  *	None.
@@ -176,8 +176,8 @@ MacSystrayDestroy(
  *
  * MacSystrayObjCmd --
  *
- * 	Main command for creating, displaying, and removing icons from the
- * 	status bar.
+ *	Main command for creating, displaying, and removing icons from the
+ *	status bar.
  *
  * Results:
  *
@@ -194,7 +194,7 @@ static int
 MacSystrayObjCmd(
     void *clientData,
     Tcl_Interp * interp,
-    int objc,
+    Tcl_Size objc,
     Tcl_Obj *const *objv)
 {
     Tk_Image tk_image;
@@ -226,7 +226,7 @@ MacSystrayObjCmd(
 				       sizeof(char *), "command", 0, &idx);
 
     if (result != TCL_OK) {
-    	return TCL_ERROR;
+	return TCL_ERROR;
     }
     switch((optionsEnum)idx) {
     case TRAY_CREATE: {
@@ -400,7 +400,7 @@ MacSystrayObjCmd(
 static int SysNotifyObjCmd(
     TCL_UNUSED(void *),
     Tcl_Interp * interp,
-    int objc,
+    Tcl_Size objc,
     Tcl_Obj *const *objv)
 {
     if (objc < 3) {
@@ -453,7 +453,7 @@ static int SysNotifyObjCmd(
  *
  * MacSystrayInit --
  *
- * 	Initialize this package and create script-level commands.
+ *	Initialize this package and create script-level commands.
  *      This is called from TkpInit for each interpreter.
  *
  * Results:
@@ -479,9 +479,9 @@ MacSystrayInit(Tcl_Interp *interp)
     StatusItemInfo info = (StatusItemInfo) ckalloc(sizeof(StatusItemInfo));
     *info = 0;
 
-    Tcl_CreateObjCommand(interp, "::tk::systray::_systray", MacSystrayObjCmd, info,
+    Tcl_CreateObjCommand2(interp, "::tk::systray::_systray", MacSystrayObjCmd, info,
 	    MacSystrayDestroy);
-    Tcl_CreateObjCommand(interp, "::tk::sysnotify::_sysnotify", SysNotifyObjCmd, NULL, NULL);
+    Tcl_CreateObjCommand2(interp, "::tk::sysnotify::_sysnotify", SysNotifyObjCmd, NULL, NULL);
     return TCL_OK;
 }
 

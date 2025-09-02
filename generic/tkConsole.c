@@ -51,13 +51,13 @@ static int	ConsoleHandle(void *instanceData, int direction,
 		    void **handlePtr);
 static int	ConsoleInput(void *instanceData, char *buf, int toRead,
 		    int *errorCode);
-static Tcl_ObjCmdProc ConsoleObjCmd;
+static Tcl_ObjCmdProc2 ConsoleObjCmd;
 static int	ConsoleOutput(void *instanceData, const char *buf,
 		    int toWrite, int *errorCode);
 static void	ConsoleWatch(void *instanceData, int mask);
 static void	DeleteConsoleInterp(void *clientData);
 static void	InterpDeleteProc(void *clientData, Tcl_Interp *interp);
-static Tcl_ObjCmdProc InterpreterObjCmd;
+static Tcl_ObjCmdProc2 InterpreterObjCmd;
 
 /*
  * This structure describes the channel type structure for file based IO:
@@ -196,9 +196,9 @@ ShouldUseConsoleChannel(
  *
  * Tk_InitConsoleChannels --
  *
- * 	Create the console channels and install them as the standard channels.
- * 	All I/O will be discarded until Tk_CreateConsoleWindow is called to
- * 	attach the console to a text widget.
+ *	Create the console channels and install them as the standard channels.
+ *	All I/O will be discarded until Tk_CreateConsoleWindow is called to
+ *	attach the console to a text widget.
  *
  * Results:
  *	None.
@@ -222,7 +222,7 @@ Tk_InitConsoleChannels(
      * Ensure that we are getting a compatible version of Tcl.
      */
 
-    if (Tcl_InitStubs(interp, "8.7-", 0) == NULL) {
+    if (Tcl_InitStubs(interp, "9.0", 0) == NULL) {
 	return;
     }
 
@@ -421,7 +421,7 @@ Tk_CreateConsoleWindow(
      * Add console commands to the interp
      */
 
-    token = Tcl_CreateObjCommand(interp, "console", ConsoleObjCmd, info,
+    token = Tcl_CreateObjCommand2(interp, "console", ConsoleObjCmd, info,
 	    ConsoleDeleteProc);
     info->refCount++;
 
@@ -430,7 +430,7 @@ Tk_CreateConsoleWindow(
      * in the consoleInterp.  The ref held by the consoleInterp delete
      * handler takes care of us.
      */
-    Tcl_CreateObjCommand(consoleInterp, "consoleinterp", InterpreterObjCmd,
+    Tcl_CreateObjCommand2(consoleInterp, "consoleinterp", InterpreterObjCmd,
 	    info, NULL);
 
     mainWindow = Tk_MainWindow(interp);
@@ -692,7 +692,7 @@ static int
 ConsoleObjCmd(
     void *clientData,	/* Access to the console interp */
     Tcl_Interp *interp,		/* Current interpreter */
-    int objc,			/* Number of arguments */
+    Tcl_Size objc,			/* Number of arguments */
     Tcl_Obj *const objv[])	/* Argument objects */
 {
     int index, result;
@@ -759,7 +759,7 @@ ConsoleObjCmd(
     } else {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		"no active console interp", TCL_INDEX_NONE));
-	Tcl_SetErrorCode(interp, "TK", "CONSOLE", "NONE", NULL);
+	Tcl_SetErrorCode(interp, "TK", "CONSOLE", "NONE", (char *)NULL);
 	result = TCL_ERROR;
     }
     Tcl_DecrRefCount(cmd);
@@ -784,7 +784,7 @@ static int
 InterpreterObjCmd(
     void *clientData,	/* */
     Tcl_Interp *interp,		/* Current interpreter */
-    int objc,			/* Number of arguments */
+    Tcl_Size objc,			/* Number of arguments */
     Tcl_Obj *const objv[])	/* Argument objects */
 {
     int index, result = TCL_OK;
@@ -810,14 +810,14 @@ InterpreterObjCmd(
     if ((otherInterp == NULL) || Tcl_InterpDeleted(otherInterp)) {
 	Tcl_SetObjResult(interp, Tcl_NewStringObj(
 		"no active parent interp", TCL_INDEX_NONE));
-	Tcl_SetErrorCode(interp, "TK", "CONSOLE", "NO_INTERP", NULL);
+	Tcl_SetErrorCode(interp, "TK", "CONSOLE", "NO_INTERP", (char *)NULL);
 	return TCL_ERROR;
     }
 
     Tcl_Preserve(otherInterp);
     switch ((enum option) index) {
     case OTHER_EVAL:
-   	result = Tcl_EvalObjEx(otherInterp, objv[2], TCL_EVAL_GLOBAL);
+	result = Tcl_EvalObjEx(otherInterp, objv[2], TCL_EVAL_GLOBAL);
 
 	/*
 	 * TODO: Should exceptions be filtered here?
@@ -828,7 +828,7 @@ InterpreterObjCmd(
 	Tcl_SetObjResult(interp, Tcl_GetObjResult(otherInterp));
 	break;
     case OTHER_RECORD:
-   	Tcl_RecordAndEvalObj(otherInterp, objv[2], TCL_EVAL_GLOBAL);
+	Tcl_RecordAndEvalObj(otherInterp, objv[2], TCL_EVAL_GLOBAL);
 
 	/*
 	 * By not setting result, we discard any exceptions or errors here and

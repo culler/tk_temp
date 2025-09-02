@@ -1358,7 +1358,7 @@ Tk_GetStyle(
     if (entryPtr == NULL) {
 	if (interp != NULL) {
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
-		    "style \"%s\" doesn't exist", name));
+		    "style \"%s\" does not exist", name));
 	    Tcl_SetErrorCode(interp, "TK", "LOOKUP", "STYLE", name, (char *)NULL);
 	}
 	return NULL;
@@ -1451,7 +1451,7 @@ SetStyleFromAny(
 
     style = Tk_GetStyle(interp, name);
     if (style == NULL) {
-    	return TCL_ERROR;
+	return TCL_ERROR;
     }
     objPtr->typePtr = &styleObjType.objType;
     objPtr->internalRep.twoPtrValue.ptr1 = style;

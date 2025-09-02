@@ -17,8 +17,8 @@
 #define _TK
 
 #include <tcl.h>
-#if (TCL_MAJOR_VERSION < 8) || (TCL_MAJOR_VERSION == 8) && (TCL_MINOR_VERSION < 7)
-#	error Tk 9.0 must be compiled with tcl.h from Tcl 8.7 or better
+#if (TCL_MAJOR_VERSION < 9)
+#	error Tk 9.1 must be compiled with tcl.h from Tcl 9.0 or better
 #endif
 
 #ifndef EXTERN
@@ -54,8 +54,7 @@ extern "C" {
  * library/tk.tcl	(1 LOC patch)
  * unix/configure.ac	(2 LOC Major, 2 LOC minor, 1 LOC patch)
  * win/configure.ac	(as above)
- * README		(sections 0 and 1)
- * macosx/Tk-Common.xcconfig (not patchlevel) 1 LOC
+ * README.md		(sections 0 and 1)
  * win/README		(not patchlevel)
  * unix/README		(not patchlevel)
  * unix/tk.spec		(1 LOC patch)
@@ -68,14 +67,15 @@ extern "C" {
 #ifndef TK_MAJOR_VERSION
 #   define TK_MAJOR_VERSION 9
 #endif
-#if TK_MAJOR_VERSION == 9
-#   define TK_MINOR_VERSION	0
-#   define TK_RELEASE_LEVEL	TCL_BETA_RELEASE
-#   define TK_RELEASE_SERIAL	3
+#if TK_MAJOR_VERSION != 9
+#   error "This header-file is for Tk 9 only"
+#endif
+#   define TK_MINOR_VERSION	1
+#   define TK_RELEASE_LEVEL	TCL_ALPHA_RELEASE
+#   define TK_RELEASE_SERIAL	1
 
-#   define TK_VERSION		"9.0"
-#   define TK_PATCH_LEVEL		"9.0b3"
-#endif /* TK_MAJOR_VERSION */
+#   define TK_VERSION		"9.1"
+#   define TK_PATCH_LEVEL		"9.1a1"
 
 /*
  * A special definition used to allow this header file to be included from
@@ -228,11 +228,8 @@ typedef struct Tk_OptionSpec {
  */
 
 #define TK_OPTION_DONT_SET_DEFAULT	(1 << 3)
-#if TCL_MAJOR_VERSION > 8
-#    define TK_OPTION_NULL_OK		TCL_NULL_OK
-#else
-#    define TK_OPTION_NULL_OK		(1 << 0)
-#endif
+#define TK_OPTION_NULL_OK		TCL_NULL_OK
+#define TK_OPTION_NEG_OK		(1 << 6) /* For TK_OPTION_PIXELS only, so no conflict with TK_OPTION_VAR */
 #define TK_OPTION_VAR(type)		((sizeof(type) < 2 * sizeof(int)) ? ((int)(sizeof(type)&(sizeof(int)-1))<<6) : (3<<6))
 #define TK_OPTION_ENUM_VAR		TK_OPTION_VAR(Tk_OptionType)
 
@@ -286,7 +283,6 @@ typedef struct Tk_SavedOption {
     Tcl_Obj *valuePtr;		/* The old value of the option, in the form of
 				 * a Tcl object; may be NULL if the value was
 				 * not saved as an object. */
-#if TCL_MAJOR_VERSION > 8
     long double internalForm;	/* The old value of the option, in some
 				 * internal representation such as an int or
 				 * (XColor *). Valid only if the field
@@ -297,9 +293,6 @@ typedef struct Tk_SavedOption {
 				 * bytes) is big enough. Also, using a long double
 				 * guarantees that the field is properly aligned
 				 * for storing large values. */
-#else
-    double internalForm;
-#endif
 } Tk_SavedOption;
 
 #ifdef TCL_MEM_DEBUG
@@ -416,11 +409,7 @@ typedef enum {
 #define TK_CONFIG_COLOR_ONLY		(1 << 1)
 #define TK_CONFIG_MONO_ONLY		(1 << 2)
 #define TK_CONFIG_DONT_SET_DEFAULT	(1 << 3)
-#if TCL_MAJOR_VERSION > 8
-#    define TK_CONFIG_NULL_OK		TCL_NULL_OK
-#else
-#    define TK_CONFIG_NULL_OK		(1 << 0)
-#endif
+#define TK_CONFIG_NULL_OK		TCL_NULL_OK
 #define TK_CONFIG_USER_BIT		0x100
 #endif /* __NO_OLD_CONFIG */
 
@@ -564,6 +553,7 @@ typedef struct Tk_FontMetrics {
 #define TK_WHOLE_WORDS		1
 #define TK_AT_LEAST_ONE		2
 #define TK_PARTIAL_OK		4
+#define TK_ISOLATE_END		32
 
 /*
  * Flags passed to Tk_ComputeTextLayout:
@@ -729,9 +719,9 @@ typedef XActivateDeactivateEvent XDeactivateEvent;
 #define Tk_Depth(tkwin)		(((Tk_FakeWin *) (tkwin))->depth)
 #define Tk_Visual(tkwin)	(((Tk_FakeWin *) (tkwin))->visual)
 #define Tk_WindowId(tkwin)	(((Tk_FakeWin *) (tkwin))->window)
-#define Tk_PathName(tkwin) 	(((Tk_FakeWin *) (tkwin))->pathName)
+#define Tk_PathName(tkwin)	(((Tk_FakeWin *) (tkwin))->pathName)
 #define Tk_Name(tkwin)		(((Tk_FakeWin *) (tkwin))->nameUid)
-#define Tk_Class(tkwin) 	(((Tk_FakeWin *) (tkwin))->classUid)
+#define Tk_Class(tkwin)	(((Tk_FakeWin *) (tkwin))->classUid)
 #define Tk_X(tkwin)		(((Tk_FakeWin *) (tkwin))->changes.x)
 #define Tk_Y(tkwin)		(((Tk_FakeWin *) (tkwin))->changes.y)
 #define Tk_Width(tkwin)		(((Tk_FakeWin *) (tkwin))->changes.width)
@@ -801,9 +791,7 @@ typedef struct Tk_FakeWin {
     unsigned long dummy7;	/* dirtyAtts */
     unsigned int flags;
     char *dummy8;		/* handlerList */
-#if defined(TK_USE_INPUT_METHODS) || (TCL_MAJOR_VERSION > 8)
     XIC dummy9;			/* inputContext */
-#endif /* TK_USE_INPUT_METHODS */
     void **dummy10;	/* tagPtr */
     Tcl_Size dummy11;		/* numTags */
     Tcl_Size dummy12;		/* optionLevel */
@@ -821,15 +809,9 @@ typedef struct Tk_FakeWin {
     int internalBorderBottom;
     int minReqWidth;
     int minReqHeight;
-#if defined(TK_USE_INPUT_METHODS) || (TCL_MAJOR_VERSION > 8)
     int dummy20;
-#endif /* TK_USE_INPUT_METHODS */
     char *dummy21;		/* geomMgrName */
     Tk_Window dummy22;		/* maintainerPtr */
-#if !defined(TK_USE_INPUT_METHODS) && (TCL_MAJOR_VERSION < 9)
-    XIC dummy9;			/* inputContext */
-    int dummy20;
-#endif /* TK_USE_INPUT_METHODS */
 } Tk_FakeWin;
 
 /*
@@ -978,7 +960,7 @@ typedef struct Tk_Item {
 				 * this canvas. Later items in list are drawn
 				 * just below earlier ones. */
     Tk_State state;		/* State of item. */
-    char *reserved1;		/* reserved for future use */
+    void *reserved1;		/* reserved for future use */
     int redraw_flags;		/* Some flags used in the canvas */
 
     /*
@@ -996,7 +978,7 @@ typedef struct Tk_Item {
  *
  * TK_ITEM_STATE_DEPENDANT -	1 means that object needs to be redrawn if the
  *				canvas state changes.
- * TK_ITEM_DONT_REDRAW - 	1 means that the object redraw is already been
+ * TK_ITEM_DONT_REDRAW -	1 means that the object redraw is already been
  *				prepared, so the general canvas code doesn't
  *				need to do that any more.
  */
@@ -1155,6 +1137,9 @@ typedef struct Tk_CanvasTextInfo {
     int cursorOn;		/* Non-zero means that an insertion cursor
 				 * should be displayed in focusItemPtr.
 				 * Read-only to items.*/
+    Tcl_Obj *insertBorderWidthObj;
+    Tcl_Obj *insertWidthObj;
+    Tcl_Obj *selBorderWidthObj;
 } Tk_CanvasTextInfo;
 
 /*
@@ -1197,8 +1182,8 @@ typedef struct Tk_Outline {
     Tk_Dash dash;		/* Dash pattern. */
     Tk_Dash activeDash;		/* Dash pattern if state is active. */
     Tk_Dash disabledDash;	/* Dash pattern if state is disabled. */
-    void *reserved1;		/* Reserved for future expansion. */
-    void *reserved2;
+    Tcl_Obj *offsetObj;		/* Dash offset. */
+    void *reserved2;		/* Reserved for future expansion. */
     void *reserved3;
     Tk_TSOffset tsoffset;	/* Stipple offset for outline. */
     XColor *color;		/* Outline color. */
@@ -1333,7 +1318,7 @@ typedef int (Tk_ImageStringWriteProc) (Tcl_Interp *interp, Tcl_Obj *format,
 	Tk_PhotoImageBlock *blockPtr);
 
 /*
- * The following alternate definitions are used with the Tk8.7 file format
+ * The following alternate definitions are used with the Tk9.0 file format
  * supporting a metadata dict, internal dstring and close file flag
  */
 

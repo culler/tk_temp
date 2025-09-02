@@ -10,7 +10,7 @@
 
 /* Bit fields for OptionSpec mask field:
  */
-#define STATE_CHANGED	 	(0x100)		/* -state option changed */
+#define STATE_CHANGED		(0x100)		/* -state option changed */
 #define DEFAULTSTATE_CHANGED	(0x200)		/* -default option changed */
 
 /*------------------------------------------------------------------------
@@ -135,10 +135,12 @@ static void
 BaseCleanup(void *recordPtr)
 {
     Base *basePtr = (Base *)recordPtr;
-    if (basePtr->base.textVariableTrace)
+    if (basePtr->base.textVariableTrace) {
 	Ttk_UntraceVariable(basePtr->base.textVariableTrace);
-    if (basePtr->base.imageSpec)
-    	TtkFreeImageSpec(basePtr->base.imageSpec);
+    }
+    if (basePtr->base.imageSpec) {
+	TtkFreeImageSpec(basePtr->base.imageSpec);
+    }
 }
 
 static void
@@ -272,7 +274,7 @@ static const Ttk_Ensemble LabelCommands[] = {
     { "configure",	TtkWidgetConfigureCommand,0 },
     { "identify",	TtkWidgetIdentifyCommand,0 },
     { "instate",	TtkWidgetInstateCommand,0 },
-    { "state",  	TtkWidgetStateCommand,0 },
+    { "state",	TtkWidgetStateCommand,0 },
     { "style",		TtkWidgetStyleCommand,0 },
     { 0,0,0 }
 };
@@ -287,8 +289,8 @@ static const WidgetSpec LabelWidgetSpec =
     BaseCleanup,		/* cleanupProc */
     BaseConfigure,		/* configureProc */
     BasePostConfigure,		/* postConfigureProc */
-    TtkWidgetGetLayout, 	/* getLayoutProc */
-    TtkWidgetSize, 		/* sizeProc */
+    TtkWidgetGetLayout,	/* getLayoutProc */
+    TtkWidgetSize,		/* sizeProc */
     TtkWidgetDoLayout,		/* layoutProc */
     TtkWidgetDisplay		/* displayProc */
 };
@@ -356,7 +358,7 @@ static int ButtonConfigure(Tcl_Interp *interp, void *recordPtr, int mask)
 }
 
 /* $button invoke --
- * 	Evaluate the button's -command.
+ *	Evaluate the button's -command.
  */
 static int
 ButtonInvokeCommand(
@@ -379,7 +381,7 @@ static const Ttk_Ensemble ButtonCommands[] = {
     { "identify",	TtkWidgetIdentifyCommand,0 },
     { "instate",	TtkWidgetInstateCommand,0 },
     { "invoke",		ButtonInvokeCommand,0 },
-    { "state",  	TtkWidgetStateCommand,0 },
+    { "state",	TtkWidgetStateCommand,0 },
     { "style",		TtkWidgetStyleCommand,0 },
     { 0,0,0 }
 };
@@ -395,7 +397,7 @@ static const WidgetSpec ButtonWidgetSpec =
     ButtonConfigure,		/* configureProc */
     BasePostConfigure,		/* postConfigureProc */
     TtkWidgetGetLayout,		/* getLayoutProc */
-    TtkWidgetSize, 		/* sizeProc */
+    TtkWidgetSize,		/* sizeProc */
     TtkWidgetDoLayout,		/* layoutProc */
     TtkWidgetDisplay		/* displayProc */
 };
@@ -404,7 +406,7 @@ TTK_BEGIN_LAYOUT(ButtonLayout)
     TTK_GROUP("Button.border", TTK_FILL_BOTH|TTK_BORDER,
 	TTK_GROUP("Button.focus", TTK_FILL_BOTH,
 	    TTK_GROUP("Button.padding", TTK_FILL_BOTH,
-	        TTK_NODE("Button.label", TTK_FILL_BOTH))))
+		TTK_NODE("Button.label", TTK_FILL_BOTH))))
 TTK_END_LAYOUT
 
 /*------------------------------------------------------------------------
@@ -505,11 +507,11 @@ CheckbuttonConfigure(Tcl_Interp *interp, void *recordPtr, int mask)
     Ttk_TraceHandle *vt = NULL;
 
     if (varName != NULL && *Tcl_GetString(varName) != '\0') {
-        vt = Ttk_TraceVariable(interp, varName,
+	vt = Ttk_TraceVariable(interp, varName,
 	    CheckbuttonVariableChanged, checkPtr);
-        if (!vt) {
+	if (!vt) {
 	    return TCL_ERROR;
-        }
+	}
     }
 
     if (BaseConfigure(interp, recordPtr, mask) != TCL_OK){
@@ -518,7 +520,7 @@ CheckbuttonConfigure(Tcl_Interp *interp, void *recordPtr, int mask)
     }
 
     if (checkPtr->checkbutton.variableTrace) {
-        Ttk_UntraceVariable(checkPtr->checkbutton.variableTrace);
+	Ttk_UntraceVariable(checkPtr->checkbutton.variableTrace);
     }
     checkPtr->checkbutton.variableTrace = vt;
 
@@ -540,7 +542,7 @@ CheckbuttonPostConfigure(Tcl_Interp *interp, void *recordPtr, int mask)
 
 /*
  * Checkbutton 'invoke' subcommand:
- * 	Toggles the checkbutton state.
+ *	Toggles the checkbutton state.
  */
 static int
 CheckbuttonInvokeCommand(
@@ -566,11 +568,11 @@ CheckbuttonInvokeCommand(
 	newValue = checkPtr->checkbutton.onValueObj;
 
     if (checkPtr->checkbutton.variableObj == NULL ||
-        *Tcl_GetString(checkPtr->checkbutton.variableObj) == '\0')
-        CheckbuttonVariableChanged(checkPtr, Tcl_GetString(newValue));
+	*Tcl_GetString(checkPtr->checkbutton.variableObj) == '\0')
+	CheckbuttonVariableChanged(checkPtr, Tcl_GetString(newValue));
     else if (Tcl_ObjSetVar2(interp,
-	        checkPtr->checkbutton.variableObj, NULL, newValue,
-	        TCL_GLOBAL_ONLY|TCL_LEAVE_ERR_MSG)
+		checkPtr->checkbutton.variableObj, NULL, newValue,
+		TCL_GLOBAL_ONLY|TCL_LEAVE_ERR_MSG)
 	    == NULL)
 	return TCL_ERROR;
 
@@ -587,7 +589,7 @@ static const Ttk_Ensemble CheckbuttonCommands[] = {
     { "identify",	TtkWidgetIdentifyCommand,0 },
     { "instate",	TtkWidgetInstateCommand,0 },
     { "invoke",		CheckbuttonInvokeCommand,0 },
-    { "state",  	TtkWidgetStateCommand,0 },
+    { "state",	TtkWidgetStateCommand,0 },
     { "style",		TtkWidgetStyleCommand,0 },
     /* MISSING: select, deselect, toggle */
     { 0,0,0 }
@@ -603,8 +605,8 @@ static const WidgetSpec CheckbuttonWidgetSpec =
     CheckbuttonCleanup,		/* cleanupProc */
     CheckbuttonConfigure,	/* configureProc */
     CheckbuttonPostConfigure,	/* postConfigureProc */
-    TtkWidgetGetLayout, 	/* getLayoutProc */
-    TtkWidgetSize, 		/* sizeProc */
+    TtkWidgetGetLayout,	/* getLayoutProc */
+    TtkWidgetSize,		/* sizeProc */
     TtkWidgetDoLayout,		/* layoutProc */
     TtkWidgetDisplay		/* displayProc */
 };
@@ -728,7 +730,7 @@ RadiobuttonPostConfigure(Tcl_Interp *interp, void *recordPtr, int mask)
 
 /*
  * Radiobutton 'invoke' subcommand:
- * 	Sets the radiobutton -variable to the -value, evaluates the -command.
+ *	Sets the radiobutton -variable to the -value, evaluates the -command.
  */
 static int
 RadiobuttonInvokeCommand(
@@ -764,7 +766,7 @@ static const Ttk_Ensemble RadiobuttonCommands[] = {
     { "identify",	TtkWidgetIdentifyCommand,0 },
     { "instate",	TtkWidgetInstateCommand,0 },
     { "invoke",		RadiobuttonInvokeCommand,0 },
-    { "state",  	TtkWidgetStateCommand,0 },
+    { "state",	TtkWidgetStateCommand,0 },
     { "style",		TtkWidgetStyleCommand,0 },
     /* MISSING: select, deselect */
     { 0,0,0 }
@@ -780,8 +782,8 @@ static const WidgetSpec RadiobuttonWidgetSpec =
     RadiobuttonCleanup,		/* cleanupProc */
     RadiobuttonConfigure,	/* configureProc */
     RadiobuttonPostConfigure,	/* postConfigureProc */
-    TtkWidgetGetLayout, 	/* getLayoutProc */
-    TtkWidgetSize, 		/* sizeProc */
+    TtkWidgetGetLayout,	/* getLayoutProc */
+    TtkWidgetSize,		/* sizeProc */
     TtkWidgetDoLayout,		/* layoutProc */
     TtkWidgetDisplay		/* displayProc */
 };
@@ -832,7 +834,7 @@ static const Ttk_Ensemble MenubuttonCommands[] = {
     { "configure",	TtkWidgetConfigureCommand,0 },
     { "cget",		TtkWidgetCgetCommand,0 },
     { "instate",	TtkWidgetInstateCommand,0 },
-    { "state",  	TtkWidgetStateCommand,0 },
+    { "state",	TtkWidgetStateCommand,0 },
     { "identify",	TtkWidgetIdentifyCommand,0 },
     { "style",		TtkWidgetStyleCommand,0 },
     { 0,0,0 }
@@ -841,15 +843,15 @@ static const Ttk_Ensemble MenubuttonCommands[] = {
 static const WidgetSpec MenubuttonWidgetSpec =
 {
     "TMenubutton",		/* className */
-    sizeof(Menubutton), 	/* recordSize */
-    MenubuttonOptionSpecs, 	/* optionSpecs */
-    MenubuttonCommands,  	/* subcommands */
-    BaseInitialize,     	/* initializeProc */
+    sizeof(Menubutton),	/* recordSize */
+    MenubuttonOptionSpecs,	/* optionSpecs */
+    MenubuttonCommands,	/* subcommands */
+    BaseInitialize,		/* initializeProc */
     BaseCleanup,		/* cleanupProc */
     BaseConfigure,		/* configureProc */
-    BasePostConfigure,  	/* postConfigureProc */
-    TtkWidgetGetLayout, 	/* getLayoutProc */
-    TtkWidgetSize, 		/* sizeProc */
+    BasePostConfigure,	/* postConfigureProc */
+    TtkWidgetGetLayout,	/* getLayoutProc */
+    TtkWidgetSize,		/* sizeProc */
     TtkWidgetDoLayout,		/* layoutProc */
     TtkWidgetDisplay		/* displayProc */
 };
@@ -859,7 +861,7 @@ TTK_BEGIN_LAYOUT(MenubuttonLayout)
 	TTK_GROUP("Menubutton.focus", TTK_FILL_BOTH,
 	    TTK_NODE("Menubutton.indicator", TTK_PACK_RIGHT)
 	    TTK_GROUP("Menubutton.padding", TTK_FILL_X,
-	        TTK_NODE("Menubutton.label", TTK_PACK_LEFT))))
+		TTK_NODE("Menubutton.label", TTK_PACK_LEFT))))
 TTK_END_LAYOUT
 
 /*------------------------------------------------------------------------

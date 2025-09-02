@@ -19,8 +19,8 @@
  *
  * If an application using Tcl_Main() is compiled with USE_TCL_STUBS,
  * Tcl_Main() will be replaced by a stub function, which loads
- * libtcl9.0.so/tcl90.dll and then calls its Tcl_MainEx(). If
- * libtcl9.0.so/tcl90.dll is not present (at runtime), a crash is what happens.
+ * libtcl9.1.so/tcl91.dll and then calls its Tcl_MainEx(). If
+ * libtcl9.1.so/tcl91.dll is not present (at runtime), a crash is what happens.
  *
  * So ... tkAppInit.c should not be compiled with USE_TCL_STUBS
  * (unless you want to use the TIP #596 functionality)
@@ -38,7 +38,7 @@
 #include <locale.h>
 #include <stdlib.h>
 #include <tchar.h>
-#if TCL_MAJOR_VERSION < 9 && TCL_MINOR_VERSION < 7
+#if (TCL_MAJOR_VERSION < 9)
 #   define Tcl_LibraryInitProc Tcl_PackageInitProc
 #   define Tcl_StaticLibrary Tcl_StaticPackage
 #endif
@@ -56,7 +56,7 @@ extern Tcl_LibraryInitProc Tktest_Init;
 #endif /* TK_TEST */
 
 #if !defined(TCL_USE_STATIC_PACKAGES)
-#   if TCL_MAJOR_VERSION > 8 || TCL_MINOR_VERSION > 6
+#   if TCL_MAJOR_VERSION > 8
 #	define TCL_USE_STATIC_PACKAGES 1
 #   else
 #	define TCL_USE_STATIC_PACKAGES 0
@@ -191,7 +191,7 @@ _tWinMain(
 
 #ifdef TK_LOCAL_MAIN_HOOK
     TK_LOCAL_MAIN_HOOK(&argc, &argv);
-#elif defined(UNICODE) && ((TCL_MAJOR_VERSION > 8) || (TCL_MINOR_VERSION > 6))
+#elif defined(UNICODE) && (TCL_MAJOR_VERSION > 8)
     /* This doesn't work on Windows without UNICODE, neither does it work with Tcl 8.6 */
     TclZipfs_AppHook(&argc, &argv);
 #endif
@@ -279,12 +279,13 @@ Tcl_AppInit(
     /*
      * Specify a user-specific startup file to invoke if the application is
      * run interactively. Typically the startup file is "~/.apprc" where "app"
-     * is the name of the application. If this line is deleted then no user-
-     * specific startup file will be run under any conditions.
+     * is the name of the application. If this line is deleted then no
+     * user-specific startup file will be run under any conditions.
      */
 
-    Tcl_ObjSetVar2(interp, Tcl_NewStringObj("tcl_rcFileName", -1), NULL,
-	    Tcl_NewStringObj("~/wishrc.tcl", -1), TCL_GLOBAL_ONLY);
+    (void) Tcl_EvalEx(interp,
+	    "set tcl_rcFileName [file tildeexpand ~/wishrc.tcl]",
+	    -1, TCL_EVAL_GLOBAL);
     return TCL_OK;
 }
 

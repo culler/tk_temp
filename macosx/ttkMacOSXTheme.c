@@ -136,7 +136,6 @@ static inline HIThemeButtonDrawInfo ComputeButtonDrawInfo(
  * define it to return nil.
  */
 
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1080
 static CGColorRef
 CGColorFromRGBA(
     CGFloat *rgba)
@@ -161,15 +160,6 @@ CGColorFromGray(
 }
 
 #define CGCOLOR(nscolor) (nscolor).CGColor
-
-#else
-
-#define CGCOLOR(nscolor) NULL
-#define CGColorFromRGBA(rgba) NULL
-#define CGColorFromGray(gray) NULL
-#define CGPathCreateWithRoundedRect(w, x, y, z) NULL
-
-#endif
 
 /*----------------------------------------------------------------------
  * +++ Utilities.
@@ -332,7 +322,7 @@ static void GetBackgroundColorRGBA(
 	    rgba[i] = containerPtr->privatePtr->fillRGBA[i];
 	}
     } else {
-	if ([NSApp macOSVersion] > 101300) {
+	if ([NSApp macOSVersion] >= 101400) {
 	    NSColorSpace *deviceRGB = [NSColorSpace deviceRGBColorSpace];
 	    NSColor *windowColor = [[NSColor windowBackgroundColor]
 		colorUsingColorSpace: deviceRGB];
@@ -422,6 +412,7 @@ static void FillBorder(
     if (bounds.size.width < 2) {
 	return;
     }
+    CHECK_RADIUS(radius, bounds);
     NSColorSpace *sRGB = [NSColorSpace sRGBColorSpace];
     CGPoint end = CGPointMake(bounds.origin.x, bounds.origin.y + bounds.size.height);
     CGFloat corner = (radius > 0 ? radius : 2.0) / bounds.size.height;
@@ -482,7 +473,7 @@ static void DrawFocusRing(
  *      drawn in a 3-step gradient and a solid gray face.
  *
  *      Note that this will produce a round button if length = width =
- *      2*radius.
+ *      2 * radius.
  */
 
 static void DrawGrayButton(
@@ -495,10 +486,8 @@ static void DrawGrayButton(
     int isDark = TkMacOSXInDarkMode(tkwin);
     GrayPalette palette = LookupGrayPalette(design, state, isDark);
     GrayColor faceGray = {.grayscale = 0.0, .alpha = 1.0};
-    CGFloat radius = 2 * design->radius <= bounds.size.height ?
-	design->radius : bounds.size.height / 2;
     if (palette.top <= 255.0) {
-	FillBorder(context, bounds, palette, radius);
+	FillBorder(context, bounds, palette, design->radius);
     }
     if (palette.face <= 255.0) {
 	faceGray.grayscale = palette.face / 255.0;
@@ -514,7 +503,8 @@ static void DrawGrayButton(
 	gray = (rgba[0] + rgba[1] + rgba[2]) / 3.0;
 	faceGray.grayscale = gray;
     }
-    FillRoundedRectangle(context, CGRectInset(bounds, 1, 1), radius - 1,
+    FillRoundedRectangle(context, CGRectInset(bounds, 1, 1),
+			 design->radius - 1,
 			 CGColorFromGray(faceGray));
 }
 
@@ -541,6 +531,7 @@ static void DrawAccentedButton(
     NSColorSpace *sRGB = [NSColorSpace sRGBColorSpace];
     CGColorRef faceColor = CGCOLOR(controlAccentColor());
     CGFloat radius = design->radius;
+    CHECK_RADIUS(radius, bounds);
     CGPathRef path = CGPathCreateWithRoundedRect(bounds, radius, radius, NULL);
     // This gradient should only be used for PushButtons and Tabs, and it needs
     // to be lighter at the top.
@@ -648,7 +639,7 @@ static void DrawEntry(
     CGColorRef backgroundColor;
     CGFloat bgRGBA[4];
     if (isDark) {
-    	GetBackgroundColorRGBA(context, tkwin, 0, NO, bgRGBA);
+	GetBackgroundColorRGBA(context, tkwin, 0, NO, bgRGBA);
 
 	/*
 	 * Lighten the entry background to provide contrast.
@@ -1369,7 +1360,8 @@ static void DrawGroupBox(
     int contrast,
     Bool save)
 {
-    CHECK_RADIUS(5, bounds)
+    CGFloat radius = 5;
+    CHECK_RADIUS(radius, bounds)
 
     CGPathRef path;
     CGColorRef backgroundColor, borderColor;
@@ -1377,7 +1369,7 @@ static void DrawGroupBox(
     backgroundColor = GetBackgroundCGColor(context, tkwin, contrast, save);
     borderColor = CGColorFromGray(boxBorder);
     CGContextSetFillColorWithColor(context, backgroundColor);
-    path = CGPathCreateWithRoundedRect(bounds, 5, 5, NULL);
+    path = CGPathCreateWithRoundedRect(bounds, radius, radius, NULL);
     CGContextClipToRect(context, bounds);
     CGContextBeginPath(context);
     CGContextAddPath(context, path);
@@ -1779,7 +1771,7 @@ static void ButtonElementDraw(
     case kThemeCheckBox:
     case kThemeRadioButton:
     case TkSidebarButton:
-    	break;
+	break;
 
     /*
      * Other buttons have a maximum height.   We have to deal with that.

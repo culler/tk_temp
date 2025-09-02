@@ -729,7 +729,7 @@ void
 TkpGetFontAttrsForChar(
     Tk_Window tkwin,		/* Window on the font's display */
     Tk_Font tkfont,		/* Font to query */
-    int c,         		/* Character of interest */
+    int c,			/* Character of interest */
     TkFontAttributes *faPtr)	/* Output: Font attributes */
 {
     WinFont *fontPtr = (WinFont *) tkfont;
@@ -988,11 +988,11 @@ Tk_MeasureChars(
 /*
  *---------------------------------------------------------------------------
  *
- * TkpMeasureCharsInContext --
+ * Tk_MeasureCharsInContext --
  *
  *	Determine the number of bytes from the string that will fit in the
  *	given horizontal span. The measurement is done under the assumption
- *	that TkpDrawCharsInContext() will be used to actually display the
+ *	that Tk_DrawCharsInContext() will be used to actually display the
  *	characters.
  *
  *	This one is almost the same as Tk_MeasureChars(), but with access to
@@ -1011,7 +1011,7 @@ Tk_MeasureChars(
  */
 
 int
-TkpMeasureCharsInContext(
+Tk_MeasureCharsInContext(
     Tk_Font tkfont,		/* Font in which characters will be drawn. */
     const char *source,		/* UTF-8 string to be displayed. Need not be
 				 * '\0' terminated. */
@@ -1355,14 +1355,14 @@ TkDrawAngledChars(
 /*
  *---------------------------------------------------------------------------
  *
- * TkpDrawCharsInContext --
+ * Tk_DrawCharsInContext --
  *
  *	Draw a string of characters on the screen like Tk_DrawChars(), but
  *	with access to all the characters on the line for context. On Windows
  *	this context isn't consulted, so we just call Tk_DrawChars().
   *
  *      Note: TK_DRAW_IN_CONTEXT being currently defined only on macOS, this
- *            function is unused (and possibly unfinished). See [7655f65ae7].
+ *            function is unused.
 *
  * Results:
  *	None.
@@ -1374,7 +1374,7 @@ TkDrawAngledChars(
  */
 
 void
-TkpDrawCharsInContext(
+Tk_DrawCharsInContext(
     Display *display,		/* Display on which to draw. */
     Drawable drawable,		/* Window or pixmap in which to draw. */
     GC gc,			/* Graphics context for drawing characters. */
@@ -1622,7 +1622,7 @@ InitFont(
     fmPtr->maxWidth	= tm.tmMaxCharWidth;
     fmPtr->fixed	= !(tm.tmPitchAndFamily & TMPF_FIXED_PITCH);
 
-    fontPtr->numSubFonts 	= 1;
+    fontPtr->numSubFonts	= 1;
     fontPtr->subFontArray	= fontPtr->staticSubFonts;
     InitSubFont(hdc, hFont, 1, &fontPtr->subFontArray[0]);
 
@@ -1694,7 +1694,7 @@ InitSubFont(
     int base,			/* Non-zero if this SubFont is being used as
 				 * the base font for a font object. */
     SubFont *subFontPtr)	/* Filled with SubFont constructed from above
-    				 * attributes. */
+				 * attributes. */
 {
     subFontPtr->hFont0	    = hFont;
     subFontPtr->familyPtr   = AllocFontFamily(hdc, hFont, base);
@@ -1883,7 +1883,7 @@ FreeFontFamily(
 	return;
     }
     if (familyPtr->refCount-- > 1) {
-    	return;
+	return;
     }
     for (i = 0; i < FONTMAP_PAGES; i++) {
 	if (familyPtr->fontMap[i] != NULL) {
@@ -2443,7 +2443,7 @@ CanUseFallback(
     if (fontPtr->numSubFonts >= SUBFONT_SPACE) {
 	SubFont *newPtr;
 
-    	newPtr = (SubFont *)ckalloc(sizeof(SubFont) * (fontPtr->numSubFonts + 1));
+	newPtr = (SubFont *)ckalloc(sizeof(SubFont) * (fontPtr->numSubFonts + 1));
 	memcpy(newPtr, fontPtr->subFontArray,
 		fontPtr->numSubFonts * sizeof(SubFont));
 	if (fontPtr->subFontArray != fontPtr->staticSubFonts) {

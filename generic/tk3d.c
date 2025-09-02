@@ -184,7 +184,7 @@ Tk_Get3DBorder(
     Tcl_Interp *interp,		/* Place to store an error message. */
     Tk_Window tkwin,		/* Token for window in which border will be
 				 * drawn. */
-    Tk_Uid colorName)		/* String giving name of color for window
+    const char *colorName)	/* String giving name of color for window
 				 * background. */
 {
     Tcl_HashEntry *hashPtr;
@@ -428,9 +428,7 @@ Tk_Free3DBorder(
 
     prevPtr = (TkBorder *)Tcl_GetHashValue(borderPtr->hashPtr);
     TkpFreeBorder(borderPtr);
-    if (borderPtr->bgColorPtr != NULL) {
-	Tk_FreeColor(borderPtr->bgColorPtr);
-    }
+    Tk_FreeColor(borderPtr->bgColorPtr);
     if (borderPtr->darkColorPtr != NULL) {
 	Tk_FreeColor(borderPtr->darkColorPtr);
     }
@@ -677,9 +675,10 @@ Tk_GetRelief(
 	relief = TK_RELIEF_SUNKEN;
     } else {
 	if (interp) {
+	    int ambigeous = (c == 'r' || c == 's') && (name[1] == '\0');
 	    Tcl_SetObjResult(interp,
-		    Tcl_ObjPrintf("bad relief \"%.50s\": must be %s",
-		    name, "flat, groove, raised, ridge, solid, or sunken"));
+		    Tcl_ObjPrintf("%s relief \"%.50s\": must be %s",
+		    ambigeous ? "ambigeous" : "bad", name, "flat, groove, raised, ridge, solid, or sunken"));
 	    Tcl_SetErrorCode(interp, "TK", "VALUE", "RELIEF", (char *)NULL);
 	}
 	return TCL_ERROR;
@@ -1421,14 +1420,17 @@ Tk_Get3DBorderColors(
     XColor *darkColorPtr,
     XColor *lightColorPtr)
 {
+    TkBorder *borderPtr = (TkBorder *)border;
+    const XColor *colorPtr = borderPtr->bgColorPtr ;
+
     if (bgColorPtr) {
-	*bgColorPtr = *((TkBorder *)border)->bgColorPtr;
+	*bgColorPtr = *colorPtr;
     }
     if (darkColorPtr) {
-	*darkColorPtr = *((TkBorder *) border)->darkColorPtr;
+	*darkColorPtr = borderPtr->darkColorPtr ? *borderPtr->darkColorPtr : *colorPtr;
     }
     if (lightColorPtr) {
-	*lightColorPtr = *((TkBorder *) border)->lightColorPtr;
+	*lightColorPtr = borderPtr->lightColorPtr ? *borderPtr->lightColorPtr : *colorPtr;
     }
 }
 

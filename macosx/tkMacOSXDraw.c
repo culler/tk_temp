@@ -14,6 +14,7 @@
  */
 
 #include "tkMacOSXPrivate.h"
+#include "tkMacOSXConstants.h"
 #include "tkMacOSXDebug.h"
 #include "tkButton.h"
 
@@ -264,8 +265,7 @@ Tk_MacOSXGetCGContextForDrawable(
 	    colorspace = CGColorSpaceCreateDeviceRGB();
 	    bitmapInfo |= kCGImageAlphaPremultipliedFirst;
 	}
-	macDraw->context = CGBitmapContextCreate(NULL,
-		(unsigned)macDraw->size.width,
+	macDraw->context = CGBitmapContextCreate(NULL, (unsigned)macDraw->size.width,
 		(unsigned)macDraw->size.height, bitsPerComponent, 0,
 		colorspace, bitmapInfo);
 	if (macDraw->context) {
@@ -1070,85 +1070,6 @@ XFillArcs(
 /*
  *----------------------------------------------------------------------
  *
- * TkScrollWindow --
- *
- *	Scroll a rectangle of the specified window and accumulate a damage
- *	region.
- *
- * Results:
- *	Returns 0 if the scroll generated no additional damage. Otherwise, sets
- *	the region that needs to be repainted after scrolling and returns 1.
- *      When drawRect was in use, this function used the now deprecated
- *      scrollRect method of NSView.  With the current updateLayer
- *      implementation, using a CGImage as the view's backing layer, we are
- *      able to use XCopyArea.  But both implementations are incomplete.
- *      They return a damage area which is just the source rectangle minus
- *      destination rectangle.  Other platforms, e.g. Windows, where
- *      this function is essentially provided by the windowing system,
- *      are able to add to the damage region the bounding rectangles of
- *      all subwindows which meet the source rectangle, even if they are
- *      contained in the destination rectangle.  The information needed
- *      to do that is not available in this module, as far as I know.
- *
- *      In fact, the Text widget is the only one which calls this
- *      function, and  textDisp.c compensates for this defect by using
- *      macOS-specific code.  This is possible because access to the
- *      list of all embedded windows in a Text widget is available in
- *      that module.
- *
- * Side effects:
- *	Scrolls the bits in the window.
- *
- *----------------------------------------------------------------------
- */
-
-int
-TkScrollWindow(
-    Tk_Window tkwin,		/* The window to be scrolled. */
-    GC gc,			/* GC for window to be scrolled. */
-    int x, int y,		/* Position rectangle to be scrolled. */
-    int width, int height,
-    int dx, int dy,		/* Distance rectangle should be moved. */
-    Region damageRgn)		/* Region to accumulate damage in. */
-{
-    Drawable drawable = Tk_WindowId(tkwin);
-    HIShapeRef srcRgn, dstRgn;
-    HIMutableShapeRef dmgRgn = HIShapeCreateMutable();
-    NSRect srcRect, dstRect;
-    int result = 0;
-
-    // Should behave more like TkScrollWindow on other platforms
-    if (XCopyArea(Tk_Display(tkwin), drawable, drawable, gc, x, y,
-	    (unsigned)width, (unsigned)height, x+dx, y+dy) == Success) {
-
-	/*
-	 * Compute the damage region, using Tk coordinates (origin at top left).
-	 */
-
-	srcRect = CGRectMake(x, y, width, height);
-	dstRect = CGRectOffset(srcRect, dx, dy);
-	srcRgn = HIShapeCreateWithRect(&srcRect);
-	dstRgn = HIShapeCreateWithRect(&dstRect);
-	ChkErr(HIShapeDifference, srcRgn, dstRgn, dmgRgn);
-	CFRelease(dstRgn);
-	CFRelease(srcRgn);
-	result = HIShapeIsEmpty(dmgRgn) ? 0 : 1;
-
-    }
-
-    /*
-     * Convert the HIShape dmgRgn into a TkRegion and store it.
-     */
-
-    TkMacOSXSetWithNativeRegion(damageRgn, dmgRgn);
-
-    CFRelease(dmgRgn);
-    return result;
-}
-
-/*
- *----------------------------------------------------------------------
- *
  * TkMacOSXSetUpGraphicsPort --
  *
  *	Set up the graphics port from the given GC.
@@ -1233,7 +1154,6 @@ TkMacOSXSetupDrawingContext(
 	 * updateLayer and return failure.
 	 */
 	canDraw = false;
-	[view setNeedsDisplay:YES];
 	goto end;
     }
 //#endif //disable clipping
@@ -1253,13 +1173,6 @@ TkMacOSXSetupDrawingContext(
 	    HIShapeGetBounds(dc.clipRgn, &clipBounds);
 	    clipBounds = CGRectApplyAffineTransform(clipBounds, t);
 	}
-
-	/*
-	 * Mark the view as needing to be redisplayed, since we are drawing
-	 * to its backing layer.
-	 */
-
-	[view setTkNeedsDisplay:YES];
 
 	/*
 	 * Workaround for an Apple bug.
@@ -1288,6 +1201,7 @@ TkMacOSXSetupDrawingContext(
 	 */
 
 	if (@available(macOS 12.0, *)) {
+#if MAC_OS_X_VERSION_MAX_ALLOWED > 120000
 	    NSAppearance *current = NSAppearance.currentDrawingAppearance;
 	    NSAppearance *effective = view.effectiveAppearance;
 	    if( current != effective) {
@@ -1295,6 +1209,7 @@ TkMacOSXSetupDrawingContext(
 		// Deprecations be damned!
 		NSAppearance.currentAppearance = effective;
 	    }
+#endif
 	} else {
 	    /*
 	     *It is not clear if this is a problem before macos 12.0, but
@@ -1447,11 +1362,25 @@ end:
 	dc.clipRgn = NULL;
     }
     *dcPtr = dc;
-    // The goal is to allow immediate drawing; canDraw == 0 should happen far less often.
-    if (0) fprintf(stderr, "tkmacosxsdc canDraw %d\n", canDraw);
     return canDraw;
 }
 
+/*
+ * Idle task to schedule a call to updateLayer so the results of drawing
+ * operations become visible. The call to nextEventMatchingMask has no effect,
+ * but it provides an opportunity for the window manager to call updateLayer.
+ */
+
+MODULE_SCOPE void
+TkMacOSXUpdateViewIdleTask(void *clientData) {
+    NSView *view = (NSView *) clientData;
+    [view setNeedsDisplay:YES];
+    [NSApp nextEventMatchingMask:NSAnyEventMask
+		       untilDate:[NSDate distantPast]
+			  inMode:NSDefaultRunLoopMode
+			 dequeue:NO];
+}
+
 /*
  *----------------------------------------------------------------------
  *
@@ -1485,6 +1414,14 @@ TkMacOSXRestoreDrawingContext(
 	CFRelease(dcPtr->clipRgn);
 	dcPtr->clipRgn = NULL;
     }
+
+    /*
+     * Schedule a call to updateLayer, since we have drawn on the view's
+     * backing layer.
+     */
+
+    Tcl_CancelIdleCall(TkMacOSXUpdateViewIdleTask, (void *) dcPtr->view);
+    Tcl_DoWhenIdle(TkMacOSXUpdateViewIdleTask, (void *) dcPtr->view);
 
 #ifdef TK_MAC_DEBUG
     bzero(dcPtr, sizeof(TkMacOSXDrawingContext));
@@ -1551,9 +1488,9 @@ TkMacOSXGetClipRgn(
  * Tk_ClipDrawableToRect --
  *
  *	Clip all drawing into the drawable d to the given rectangle. If width
- *	or height are negative, reset to no clipping.bThis is called by the
- *      Text widget to display each DLine, and by the Canvas widget when it
- *      is updating a sub rectangle in the canvas.
+ *	or height are negative, reset to no clipping. This is called by the
+ *	Text widget to display each DLine, and by the Canvas widget when it
+ *	is updating a sub rectangle in the canvas.
  *
  * Results:
  *	None.
@@ -1676,7 +1613,7 @@ TkMacOSXMakeStippleMap(
  *
  *	On the Macintosh, this puts a 1 pixel border in the bgGC color between
  *	the widget and the focus ring, except in the case where highlightWidth
- *	is 1, in which case the border is left out.
+ *	is 0 or 1, in which case the border is left out.
  *
  *	For proper Mac L&F, use highlightWidth of 3.
  *
@@ -1691,19 +1628,19 @@ TkMacOSXMakeStippleMap(
  */
 
 void
-Tk_DrawHighlightBorder (
+Tk_DrawHighlightBorder(
     Tk_Window tkwin,
     GC fgGC,
     GC bgGC,
     int highlightWidth,
     Drawable drawable)
 {
-    if (highlightWidth == 1) {
-	TkDrawInsetFocusHighlight (tkwin, fgGC, highlightWidth, drawable, 0);
+    if (highlightWidth <= 1) {
+	TkDrawInsetFocusHighlight(tkwin, fgGC, 1, drawable, 0);
     } else {
-	TkDrawInsetFocusHighlight (tkwin, bgGC, highlightWidth, drawable, 0);
+	TkDrawInsetFocusHighlight(tkwin, bgGC, highlightWidth, drawable, 0);
 	if (fgGC != bgGC) {
-	    TkDrawInsetFocusHighlight (tkwin, fgGC, highlightWidth - 1,
+	    TkDrawInsetFocusHighlight(tkwin, fgGC, highlightWidth - 1,
 		    drawable, 0);
 	}
     }

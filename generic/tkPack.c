@@ -233,7 +233,7 @@ Tk_PackObjCmd(
 	if (argv2[0] != '.') {
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "bad argument \"%s\": must be name of window", argv2));
-	    Tcl_SetErrorCode(interp, "TK", "VALUE", "WINDOW_PATH", NULL);
+	    Tcl_SetErrorCode(interp, "TK", "VALUE", "WINDOW_PATH", (char *)NULL);
 	    return TCL_ERROR;
 	}
 	return ConfigureContent(interp, tkwin, objc-2, objv+2);
@@ -246,7 +246,9 @@ Tk_PackObjCmd(
 	    if (TkGetWindowFromObj(interp, tkwin, objv[i], &content) != TCL_OK) {
 		continue;
 	    }
-	    contentPtr = GetPacker(content);
+	    if (!(contentPtr = GetPacker(content))) {
+		continue;
+	    }
 	    if ((contentPtr != NULL) && (contentPtr->containerPtr != NULL)) {
 		Tk_ManageGeometry(content, NULL, NULL);
 		if (contentPtr->containerPtr->tkwin != Tk_Parent(contentPtr->tkwin)) {
@@ -271,11 +273,13 @@ Tk_PackObjCmd(
 	if (TkGetWindowFromObj(interp, tkwin, objv[2], &content) != TCL_OK) {
 	    return TCL_ERROR;
 	}
-	contentPtr = GetPacker(content);
+	if (!(contentPtr = GetPacker(content))) {
+	    return TCL_OK;
+	}
 	if (contentPtr->containerPtr == NULL) {
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "window \"%s\" isn't packed", argv2));
-	    Tcl_SetErrorCode(interp, "TK", "PACK", "NOT_PACKED", NULL);
+	    Tcl_SetErrorCode(interp, "TK", "PACK", "NOT_PACKED", (char *)NULL);
 	    return TCL_ERROR;
 	}
 
@@ -325,7 +329,9 @@ Tk_PackObjCmd(
 	if (TkGetWindowFromObj(interp, tkwin, objv[2], &container) != TCL_OK) {
 	    return TCL_ERROR;
 	}
-	containerPtr = GetPacker(container);
+	if (!(containerPtr = GetPacker(container))) {
+	    return TCL_OK;
+	}
 	if (objc == 3) {
 	    Tcl_SetObjResult(interp,
 		    Tcl_NewBooleanObj(!(containerPtr->flags & DONT_PROPAGATE)));
@@ -382,7 +388,9 @@ Tk_PackObjCmd(
 	    return TCL_ERROR;
 	}
 	resultObj = Tcl_NewObj();
-	containerPtr = GetPacker(container);
+	if (!(containerPtr = GetPacker(container))) {
+	    return TCL_OK;
+	}
 	for (contentPtr = containerPtr->contentPtr; contentPtr != NULL;
 		contentPtr = contentPtr->nextPtr) {
 	    Tcl_ListObjAppendElement(NULL, resultObj,
@@ -919,11 +927,12 @@ YExpansion(
  * GetPacker --
  *
  *	This internal function is used to locate a Packer structure for a
- *	given window, creating one if one doesn't exist already.
+ *	window, creating one if one doesn't exist already, except if the window
+ *	is already dead.
  *
  * Results:
  *	The return value is a pointer to the Packer structure corresponding to
- *	tkwin.
+ *	tkwin, or NULL when tkwin is already dead.
  *
  * Side effects:
  *	A new packer structure may be created. If so, then a callback is set
@@ -941,6 +950,10 @@ GetPacker(
     Tcl_HashEntry *hPtr;
     int isNew;
     TkDisplay *dispPtr = ((TkWindow *) tkwin)->dispPtr;
+
+    if (((TkWindow *) tkwin)->flags & TK_ALREADY_DEAD) {
+	return NULL;
+    }
 
     if (!dispPtr->packInit) {
 	dispPtr->packInit = 1;
@@ -1061,11 +1074,7 @@ Unlink(
 
 static void
 DestroyPacker(
-#if TCL_MAJOR_VERSION > 8
     void *memPtr)		/* Info about packed window that is now dead. */
-#else
-    char *memPtr)
-#endif
 {
     Packer *packPtr = (Packer *)memPtr;
 
@@ -1243,10 +1252,13 @@ ConfigureContent(
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "can't pack \"%s\": it's a top-level window",
 		    Tcl_GetString(objv[j])));
-	    Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "TOPLEVEL", NULL);
+	    Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "TOPLEVEL", (char *)NULL);
 	    return TCL_ERROR;
 	}
-	contentPtr = GetPacker(content);
+	if (!(contentPtr = GetPacker(content))) {
+	    continue;
+	}
+
 	contentPtr->flags &= ~OLD_STYLE;
 
 	/*
@@ -1269,7 +1281,7 @@ ConfigureContent(
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"extra option \"%s\" (option with no value?)",
 			Tcl_GetString(objv[i])));
-		Tcl_SetErrorCode(interp, "TK", "PACK", "BAD_PARAMETER", NULL);
+		Tcl_SetErrorCode(interp, "TK", "PACK", "BAD_PARAMETER", (char *)NULL);
 		return TCL_ERROR;
 	    }
 	    if (Tcl_GetIndexFromObj(interp, objv[i], optionStrings,
@@ -1284,7 +1296,9 @@ ConfigureContent(
 			    != TCL_OK) {
 			return TCL_ERROR;
 		    }
-		    prevPtr = GetPacker(other);
+		    if (!(prevPtr = GetPacker(other))) {
+			continue;
+		    }
 		    if (prevPtr->containerPtr == NULL) {
 		    notPacked:
 			Tcl_SetObjResult(interp, Tcl_ObjPrintf(
@@ -1310,7 +1324,9 @@ ConfigureContent(
 			    != TCL_OK) {
 			return TCL_ERROR;
 		    }
-		    otherPtr = GetPacker(other);
+		    if (!(otherPtr = GetPacker(other))) {
+			continue;
+		    }
 		    if (otherPtr->containerPtr == NULL) {
 			goto notPacked;
 		    }
@@ -1349,7 +1365,7 @@ ConfigureContent(
 		    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			    "bad fill style \"%s\": must be "
 			    "none, x, y, or both", string));
-		    Tcl_SetErrorCode(interp, "TK", "VALUE", "FILL", NULL);
+		    Tcl_SetErrorCode(interp, "TK", "VALUE", "FILL", (char *)NULL);
 		    return TCL_ERROR;
 		}
 		break;
@@ -1359,7 +1375,9 @@ ConfigureContent(
 			    != TCL_OK) {
 			return TCL_ERROR;
 		    }
-		    containerPtr = GetPacker(other);
+		    if (!(containerPtr = GetPacker(other))) {
+			continue;
+		    }
 		    prevPtr = containerPtr->contentPtr;
 		    if (prevPtr != NULL) {
 			while (prevPtr->nextPtr != NULL) {
@@ -1375,7 +1393,7 @@ ConfigureContent(
 		    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			    "bad ipadx value \"%s\": must be positive screen"
 			    " distance", Tcl_GetString(objv[i+1])));
-		    Tcl_SetErrorCode(interp, "TK", "VALUE", "INT_PAD", NULL);
+		    Tcl_SetErrorCode(interp, "TK", "VALUE", "INT_PAD", (char *)NULL);
 		    return TCL_ERROR;
 		}
 		contentPtr->iPadX = tmp * 2;
@@ -1386,7 +1404,7 @@ ConfigureContent(
 		    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			    "bad ipady value \"%s\": must be positive screen"
 			    " distance", Tcl_GetString(objv[i+1])));
-		    Tcl_SetErrorCode(interp, "TK", "VALUE", "INT_PAD", NULL);
+		    Tcl_SetErrorCode(interp, "TK", "VALUE", "INT_PAD", (char *)NULL);
 		    return TCL_ERROR;
 		}
 		contentPtr->iPadY = tmp * 2;
@@ -1442,7 +1460,9 @@ ConfigureContent(
 	 */
 
 	if (!positionGiven) {
-	    containerPtr = GetPacker(Tk_Parent(content));
+	    if (!(containerPtr = GetPacker(Tk_Parent(content)))) {
+		continue;
+	    }
 	    prevPtr = containerPtr->contentPtr;
 	    if (prevPtr != NULL) {
 		while (prevPtr->nextPtr != NULL) {
@@ -1466,14 +1486,14 @@ ConfigureContent(
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"can't pack \"%s\" inside \"%s\"", Tcl_GetString(objv[j]),
 			Tk_PathName(containerPtr->tkwin)));
-		Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "HIERARCHY", NULL);
+		Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "HIERARCHY", (char *)NULL);
 		return TCL_ERROR;
 	    }
 	}
 	if (content == containerPtr->tkwin) {
 	    Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 		    "can't pack \"%s\" inside itself", Tcl_GetString(objv[j])));
-	    Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "SELF", NULL);
+	    Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "SELF", (char *)NULL);
 	    return TCL_ERROR;
 	}
 
@@ -1487,7 +1507,7 @@ ConfigureContent(
 		Tcl_SetObjResult(interp, Tcl_ObjPrintf(
 			"can't put \"%s\" inside \"%s\": would cause management loop",
 			Tcl_GetString(objv[j]), Tk_PathName(containerPtr->tkwin)));
-		Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "LOOP", NULL);
+		Tcl_SetErrorCode(interp, "TK", "GEOMETRY", "LOOP", (char *)NULL);
 		return TCL_ERROR;
 	    }
 	}

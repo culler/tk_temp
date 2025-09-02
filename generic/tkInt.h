@@ -533,11 +533,9 @@ typedef struct TkDisplay {
      * Miscellaneous information:
      */
 
-#if defined(TK_USE_INPUT_METHODS) || (TCL_MAJOR_VERSION > 8)
     XIM inputMethod;		/* Input method for this display. */
     XIMStyle inputStyle;	/* Input style selected for this display. */
     XFontSet inputXfs;		/* XFontSet cached for over-the-spot XIM. */
-#endif /* TK_USE_INPUT_METHODS */
     Tcl_HashTable winTable;	/* Maps from X window ids to TkWindow ptrs. */
 
     Tcl_Size refCount;		/* Reference count of how many Tk applications
@@ -563,11 +561,6 @@ typedef struct TkDisplay {
     int iconDataSize;		/* Size of default iconphoto image data. */
     unsigned char *iconDataPtr;	/* Default iconphoto image data, if set. */
     int ximGeneration;          /* Used to invalidate XIC */
-#if !defined(TK_USE_INPUT_METHODS) && (TCL_MAJOR_VERSION < 9)
-    XIM inputMethod;		/* Input method for this display. */
-    XIMStyle inputStyle;	/* Input style selected for this display. */
-    XFontSet inputXfs;		/* XFontSet cached for over-the-spot XIM. */
-#endif /* TK_USE_INPUT_METHODS */
 } TkDisplay;
 
 /*
@@ -646,11 +639,7 @@ typedef struct TkMainInfo {
     Tcl_HashTable nameTable;	/* Hash table mapping path names to TkWindow
 				 * structs for all windows related to this
 				 * main window. Managed by tkWindow.c. */
-#if TCL_MAJOR_VERSION > 8
     size_t deletionEpoch;		/* Incremented by window deletions. */
-#else
-    long deletionEpoch;
-#endif
     Tk_BindingTable bindingTable;
 				/* Used in conjunction with "bind" command to
 				 * bind events to Tcl commands. */
@@ -691,16 +680,14 @@ typedef struct TkMainInfo {
 				/* Saved Tcl [update] command, used to restore
 				 * Tcl's version of [update] after Tk is shut
 				 * down */
-#if TCL_MAJOR_VERSION > 8
     Tcl_ObjCmdProc2 *tclUpdateObjProc2;
 				/* Saved Tcl [update] command, used to restore
 				 * Tcl's version of [update] after Tk is shut
 				 * down, in case it's a Tcl_ObjCmdProc2 */
-#endif
     unsigned int ttkNbTabsStickBit;
-    				/* Information used by ttk::notebook. */
+				/* Information used by ttk::notebook. */
     int troughInnerX, troughInnerY, troughInnerWidth, troughInnerHeight;
-    				/* Information used by ttk::scale. */
+				/* Information used by ttk::scale. */
 } TkMainInfo;
 
 /*
@@ -713,7 +700,7 @@ typedef struct {
     const void *source;		/* Bits for bitmap. */
     int width, height;		/* Dimensions of bitmap. */
     int native;			/* 0 means generic (X style) bitmap, 1 means
-    				 * native style bitmap. */
+				 * native style bitmap. */
 } TkPredefBitmap;
 
 /*
@@ -801,9 +788,7 @@ typedef struct TkWindow {
 
     TkEventHandler *handlerList;/* First in list of event handlers declared
 				 * for this window, or NULL if none. */
-#if defined(TK_USE_INPUT_METHODS) || (TCL_MAJOR_VERSION > 8)
     XIC inputContext;		/* XIM input context. */
-#endif /* TK_USE_INPUT_METHODS */
 
     /*
      * Information used for event bindings (see "bind" and "bindtags" commands
@@ -882,18 +867,12 @@ typedef struct TkWindow {
 
     int minReqWidth;		/* Minimum requested width. */
     int minReqHeight;		/* Minimum requested height. */
-#if defined(TK_USE_INPUT_METHODS) || (TCL_MAJOR_VERSION > 8)
     int ximGeneration;          /* Used to invalidate XIC */
-#endif /* TK_USE_INPUT_METHODS */
     char *geomMgrName;          /* Records the name of the geometry manager. */
     struct TkWindow *maintainerPtr;
 				/* The geometry container for this window. The
 				 * value is NULL if the window has no container or
 				 * if its container is its parent. */
-#if !defined(TK_USE_INPUT_METHODS) && (TCL_MAJOR_VERSION < 9)
-    XIC inputContext;		/* XIM input context. */
-    int ximGeneration;          /* Used to invalidate XIC */
-#endif /* TK_USE_INPUT_METHODS */
 } TkWindow;
 
 /*
@@ -945,10 +924,6 @@ typedef struct {
  * commands and optionally to create sub-ensembles.
  */
 
-#if (TCL_MAJOR_VERSION < 9) && !defined(Tcl_ObjCmdProc2)
-#define Tcl_ObjCmdProc2 Tcl_ObjCmdProc
-#endif
-
 typedef struct TkEnsemble {
     const char *name;
     Tcl_ObjCmdProc2 *proc;
@@ -992,14 +967,6 @@ typedef struct TkpClipMask {
 #define TK_GRAB_EXCLUDED	3
 
 /*
- * Additional flag for TkpMeasureCharsInContext. Coordinate with other flags
- * for this routine, but don't make public until TkpMeasureCharsInContext is
- * made public, too.
- */
-
-#define TK_ISOLATE_END		32
-
-/*
  * The macro below is used to modify a "char" value (e.g. by casting it to an
  * unsigned character) so that it can be used safely with macros such as
  * isspace().
@@ -1036,17 +1003,25 @@ typedef struct TkpClipMask {
 # define Button9 9
 #endif
 
+/*
+ * The Button<B>Mask modifiers for <B> in {6 7 8 9}
+ * are internally used by Tk. They must be above the
+ * AnyModifier bit since anything below is reserved
+ * for the X protocol. If a future X11 version
+ * defines these, we adhere.
+ */
+
 #ifndef Button6Mask
-# define Button6Mask (1<<13)
+# define Button6Mask (AnyModifier<<6)
 #endif
 #ifndef Button7Mask
-# define Button7Mask (1<<14)
+# define Button7Mask (AnyModifier<<7)
 #endif
 #ifndef Button8Mask
-# define Button8Mask (AnyModifier<<4)
+# define Button8Mask (AnyModifier<<8)
 #endif
 #ifndef Button9Mask
-# define Button9Mask (AnyModifier<<5)
+# define Button9Mask (AnyModifier<<9)
 #endif
 
 /*
@@ -1193,7 +1168,7 @@ MODULE_SCOPE Tcl_ObjCmdProc Tk_RaiseObjCmd;
 MODULE_SCOPE Tcl_ObjCmdProc Tk_ScaleObjCmd;
 MODULE_SCOPE Tcl_ObjCmdProc Tk_ScrollbarObjCmd;
 MODULE_SCOPE Tcl_ObjCmdProc Tk_SelectionObjCmd;
-MODULE_SCOPE Tcl_ObjCmdProc Tk_SendObjCmd;
+MODULE_SCOPE Tcl_ObjCmdProc2 Tk_SendObjCmd;
 MODULE_SCOPE Tcl_ObjCmdProc Tk_SpinboxObjCmd;
 MODULE_SCOPE Tcl_ObjCmdProc Tk_TextObjCmd;
 MODULE_SCOPE Tcl_ObjCmdProc Tk_TkwaitObjCmd;
@@ -1207,7 +1182,6 @@ MODULE_SCOPE int	TkSetGeometryContainer(Tcl_Interp *interp,
 MODULE_SCOPE void	TkFreeGeometryContainer(Tk_Window tkwin,
 			    const char *name);
 
-MODULE_SCOPE void	TkEventInit(void);
 MODULE_SCOPE void	TkRegisterObjTypes(void);
 MODULE_SCOPE Tcl_ObjCmdProc TkDeadAppObjCmd;
 MODULE_SCOPE int	TkCanvasGetCoordObj(Tcl_Interp *interp,
@@ -1237,22 +1211,10 @@ MODULE_SCOPE int	TkParsePadAmount(Tcl_Interp *interp,
 			    int *pad1Ptr, int *pad2Ptr);
 MODULE_SCOPE void       TkFocusSplit(TkWindow *winPtr);
 MODULE_SCOPE void       TkFocusJoin(TkWindow *winPtr);
-MODULE_SCOPE void	TkpDrawCharsInContext(Display * display,
-			    Drawable drawable, GC gc, Tk_Font tkfont,
-			    const char *source, Tcl_Size numBytes, Tcl_Size rangeStart,
-			    Tcl_Size rangeLength, int x, int y);
 MODULE_SCOPE void	TkpDrawAngledCharsInContext(Display * display,
 			    Drawable drawable, GC gc, Tk_Font tkfont,
 			    const char *source, Tcl_Size numBytes, Tcl_Size rangeStart,
 			    Tcl_Size rangeLength, double x, double y, double angle);
-MODULE_SCOPE int	TkpMeasureCharsInContext(Tk_Font tkfont,
-			    const char *source, Tcl_Size numBytes, Tcl_Size rangeStart,
-			    Tcl_Size rangeLength, int maxLength, int flags,
-			    int *lengthPtr);
-MODULE_SCOPE void	TkUnderlineCharsInContext(Display *display,
-			    Drawable drawable, GC gc, Tk_Font tkfont,
-			    const char *string, Tcl_Size numBytes, int x, int y,
-			    Tcl_Size firstByte, Tcl_Size lastByte);
 MODULE_SCOPE void	TkpGetFontAttrsForChar(Tk_Window tkwin, Tk_Font tkfont,
 			    int c, struct TkFontAttributes *faPtr);
 MODULE_SCOPE void	TkpDrawFrameEx(Tk_Window tkwin, Drawable drawable,
@@ -1268,10 +1230,13 @@ MODULE_SCOPE void	TkpCreateBusy(Tk_FakeWin *winPtr, Tk_Window tkRef,
 			    TkBusy busy);
 MODULE_SCOPE int	TkBackgroundEvalObjv(Tcl_Interp *interp,
 			    Tcl_Size objc, Tcl_Obj *const *objv, int flags);
+MODULE_SCOPE void	TkDrawDottedRect(Display *disp, Drawable d, GC gc,
+			    int x, int y, int width, int height);
 MODULE_SCOPE Tcl_Command TkMakeEnsemble(Tcl_Interp *interp,
 			    const char *nsname, const char *name,
 			    void *clientData, const TkEnsemble *map);
 MODULE_SCOPE double	TkScalingLevel(Tk_Window tkwin);
+MODULE_SCOPE int	TkObjIsEmpty(Tcl_Obj *objPtr);
 MODULE_SCOPE int	TkInitTkCmd(Tcl_Interp *interp,
 			    void *clientData);
 MODULE_SCOPE int	TkInitFontchooser(Tcl_Interp *interp,
@@ -1328,10 +1293,6 @@ MODULE_SCOPE void	TkpCopyRegion(TkRegion dst, TkRegion src);
 # define c_class class
 #endif
 
-#if defined(_WIN32) && !defined(STATIC_BUILD) && TCL_MAJOR_VERSION < 9
-#   define tcl_CreateFileHandler reserved9
-#endif
-
 MODULE_SCOPE  void       Icu_Init(Tcl_Interp* interp);
 
 /*
@@ -1343,7 +1304,7 @@ MODULE_SCOPE Tcl_ObjCmdProc TkUnsupported1ObjCmd;
 /*
  * For Tktest.
  */
-MODULE_SCOPE Tcl_ObjCmdProc SquareObjCmd;
+MODULE_SCOPE Tcl_ObjCmdProc2 SquareObjCmd;
 #if !(defined(_WIN32) || defined(MAC_OSX_TK))
 #define TkplatformtestInit(x) TCL_OK
 #else

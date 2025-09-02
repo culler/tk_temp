@@ -24,8 +24,6 @@
 #include "tkMacOSXInt.h"
 #endif
 
-#define OK_TO_LOG 1
-
 /*
  * "Calculations of line pixel heights and the size of the vertical
  * scrollbar."
@@ -81,7 +79,7 @@
  *	always performed with maximum context.
  *
  *	This is necessary for text rendering engines that provide ligatures
- *	and sub-pixel layout, like ATSU on Mac. If we don't do this, the
+ *	and sub-pixel layout, like ATSU on macOS. If we don't do this, the
  *	measuring will change all the time, leading to an ugly "tremble and
  *	shiver" effect. This is because of the continuous splitting and
  *	re-merging of chunks that goes on in a text widget, when the cursor or
@@ -205,20 +203,13 @@ typedef struct TextStyle {
 
 /*
  * Macros to make debugging/testing logging a little easier.
- *
- * On OSX 10.14 Drawing procedures are sometimes run because the system has
- * decided to redraw the window.  This can corrupt the data that a test is
- * trying to collect.  So we don't write to the logging variables when the
- * drawing procedure is being run that way.  Other systems can always log.
  */
 
 #define LOG(toVar,what)							\
-    if (OK_TO_LOG)							\
-	Tcl_SetVar2(textPtr->interp, toVar, NULL, (what),		\
-		    TCL_GLOBAL_ONLY|TCL_APPEND_VALUE|TCL_LIST_ELEMENT)
+    Tcl_SetVar2(textPtr->interp, toVar, NULL, (what),			\
+		TCL_GLOBAL_ONLY|TCL_APPEND_VALUE|TCL_LIST_ELEMENT)
 #define CLEAR(var)							\
-    if (OK_TO_LOG)							\
-	Tcl_SetVar2(interp, var, NULL, "", TCL_GLOBAL_ONLY)
+    Tcl_SetVar2(interp, var, NULL, "", TCL_GLOBAL_ONLY)
 
 /*
  * The following structure describes one line of the display, which may be
@@ -813,9 +804,9 @@ GetStyle(
     styleValues.overstrikeColor = textPtr->fgColor;
     styleValues.tkfont = textPtr->tkfont;
     styleValues.justify = TK_JUSTIFY_LEFT;
-    styleValues.spacing1 = textPtr->spacing1;
-    styleValues.spacing2 = textPtr->spacing2;
-    styleValues.spacing3 = textPtr->spacing3;
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->spacing1Obj, &styleValues.spacing1);
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->spacing2Obj, &styleValues.spacing2);
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->spacing3Obj, &styleValues.spacing3);
     styleValues.tabArrayPtr = textPtr->tabArrayPtr;
     styleValues.tabStyle = textPtr->tabStyle;
     styleValues.wrapMode = textPtr->wrapMode;
@@ -867,10 +858,10 @@ GetStyle(
 	    styleValues.border = border;
 	    borderPrio = tagPtr->priority;
 	}
-	if ((tagPtr->borderWidthPtr != NULL)
-		&& (Tcl_GetString(tagPtr->borderWidthPtr)[0] != '\0')
+	if ((tagPtr->borderWidthObj != NULL)
+		&& (Tcl_GetString(tagPtr->borderWidthObj)[0] != '\0')
 		&& (tagPtr->priority > borderWidthPrio)) {
-	    styleValues.borderWidth = tagPtr->borderWidth;
+	    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, tagPtr->borderWidthObj, &styleValues.borderWidth);
 	    borderWidthPrio = tagPtr->priority;
 	}
 	if ((tagPtr->relief != TK_RELIEF_NULL)
@@ -904,14 +895,14 @@ GetStyle(
 	    styleValues.justify = tagPtr->justify;
 	    justifyPrio = tagPtr->priority;
 	}
-	if ((tagPtr->lMargin1 != INT_MIN)
+	if ((tagPtr->lMargin1Obj != NULL)
 		&& (tagPtr->priority > lMargin1Prio)) {
-	    styleValues.lMargin1 = tagPtr->lMargin1;
+	    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, tagPtr->lMargin1Obj, &styleValues.lMargin1);
 	    lMargin1Prio = tagPtr->priority;
 	}
-	if ((tagPtr->lMargin2 != INT_MIN)
+	if ((tagPtr->lMargin2Obj != NULL)
 		&& (tagPtr->priority > lMargin2Prio)) {
-	    styleValues.lMargin2 = tagPtr->lMargin2;
+	    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, tagPtr->lMargin2Obj, &styleValues.lMargin2);
 	    lMargin2Prio = tagPtr->priority;
 	}
 	if ((tagPtr->lMarginColor != NULL)
@@ -919,9 +910,9 @@ GetStyle(
 	    styleValues.lMarginColor = tagPtr->lMarginColor;
 	    lMarginColorPrio = tagPtr->priority;
 	}
-	if ((tagPtr->offset != INT_MIN)
+	if ((tagPtr->offsetObj != NULL)
 		&& (tagPtr->priority > offsetPrio)) {
-	    styleValues.offset = tagPtr->offset;
+	    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, tagPtr->offsetObj, &styleValues.offset);
 	    offsetPrio = tagPtr->priority;
 	}
 	if ((tagPtr->overstrike >= 0)
@@ -929,14 +920,14 @@ GetStyle(
 	    styleValues.overstrike = tagPtr->overstrike > 0;
 	    overstrikePrio = tagPtr->priority;
 	    if (tagPtr->overstrikeColor != NULL) {
-		 styleValues.overstrikeColor = tagPtr->overstrikeColor;
+		styleValues.overstrikeColor = tagPtr->overstrikeColor;
 	    } else if (fgColor != NULL) {
-		 styleValues.overstrikeColor = fgColor;
+		styleValues.overstrikeColor = fgColor;
 	    }
 	}
-	if ((tagPtr->rMargin != INT_MIN)
+	if ((tagPtr->rMarginObj != NULL)
 		&& (tagPtr->priority > rMarginPrio)) {
-	    styleValues.rMargin = tagPtr->rMargin;
+	    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, tagPtr->rMarginObj, &styleValues.rMargin);
 	    rMarginPrio = tagPtr->priority;
 	}
 	if ((tagPtr->rMarginColor != NULL)
@@ -944,19 +935,19 @@ GetStyle(
 	    styleValues.rMarginColor = tagPtr->rMarginColor;
 	    rMarginColorPrio = tagPtr->priority;
 	}
-	if ((tagPtr->spacing1 != INT_MIN)
+	if ((tagPtr->spacing1Obj != NULL)
 		&& (tagPtr->priority > spacing1Prio)) {
-	    styleValues.spacing1 = tagPtr->spacing1;
+	    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, tagPtr->spacing1Obj, &styleValues.spacing1);
 	    spacing1Prio = tagPtr->priority;
 	}
-	if ((tagPtr->spacing2 != INT_MIN)
+	if ((tagPtr->spacing2Obj != NULL)
 		&& (tagPtr->priority > spacing2Prio)) {
-	    styleValues.spacing2 = tagPtr->spacing2;
+	    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, tagPtr->spacing2Obj, &styleValues.spacing2);
 	    spacing2Prio = tagPtr->priority;
 	}
-	if ((tagPtr->spacing3 != INT_MIN)
+	if ((tagPtr->spacing3Obj != NULL)
 		&& (tagPtr->priority > spacing3Prio)) {
-	    styleValues.spacing3 = tagPtr->spacing3;
+	    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, tagPtr->spacing3Obj, &styleValues.spacing3);
 	    spacing3Prio = tagPtr->priority;
 	}
 	if ((tagPtr->tabStringPtr != NULL)
@@ -2510,7 +2501,6 @@ DisplayDLine(
 		chunkPtr = chunkPtr->nextPtr) {
 	    if (chunkPtr->displayProc == TkTextInsertDisplayProc) {
 		int x = chunkPtr->x + dInfoPtr->x - dInfoPtr->curXPixelOffset;
-
 		chunkPtr->displayProc(textPtr, chunkPtr, x,
 			y + dlPtr->spaceAbove,
 			dlPtr->height - dlPtr->spaceAbove - dlPtr->spaceBelow,
@@ -4182,6 +4172,8 @@ DisplayText(
     int bottomY = 0;		/* Initialization needed only to stop compiler
 				 * warnings. */
     Tcl_Interp *interp;
+    int padX, padY;
+    int borderWidth, highlightWidth;
 
 
     if ((textPtr->tkwin == NULL) || (textPtr->flags & DESTROYED)) {
@@ -4191,22 +4183,6 @@ DisplayText(
 
 	return;
     }
-
-#ifdef MAC_OSX_TK
-    /*
-     * If the toplevel is being resized it would be dangerous to try redrawing
-     * the widget.  But we can just clear the REDRAW_PENDING flag and return.
-     * This display proc will be called again after the widget has been
-     * reconfigured.
-     */
-
-    TkWindow *winPtr = (TkWindow *)(textPtr->tkwin);
-    MacDrawable *macWin = winPtr->privatePtr;
-    if (macWin && (macWin->flags & TK_DO_NOT_DRAW)){
-	dInfoPtr->flags &= ~REDRAW_PENDING;
-    	return;
-     }
-#endif
 
     interp = textPtr->interp;
     Tcl_Preserve(interp);
@@ -4373,7 +4349,10 @@ DisplayText(
 	if (TkScrollWindow(textPtr->tkwin, dInfoPtr->scrollGC, dInfoPtr->x,
 		oldY, dInfoPtr->maxX-dInfoPtr->x, height, 0, y-oldY,
 		damageRgn)) {
+#ifndef MACOSX_TK
+	    /* No point in doing this on macOS. The DLines get redrawn anyway.*/
 	    TextInvalidateRegion(textPtr, damageRgn);
+#endif
 	}
 	numCopies++;
 	TkDestroyRegion(damageRgn);
@@ -4390,6 +4369,9 @@ DisplayText(
      */
 
     dInfoPtr->flags &= ~REDRAW_PENDING;
+
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->padXObj, &padX);
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->padYObj, &padY);
 
     /*
      * Redraw the borders if that's needed.
@@ -4408,13 +4390,15 @@ DisplayText(
 	    goto end;
 	}
 
+	Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->borderWidthObj, &borderWidth);
+	Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->highlightWidthObj, &highlightWidth);
 	Tk_Draw3DRectangle(textPtr->tkwin, Tk_WindowId(textPtr->tkwin),
-		textPtr->border, textPtr->highlightWidth,
-		textPtr->highlightWidth,
-		Tk_Width(textPtr->tkwin) - 2*textPtr->highlightWidth,
-		Tk_Height(textPtr->tkwin) - 2*textPtr->highlightWidth,
-		textPtr->borderWidth, textPtr->relief);
-	if (textPtr->highlightWidth > 0) {
+		textPtr->border, highlightWidth,
+		highlightWidth,
+		Tk_Width(textPtr->tkwin) - 2 * highlightWidth,
+		Tk_Height(textPtr->tkwin) - 2 * highlightWidth,
+		borderWidth, textPtr->relief);
+	if (highlightWidth > 0) {
 	    GC fgGC, bgGC;
 
 	    bgGC = Tk_GCForColor(textPtr->highlightBgColorPtr,
@@ -4423,35 +4407,35 @@ DisplayText(
 		fgGC = Tk_GCForColor(textPtr->highlightColorPtr,
 			Tk_WindowId(textPtr->tkwin));
 		Tk_DrawHighlightBorder(textPtr->tkwin, fgGC, bgGC,
-			textPtr->highlightWidth, Tk_WindowId(textPtr->tkwin));
+			highlightWidth, Tk_WindowId(textPtr->tkwin));
 	    } else {
 		Tk_DrawHighlightBorder(textPtr->tkwin, bgGC, bgGC,
-			textPtr->highlightWidth, Tk_WindowId(textPtr->tkwin));
+			highlightWidth, Tk_WindowId(textPtr->tkwin));
 	    }
 	}
-	borders = textPtr->borderWidth + textPtr->highlightWidth;
-	if (textPtr->padY > 0) {
+	borders = borderWidth + highlightWidth;
+	if (padY > 0) {
 	    Tk_Fill3DRectangle(textPtr->tkwin, Tk_WindowId(textPtr->tkwin),
 		    textPtr->border, borders, borders,
-		    Tk_Width(textPtr->tkwin) - 2*borders, textPtr->padY,
+		    Tk_Width(textPtr->tkwin) - 2 * borders, padY,
 		    0, TK_RELIEF_FLAT);
 	    Tk_Fill3DRectangle(textPtr->tkwin, Tk_WindowId(textPtr->tkwin),
 		    textPtr->border, borders,
-		    Tk_Height(textPtr->tkwin) - borders - textPtr->padY,
-		    Tk_Width(textPtr->tkwin) - 2*borders,
-		    textPtr->padY, 0, TK_RELIEF_FLAT);
+		    Tk_Height(textPtr->tkwin) - borders - padY,
+		    Tk_Width(textPtr->tkwin) - 2 * borders,
+		    padY, 0, TK_RELIEF_FLAT);
 	}
-	if (textPtr->padX > 0) {
+	if (padX > 0) {
 	    Tk_Fill3DRectangle(textPtr->tkwin, Tk_WindowId(textPtr->tkwin),
-		    textPtr->border, borders, borders + textPtr->padY,
-		    textPtr->padX,
-		    Tk_Height(textPtr->tkwin) - 2*borders -2*textPtr->padY,
+		    textPtr->border, borders, borders + padY,
+		    padX,
+		    Tk_Height(textPtr->tkwin) - 2 * borders -2 * padY,
 		    0, TK_RELIEF_FLAT);
 	    Tk_Fill3DRectangle(textPtr->tkwin, Tk_WindowId(textPtr->tkwin),
 		    textPtr->border,
-		    Tk_Width(textPtr->tkwin) - borders - textPtr->padX,
-		    borders + textPtr->padY, textPtr->padX,
-		    Tk_Height(textPtr->tkwin) - 2*borders -2*textPtr->padY,
+		    Tk_Width(textPtr->tkwin) - borders - padX,
+		    borders + padY, padX,
+		    Tk_Height(textPtr->tkwin) - 2 * borders -2 * padY,
 		    0, TK_RELIEF_FLAT);
 	}
 	dInfoPtr->flags &= ~REDRAW_BORDERS;
@@ -4530,17 +4514,14 @@ DisplayText(
 		 * not necessary on Unix or Windows because XScrollWindow will
 		 * have included the bounding rectangles of all of these
 		 * windows in the damage region.  The macosx implementation of
-		 * TkScrollWindow does not do this.  It simply generates a
-		 * damage region which is the scroll source rectangle minus
-		 * the scroll destination rectangle.  This is because there is
-		 * no efficient process available for iterating through the
-		 * subwindows which meet the scrolled area.  (On Unix this is
-		 * handled by GraphicsExpose events generated by XCopyArea and
-		 * on Windows by ScrollWindowEx.  On macOS the low level
-		 * scrolling is accomplished by calling [view scrollRect:by:].
-		 * This method does not provide any damage information and, in
-		 * any case, could not be aware of Tk windows which were not
-		 * based on NSView objects.
+		 * TkScrollWindow is not able to do this because no
+		 * information about embedded windows is avaliable to it. So
+		 * it simply generates a damage region which is the scroll
+		 * source rectangle minus the scroll destination rectangle.
+		 * (On Unix this is handled by GraphicsExpose events generated
+		 * by XCopyArea and on Windows by ScrollWindowEx.  On macOS
+		 * the embedded windows are not managed by the window manager,
+		 * so there is no analogous technique available.)
 		 *
 		 * On the other hand, this loop is already iterating through
 		 * all embedded windows which could possibly have been moved
@@ -4552,7 +4533,7 @@ DisplayText(
 	    } else if (dlPtr->chunkPtr != NULL && ((dlPtr->y < 0)
 		    || (dlPtr->y + dlPtr->height > dInfoPtr->maxY))) {
 		/*
-		 * On platforms other than the Mac:
+		 * On platforms other than macOS ...
 		 *
 		 * It's the first or last DLine which are also overlapping the
 		 * top or bottom of the window, but we decided above it wasn't
@@ -4597,11 +4578,22 @@ DisplayText(
 			TkTextPrintIndex(textPtr, &dlPtr->index, string);
 			LOG("tk_textEmbWinDisplay", string);
 		    }
+#ifdef MAC_OSX_TK
+		    /* We need to redisplay the entire DLine so that the
+		     * background of the line will not contain artifacts left
+		     * by the scrolling.
+		     */
+
+		    DisplayDLine(textPtr, dlPtr, NULL, pixmap);
+#else
 		    TkTextEmbWinDisplayProc(textPtr, chunkPtr, x,
-			    dlPtr->spaceAbove,
+			    0,
 			    dlPtr->height-dlPtr->spaceAbove-dlPtr->spaceBelow,
-			    dlPtr->baseline - dlPtr->spaceAbove, NULL,
-			    None, dlPtr->y + dlPtr->spaceAbove);
+			    dlPtr->baseline - dlPtr->spaceAbove,
+			    NULL,
+			    None,
+			    dlPtr->y + dlPtr->spaceAbove);
+#endif
 		}
 	    }
 	}
@@ -4634,8 +4626,8 @@ DisplayText(
 	}
 
 	Tk_Fill3DRectangle(textPtr->tkwin, Tk_WindowId(textPtr->tkwin),
-		textPtr->border, dInfoPtr->x - textPtr->padX, bottomY,
-		dInfoPtr->maxX - (dInfoPtr->x - textPtr->padX),
+		textPtr->border, dInfoPtr->x - padX, bottomY,
+		dInfoPtr->maxX - (dInfoPtr->x - padX),
 		dInfoPtr->topOfEof-bottomY, 0, TK_RELIEF_FLAT);
     }
     dInfoPtr->topOfEof = bottomY;
@@ -4779,6 +4771,8 @@ TextInvalidateRegion(
     TextDInfo *dInfoPtr = textPtr->dInfoPtr;
     int maxY, inset;
     XRectangle rect;
+    int padX, padY;
+    int borderWidth, highlightWidth;
 
     /*
      * Find all lines that overlap the given region and mark them for
@@ -4799,12 +4793,16 @@ TextInvalidateRegion(
 	dInfoPtr->topOfEof = maxY;
     }
 
-    inset = textPtr->borderWidth + textPtr->highlightWidth;
-    if ((rect.x < (inset + textPtr->padX))
-	    || (rect.y < (inset + textPtr->padY))
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->padXObj, &padX);
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->padYObj, &padY);
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->borderWidthObj, &borderWidth);
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->highlightWidthObj, &highlightWidth);
+    inset = borderWidth + highlightWidth;
+    if ((rect.x < (inset + padX))
+	    || (rect.y < (inset + padY))
 	    || ((int) (rect.x + rect.width) > (Tk_Width(textPtr->tkwin)
-		    - inset - textPtr->padX))
-	    || (maxY > (Tk_Height(textPtr->tkwin) - inset - textPtr->padY))) {
+		    - inset - padX))
+	    || (maxY > (Tk_Height(textPtr->tkwin) - inset - padY))) {
 	dInfoPtr->flags |= REDRAW_BORDERS;
     }
 }
@@ -5219,6 +5217,8 @@ TkTextRelayoutWindow(
     GC newGC;
     XGCValues gcValues;
     Bool inSync = 1;
+    int padX, padY;
+    int borderWidth, highlightWidth;
 
     /*
      * Schedule the window redisplay. See TkTextChanged for the reason why
@@ -5256,15 +5256,14 @@ TkTextRelayoutWindow(
      * it.
      */
 
-    if (textPtr->highlightWidth < 0) {
-	textPtr->highlightWidth = 0;
-    }
-    dInfoPtr->x = textPtr->highlightWidth + textPtr->borderWidth
-	    + textPtr->padX;
-    dInfoPtr->y = textPtr->highlightWidth + textPtr->borderWidth
-	    + textPtr->padY;
-    dInfoPtr->maxX = Tk_Width(textPtr->tkwin) - textPtr->highlightWidth
-	    - textPtr->borderWidth - textPtr->padX;
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->padXObj, &padX);
+    Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->padYObj, &padY);
+	Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->borderWidthObj, &borderWidth);
+	Tk_GetPixelsFromObj(NULL, textPtr->tkwin, textPtr->highlightWidthObj, &highlightWidth);
+    dInfoPtr->x = highlightWidth + borderWidth + padX;
+    dInfoPtr->y = highlightWidth + borderWidth + padY;
+    dInfoPtr->maxX = Tk_Width(textPtr->tkwin) - highlightWidth
+	    - borderWidth - padX;
     if (dInfoPtr->maxX <= dInfoPtr->x) {
 	dInfoPtr->maxX = dInfoPtr->x + 1;
     }
@@ -5273,8 +5272,8 @@ TkTextRelayoutWindow(
      * This is the only place where dInfoPtr->maxY is set.
      */
 
-    dInfoPtr->maxY = Tk_Height(textPtr->tkwin) - textPtr->highlightWidth
-	    - textPtr->borderWidth - textPtr->padY;
+    dInfoPtr->maxY = Tk_Height(textPtr->tkwin) - highlightWidth
+	    - borderWidth - padY;
     if (dInfoPtr->maxY <= dInfoPtr->y) {
 	dInfoPtr->maxY = dInfoPtr->y + 1;
     }
@@ -7358,15 +7357,24 @@ TkTextIndexBbox(
 				 * coordinate. */
     int *widthPtr, int *heightPtr,
 				/* Filled in with index's dimensions. */
-    int *charWidthPtr)		/* If the 'index' is at the end of a display
+    int *charWidthPtr,		/* If the 'index' is at the end of a display
 				 * line and therefore takes up a very large
 				 * width, this is used to return the smaller
 				 * width actually desired by the index. */
+    int *cursorWidthPtr)	/* Receives the same value as 'charWidthPtr'
+				 * except when indexPtr points to a Tab. Then
+				 * 'cursorWidthPtr' gets reduced to the width
+				 * of a single space. */
 {
     TextDInfo *dInfoPtr = textPtr->dInfoPtr;
     DLine *dlPtr;
     TkTextDispChunk *chunkPtr;
     Tcl_Size byteCount;
+    int dummy;
+
+    if (charWidthPtr == NULL) {
+	charWidthPtr = &dummy;
+    }
 
     /*
      * Make sure that all of the screen layout information is up to date.
@@ -7432,20 +7440,16 @@ TkTextIndexBbox(
 	 * line.
 	 */
 
-	if (charWidthPtr != NULL) {
-	    *charWidthPtr = dInfoPtr->maxX - *xPtr;
-	    if (*charWidthPtr > textPtr->charWidth) {
-		*charWidthPtr = textPtr->charWidth;
-	    }
+	*charWidthPtr = dInfoPtr->maxX - *xPtr;
+	if (*charWidthPtr > textPtr->charWidth) {
+	    *charWidthPtr = textPtr->charWidth;
 	}
 	if (*xPtr > dInfoPtr->maxX) {
 	    *xPtr = dInfoPtr->maxX;
 	}
 	*widthPtr = dInfoPtr->maxX - *xPtr;
     } else {
-	if (charWidthPtr != NULL) {
-	    *charWidthPtr = *widthPtr;
-	}
+	*charWidthPtr = *widthPtr;
     }
     if (*widthPtr == 0) {
 	/*
@@ -7471,6 +7475,30 @@ TkTextIndexBbox(
 	*heightPtr = dInfoPtr->maxY - *yPtr;
 	if (*heightPtr <= 0) {
 	    return -1;
+	}
+    }
+
+    /*
+     * For a block cursor on a tab, cursorWidthPtr is the whitespace width.
+     */
+
+    if (cursorWidthPtr != NULL) {
+	*cursorWidthPtr = *charWidthPtr;
+	if (chunkPtr->bboxProc == CharBboxProc) {
+	    CharInfo *ciPtr = (CharInfo*)chunkPtr->clientData;
+#ifdef TK_LAYOUT_WITH_BASE_CHUNKS
+	    BaseCharInfo *bciPtr =
+		    (BaseCharInfo*)ciPtr->baseChunkPtr->clientData;
+	    char *chars = Tcl_DStringValue(&bciPtr->baseChars);
+
+	    if (chars[ciPtr->baseOffset + byteCount] == '\t')
+#else
+	    if (ciPtr->chars[byteCount] == '\t')
+#endif
+	    {
+		CharChunkMeasureChars(chunkPtr, " ", 1, 0, 1,
+		    0, -1, 0, cursorWidthPtr);
+	    }
 	}
     }
     return 0;
@@ -8061,13 +8089,13 @@ CharDisplayProc(
 	    return;
 	}
 
-	TkpDrawCharsInContext(display, dst, stylePtr->fgGC, sValuePtr->tkfont,
+	Tk_DrawCharsInContext(display, dst, stylePtr->fgGC, sValuePtr->tkfont,
 		string, numBytes, start, len,
 		ciPtr->baseChunkPtr->x + xDisplacement,
 		y + baseline - sValuePtr->offset);
 
 	if (sValuePtr->underline) {
-	    TkUnderlineCharsInContext(display, dst, stylePtr->ulGC,
+	    Tk_UnderlineCharsInContext(display, dst, stylePtr->ulGC,
 		    sValuePtr->tkfont, string, numBytes,
 		    ciPtr->baseChunkPtr->x + xDisplacement,
 		    y + baseline - sValuePtr->offset,
@@ -8077,7 +8105,7 @@ CharDisplayProc(
 	    Tk_FontMetrics fm;
 
 	    Tk_GetFontMetrics(sValuePtr->tkfont, &fm);
-	    TkUnderlineCharsInContext(display, dst, stylePtr->ovGC,
+	    Tk_UnderlineCharsInContext(display, dst, stylePtr->ovGC,
 		    sValuePtr->tkfont, string, numBytes,
 		    ciPtr->baseChunkPtr->x + xDisplacement,
 		    y + baseline - sValuePtr->offset
@@ -8723,7 +8751,7 @@ MeasureChars(
 	    break;
 	}
 #ifdef TK_DRAW_IN_CONTEXT
-	start += TkpMeasureCharsInContext(tkfont, source, maxBytes,
+	start += Tk_MeasureCharsInContext(tkfont, source, maxBytes,
 		start - source, special - start,
 		maxX >= 0 ? maxX - curX : -1, flags, &width);
 #else
@@ -9007,7 +9035,7 @@ FreeBaseChunk(
  *	elide, "offset" and foreground stipple. Do *not* consider: background
  *	color, border, relief or background stipple.
  *
- *	If we use TkpDrawCharsInContext(), we also don't need to check
+ *	If we use Tk_DrawCharsInContext(), we also don't need to check
  *	foreground color, font decorations, elide, offset and foreground
  *	stipple, so all that is left is font (including font size and font
  *	style) and "offset".
