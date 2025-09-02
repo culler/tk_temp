@@ -34,16 +34,11 @@ jobs:
         uses: actions/checkout@v5
         with:
           path: tk
-<<<<<<< HEAD
       - name: Checkout Tcl 9.1
         uses: actions/checkout@v5
-=======
-      - name: Checkout Tcl 9.0
-        uses: actions/checkout@v4
->>>>>>> 251464703d3dda8000c7bcc37a15710633e5fe4c
         with:
           repository: tcltk/tcl
-          ref: core-9-0-branch
+          ref: main
           path: tcl
       - name: Setup Environment (compiler=${{ matrix.compiler }})
         run: |
@@ -143,16 +138,11 @@ jobs:
         uses: actions/checkout@v5
         with:
           path: tk
-<<<<<<< HEAD
       - name: Checkout Tcl 9.1
         uses: actions/checkout@v5
-=======
-      - name: Checkout Tcl 9.0
-        uses: actions/checkout@v4
->>>>>>> 251464703d3dda8000c7bcc37a15710633e5fe4c
         with:
           repository: tcltk/tcl
-          ref: core-9-0-branch
+          ref: main
           path: tcl
       - name: Setup Environment (compiler=${{ matrix.compiler }})
         run: |
