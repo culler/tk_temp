@@ -47,7 +47,9 @@ jobs:
           }
       - name: Run Tests
         run: |
+          mkdir -p ~/Library/Caches
           make TK_NO_STDERR=1 test | tee out.txt
+          ls ~/Library/Caches
           nmatches=$( grep -c "Failed	0" out.txt )
           if [ $nmatches -lt 4 ]
           then
