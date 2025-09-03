@@ -189,7 +189,7 @@ test send-7.4 {Tk_SetAppName procedure, name in use} {secureserver testsend} {
 
 # This passes on real macOS systems but fails on macOS CI runners because
 # of a timeout when sending the AEDoScript event.  So it is nonPortable.
-test send-8.1 {Tk_SendCmd procedure, options} {secureserver} {
+test send-8.1 {Tk_SendCmd procedure, options} {secureserver nonPortable} {
     childTkProcess create
     set app [childTkProcess eval {tk appname}]
     set a 66
@@ -332,7 +332,7 @@ if {[testConstraint aqua]} {
 
 # This passes on real macOS systems but fails on macOS CI runners because
 # of a timeout when sending the AEDoScript event.  So it is nonPortable.
-test send-8.18 {Tk_SendCmd procedure, error in remote app} {secureserver} {
+test send-8.18 {Tk_SendCmd procedure, error in remote app} {secureserver nonPortable} {
     childTkProcess create
     set app [childTkProcess eval {tk appname}]
     set result [string tolower [list [catch {send $app open bad_name} msg] \
@@ -343,7 +343,7 @@ test send-8.18 {Tk_SendCmd procedure, error in remote app} {secureserver} {
 
 # This passes on real macOS systems but fails on macOS CI runners because
 # of a timeout when sending the AEDoScript event.  So it is nonPortable.
-test send-8.19 {Tk_SendCmd, using modal timeouts} {secureserver} {
+test send-8.19 {Tk_SendCmd, using modal timeouts} {secureserver nonPortable} {
     childTkProcess create
     set app [childTkProcess eval {tk appname}]
     set x no
